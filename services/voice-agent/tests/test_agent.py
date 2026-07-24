@@ -65,6 +65,8 @@ async def test_entrypoint_keeps_http_open_until_job_shutdown(monkeypatch) -> Non
     room = FakeRoom()
     callbacks = []
     start_kwargs: dict[str, Any] = {}
+    stt_kwargs: dict[str, Any] = {}
+    tts_kwargs: dict[str, Any] = {}
     waited_for: list[str] = []
     shutdown_reasons: list[str] = []
     http = FakeHttp()
@@ -107,20 +109,31 @@ async def test_entrypoint_keeps_http_open_until_job_shutdown(monkeypatch) -> Non
     monkeypatch.setattr(voice_agent, "AImautaVoiceAgent", FakeAgent)
     monkeypatch.setattr(voice_agent, "AgentSession", FakeSession)
     monkeypatch.setattr(voice_agent, "install_context_listener", lambda *_, **__: None)
-    monkeypatch.setattr(voice_agent.deepgram, "STT", lambda **_: object())
-    monkeypatch.setattr(voice_agent.deepgram, "TTS", lambda **_: object())
+    monkeypatch.setattr(
+        voice_agent.inference,
+        "STT",
+        lambda **kwargs: stt_kwargs.update(kwargs) or object(),
+    )
+    monkeypatch.setattr(
+        voice_agent.inference,
+        "TTS",
+        lambda **kwargs: tts_kwargs.update(kwargs) or object(),
+    )
     monkeypatch.setattr(
         voice_agent,
         "get_settings",
         lambda: SimpleNamespace(
-            turn_endpoint="http://127.0.0.1:3000/api/internal/turn",
+            turn_endpoint="http://127.0.0.1:3309/api/internal/turn",
             aimauta_agent_secret="s" * 32,
             request_timeout_seconds=10,
             max_session_seconds=600,
-            deepgram_api_key="deepgram",
-            stt_model="nova-3",
-            stt_language="es",
-            tts_model="aura-2-selena-es",
+            livekit_api_key="livekit-key",
+            livekit_api_secret="livekit-secret",
+            stt_model="deepgram/nova-3",
+            stt_language="es-419",
+            tts_model="deepgram/aura-2",
+            tts_voice="selena",
+            tts_language="es-419",
         ),
     )
 
@@ -135,6 +148,27 @@ async def test_entrypoint_keeps_http_open_until_job_shutdown(monkeypatch) -> Non
         == "student-session-12345678"
     )
     assert start_kwargs["room_options"].delete_room_on_close is True
+    assert stt_kwargs == {
+        "model": "deepgram/nova-3",
+        "language": "es-419",
+        "api_key": "livekit-key",
+        "api_secret": "livekit-secret",
+        "extra_kwargs": {
+            "interim_results": True,
+            "smart_format": True,
+            "punctuate": True,
+            "profanity_filter": True,
+            "endpointing": 350,
+            "mip_opt_out": True,
+        },
+    }
+    assert tts_kwargs == {
+        "model": "deepgram/aura-2",
+        "voice": "selena",
+        "language": "es-419",
+        "api_key": "livekit-key",
+        "api_secret": "livekit-secret",
+    }
 
     for callback in callbacks:
         await callback("test shutdown")
@@ -233,9 +267,21 @@ def test_sensitive_log_filter_redacts_structured_transcript_fields() -> None:
 def test_worker_health_server_is_loopback_only(monkeypatch) -> None:
     options = []
     monkeypatch.setattr(voice_agent.agents.cli, "run_app", options.append)
+    monkeypatch.setattr(
+        voice_agent,
+        "get_settings",
+        lambda: SimpleNamespace(
+            livekit_url="wss://aimauta-test.livekit.cloud",
+            livekit_api_key="livekit-key",
+            livekit_api_secret="livekit-secret",
+        ),
+    )
 
     voice_agent.main()
 
     assert len(options) == 1
     assert options[0].host == "127.0.0.1"
+    assert options[0].ws_url == "wss://aimauta-test.livekit.cloud"
+    assert options[0].api_key == "livekit-key"
+    assert options[0].api_secret == "livekit-secret"
     assert options[0].log_level == "WARN"

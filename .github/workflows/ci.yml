@@ -61,3 +61,17 @@ jobs:
 
       - name: Build production image
         run: docker build --tag aimauta-web:ci .
+
+      - name: Build voice worker image
+        run: docker build --tag aimauta-voice-agent:ci services/voice-agent
+
+      - name: Smoke LiveKit Inference contract
+        run: |
+          docker run --rm \
+            --entrypoint python \
+            --env LIVEKIT_URL=wss://ci-test.livekit.cloud \
+            --env LIVEKIT_API_KEY=ci-test-key \
+            --env LIVEKIT_API_SECRET=ci-test-secret \
+            --env AIMAUTA_AGENT_SECRET=ci-test-agent-secret-with-32-characters \
+            aimauta-voice-agent:ci \
+            -c "from aimauta_voice.config import Settings; from livekit.agents import inference; s = Settings(); inference.STT(model=s.stt_model, language=s.stt_language, api_key=s.livekit_api_key, api_secret=s.livekit_api_secret); inference.TTS(model=s.tts_model, voice=s.tts_voice, language=s.tts_language, api_key=s.livekit_api_key, api_secret=s.livekit_api_secret); print('voice-inference-contract-ok')"

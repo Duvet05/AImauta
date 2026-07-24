@@ -167,13 +167,13 @@ AImauta está dirigido a menores de edad y aplica minimización de datos:
 - cualquier conjunto de evaluación debe ser sintético o estar anonimizado y
   autorizado.
 
-Estas medidas no eliminan el tratamiento necesario para la voz: la instancia
-LiveKit self-hosted procesa el transporte de audio y paquetes de datos, y
-Deepgram procesa audio y transcripciones para STT/TTS. Antes de habilitar el
-canal para menores se deben documentar consentimiento aplicable, DPA con
-Deepgram, ubicación y subencargados, retención, eliminación y mecanismo para
-atender derechos. No habilitar grabaciones ni telemetría evita copias
-adicionales, pero Deepgram impide considerar el flujo exclusivamente local.
+Estas medidas no eliminan el tratamiento necesario para la voz: LiveKit Cloud
+procesa el transporte y LiveKit Inference usa Deepgram para STT/TTS. La
+inferencia aplica retención cero por defecto, pero antes de habilitar el canal
+para menores se deben documentar consentimiento aplicable, acuerdos de
+tratamiento, ubicación y subencargados, retención, eliminación y mecanismo para
+atender derechos. No habilitar grabaciones ni observabilidad evita copias
+adicionales; el flujo de voz no debe considerarse exclusivamente local.
 
 Las credenciales de Ollama, LiveKit u otros servicios tampoco se versionan.
 

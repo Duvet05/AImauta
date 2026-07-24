@@ -53,6 +53,26 @@ describe("POST /api/livekit/token", () => {
     }
   });
 
+  it("rechaza LiveKit remoto sin TLS o con hosts Cloud distintos", async () => {
+    process.env.LIVEKIT_API_KEY = "test-key";
+    process.env.LIVEKIT_API_SECRET = "test-secret";
+    const session = issueLearningSession({ bookId, page: 13 });
+    try {
+      process.env.LIVEKIT_URL = "ws://livekit.example.test";
+      process.env.LIVEKIT_API_URL = "http://livekit.example.test";
+      expect((await POST(request(session.token))).status).toBe(503);
+
+      process.env.LIVEKIT_URL = "wss://livekit.example.test";
+      process.env.LIVEKIT_API_URL = "https://other.example.test";
+      expect((await POST(request(session.token))).status).toBe(503);
+    } finally {
+      delete process.env.LIVEKIT_URL;
+      delete process.env.LIVEKIT_API_URL;
+      delete process.env.LIVEKIT_API_KEY;
+      delete process.env.LIVEKIT_API_SECRET;
+    }
+  });
+
   it("no emite voz durante Evaluamos aunque LiveKit falte", async () => {
     const session = issueLearningSession({ bookId, page: 13 });
     const evaluation = moveLearningSession(session.token, 21);

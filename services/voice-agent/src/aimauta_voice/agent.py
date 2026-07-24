@@ -12,9 +12,10 @@ from livekit.agents import (
     ChatContext,
     ChatMessage,
     StopResponse,
+    inference,
     room_io,
 )
-from livekit.plugins import deepgram, silero
+from livekit.plugins import silero
 
 from aimauta_voice.config import get_settings
 from aimauta_voice.metadata import parse_dispatch_metadata, parse_room_metadata
@@ -59,7 +60,7 @@ def install_privacy_log_filter() -> None:
     # LiveKit emits raw STT text only at DEBUG today. Keep dependencies above
     # that level as a second layer in case a handler is replaced later.
     logging.getLogger("livekit.agents").setLevel(logging.WARNING)
-    logging.getLogger("livekit.plugins.deepgram").setLevel(logging.WARNING)
+    logging.getLogger("livekit.agents.inference").setLevel(logging.WARNING)
 
 
 class AImautaVoiceAgent(Agent):
@@ -249,20 +250,27 @@ async def entrypoint(ctx: agents.JobContext) -> None:
 
         session = AgentSession(
             vad=ctx.proc.userdata.get("vad") if ctx.proc else silero.VAD.load(),
-            stt=deepgram.STT(
-                api_key=settings.deepgram_api_key,
+            stt=inference.STT(
                 model=settings.stt_model,
                 language=settings.stt_language,
-                interim_results=True,
-                smart_format=True,
-                punctuate=True,
-                profanity_filter=True,
-                endpointing_ms=350,
+                api_key=settings.livekit_api_key,
+                api_secret=settings.livekit_api_secret,
+                extra_kwargs={
+                    "interim_results": True,
+                    "smart_format": True,
+                    "punctuate": True,
+                    "profanity_filter": True,
+                    "endpointing": 350,
+                    "mip_opt_out": True,
+                },
             ),
             llm=None,
-            tts=deepgram.TTS(
-                api_key=settings.deepgram_api_key,
+            tts=inference.TTS(
                 model=settings.tts_model,
+                voice=settings.tts_voice,
+                language=settings.tts_language,
+                api_key=settings.livekit_api_key,
+                api_secret=settings.livekit_api_secret,
             ),
             turn_detection="stt",
             allow_interruptions=True,
@@ -292,11 +300,15 @@ async def entrypoint(ctx: agents.JobContext) -> None:
 
 
 def main() -> None:
+    settings = get_settings()
     agents.cli.run_app(
         agents.WorkerOptions(
             entrypoint_fnc=entrypoint,
             prewarm_fnc=prewarm,
             agent_name="aimauta-socratic-tutor",
+            ws_url=settings.livekit_url,
+            api_key=settings.livekit_api_key,
+            api_secret=settings.livekit_api_secret,
             host="127.0.0.1",
             log_level="WARN",
         )

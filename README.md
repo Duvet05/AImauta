@@ -19,8 +19,8 @@ El recorrido vertical actual incluye:
    el servidor;
 5. un único servicio de tutoría para texto y voz, con RAG por página, política
    socrática y respaldo conservador cuando Ollama no responde;
-6. un canal de voz opcional con LiveKit self-hosted, Deepgram y un worker
-   preparado para ejecutarse en PowerEdge;
+6. un canal de voz opcional con LiveKit Cloud Inference y un worker
+   autohospedado en PowerEdge;
 7. un avatar 3D local que reacciona al audio aprobado del tutor, con una
    ilustración SVG accesible como respaldo.
 
@@ -124,16 +124,15 @@ conexión y limpia audio y micrófono.
 
 El worker inicia `AgentSession` con `record=False`, usa logging `WARN` con
 redacción, limita cada conexión a diez minutos, elimina la sala al terminar y
-expone su health check únicamente en `127.0.0.1`. La instancia LiveKit
-self-hosted no habilita grabación, Ingress, Egress, SIP ni exportación de
-telemetría, pero sigue procesando audio en tránsito; Deepgram procesa audio y
-transcripciones para STT/TTS. Un piloto con estudiantes requiere consentimiento
-aplicable, un acuerdo de tratamiento con Deepgram y una política explícita de
-retención y eliminación.
+expone su health check únicamente en `127.0.0.1`. LiveKit Cloud transporta la
+sesión y LiveKit Inference ejecuta STT/TTS con Deepgram bajo retención cero por
+defecto. No se habilita Agent Observability, grabación, Ingress, Egress ni SIP.
+Un piloto con estudiantes requiere igualmente consentimiento aplicable,
+revisión contractual y una política explícita de retención y eliminación.
 
-Deepgram realiza STT y TTS; Silero aporta detección de voz. El worker llama a
-`POST /api/internal/turn` con un secreto de servicio y no se conecta
-directamente a Ollama.
+LiveKit Inference usa Deepgram Nova-3 y Aura-2; Silero aporta detección de voz.
+El worker llama a `POST /api/internal/turn` con un secreto de servicio y no se
+conecta directamente a Ollama.
 
 ## Avatar local y privado
 
@@ -227,10 +226,11 @@ es un túnel SSH que publique únicamente
 `http://127.0.0.1:11435` en PowerEdge. No se debe usar Tailscale Funnel ni
 configurar Ollama en `0.0.0.0`.
 
-La instancia LiveKit self-hosted y Deepgram deben usar claves dedicadas a
-AImauta, separadas de Nebu y de cualquier otro sistema. Los secretos permanecen
-únicamente en los servicios de PowerEdge. La configuración reproducible de
-LiveKit está documentada en [`infra/livekit`](infra/livekit/README.md).
+El proyecto LiveKit Cloud y sus credenciales deben ser dedicados a AImauta,
+separados de Nebu y de cualquier otro sistema. Los secretos permanecen
+únicamente en los servicios de PowerEdge. La alternativa self-hosted está
+documentada en [`infra/livekit`](infra/livekit/README.md), pero el worker Cloud
+actual requeriría otro adaptador STT/TTS para usarla.
 
 ## Límites de contenido y datos
 

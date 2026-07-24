@@ -10,7 +10,6 @@ requires-python = ">=3.12,<3.14"
 dependencies = [
   "aiohttp==3.14.1",
   "livekit-agents[codecs]==1.6.6",
-  "livekit-plugins-deepgram==1.6.6",
   "livekit-plugins-silero==1.6.6",
   "pydantic-settings==2.14.2",
   "python-dotenv==1.2.2"

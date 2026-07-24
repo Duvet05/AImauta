@@ -4,6 +4,12 @@ Este directorio define el MVP de LiveKit Server en un único nodo Linux. No
 incluye LiveKit Cloud, Redis, Ingress, Egress, SIP ni grabaciones. El servidor
 es Apache-2.0 y las imágenes se fijan por versión, plataforma y digest.
 
+El despliegue activo usa LiveKit Cloud. El worker actual consume LiveKit
+Inference y no puede autenticarse allí con las claves de este servidor
+self-hosted; esta pila queda como alternativa de infraestructura, no como un
+procedimiento completo de voz, hasta implementar credenciales de inferencia
+separadas o un proveedor STT/TTS directo.
+
 Al no usar Redis ni una segunda instancia, las salas, dispatches y conexiones
 son efímeros: reiniciar el nodo termina las sesiones de voz activas. Esta
 topología no ofrece alta disponibilidad ni un SLA y debe ampliarse antes de un

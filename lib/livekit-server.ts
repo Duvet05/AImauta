@@ -36,6 +36,12 @@ type LiveKitConfiguration = {
   apiSecret: string;
 };
 
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+function isLoopback(url: URL): boolean {
+  return LOOPBACK_HOSTS.has(url.hostname);
+}
+
 function configuration(): LiveKitConfiguration {
   const websocketUrl = process.env.LIVEKIT_URL ?? "";
   const apiUrl =
@@ -49,19 +55,30 @@ function configuration(): LiveKitConfiguration {
       "LiveKit todavía no está configurado para este entorno."
     );
   }
-  let wsProtocol: string;
-  let apiProtocol: string;
+  let wsUrl: URL;
+  let apiHttpUrl: URL;
   try {
-    wsProtocol = new URL(websocketUrl).protocol;
-    apiProtocol = new URL(apiUrl).protocol;
+    wsUrl = new URL(websocketUrl);
+    apiHttpUrl = new URL(apiUrl);
   } catch {
     throw new VoiceConfigurationError("Las URL de LiveKit son inválidas.");
   }
   if (
-    !["ws:", "wss:"].includes(wsProtocol) ||
-    !["http:", "https:"].includes(apiProtocol)
+    !["ws:", "wss:"].includes(wsUrl.protocol) ||
+    !["http:", "https:"].includes(apiHttpUrl.protocol) ||
+    wsUrl.username ||
+    wsUrl.password ||
+    apiHttpUrl.username ||
+    apiHttpUrl.password ||
+    (wsUrl.protocol === "ws:" && !isLoopback(wsUrl)) ||
+    (apiHttpUrl.protocol === "http:" && !isLoopback(apiHttpUrl)) ||
+    (!isLoopback(wsUrl) &&
+      !isLoopback(apiHttpUrl) &&
+      wsUrl.hostname !== apiHttpUrl.hostname)
   ) {
-    throw new VoiceConfigurationError("Las URL de LiveKit son inválidas.");
+    throw new VoiceConfigurationError(
+      "Las URL de LiveKit son inválidas o no usan transporte seguro."
+    );
   }
 
   return { websocketUrl, apiUrl, apiKey, apiSecret };

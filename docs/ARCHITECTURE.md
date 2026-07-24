@@ -26,23 +26,22 @@ servidor. Sus propiedades principales son:
 └──────┬──────────────────┬────────────────┬──────────────────┬────────────┘
        │                  │                │                  │ WebRTC/datos
        │                  ├─ POST /api/session               ▼
-       │                  └─ POST /api/tutor    LiveKit self-hosted
+       │                  └─ POST /api/tutor       LiveKit Cloud
        │                                   │                 │
        ▼                                   ▼                 ▼
 PowerEdge: Next.js ─────────────────► tutor-service   worker de voz
   ├─ catálogo y currículo                  ▲           ├─ Silero VAD
-  ├─ sesiones HMAC                         │           ├─ Deepgram STT
+  ├─ sesiones HMAC                         │           ├─ Inference STT
   ├─ PDF e índice RAG                      └───────────┤  /api/internal/turn
-  └─ API LiveKit                                       └─ Deepgram TTS
+  └─ API LiveKit                                       └─ Inference TTS
        │
        └─ túnel SSH 127.0.0.1:11435 ──► Aule 127.0.0.1:11434
                                           Ollama + Gemma
 ```
 
-LiveKit Server y su TURN integrado transportan audio y datos del canal de voz
-en infraestructura administrada por el equipo. PowerEdge conserva la autoridad
-pedagógica, el contenido y el worker. Aule solo sirve la inferencia de Gemma a
-través de Ollama y no se publica en Internet.
+LiveKit Cloud y su TURN transportan audio y datos del canal de voz. PowerEdge
+conserva la autoridad pedagógica, el contenido y el worker. Aule solo sirve la
+inferencia de Gemma a través de Ollama y no se publica en Internet.
 
 ## Aplicación web y contratos HTTP
 
@@ -315,11 +314,11 @@ El worker de `services/voice-agent` usa esta secuencia:
 
 ```text
 Silero VAD
-  └─► Deepgram STT
+  └─► LiveKit Inference / Deepgram STT
         └─► POST /api/internal/turn
               └─► tutor-service ─► RAG ─► Ollama/Gemma o respaldo
         ◄──────────────── respuesta aprobada
-  ◄─ Deepgram TTS
+  ◄─ LiveKit Inference / Deepgram TTS
 ```
 
 `AgentSession` se inicia con `record=False`, por lo que Agent Insights no graba
@@ -330,11 +329,12 @@ la red del host; no debe publicarse mediante el proxy ni el firewall. Un
 deadline autoritativo de diez minutos cierra el job y `delete_room_on_close`
 elimina la sala, desconectando también al navegador y deteniendo el micrófono.
 
-No habilitar grabación u observabilidad no elimina el tratamiento: el LiveKit
-self-hosted procesa el transporte WebRTC y Deepgram procesa
-audio/transcripciones para STT y TTS. Antes de trabajar con menores se requieren
-consentimiento aplicable, un acuerdo de tratamiento con Deepgram y decisiones
-explícitas de retención y eliminación para la infraestructura operada.
+No habilitar grabación u observabilidad no elimina el tratamiento: LiveKit
+Cloud procesa el transporte WebRTC y LiveKit Inference usa Deepgram para
+audio/transcripciones de STT y TTS. Aunque la inferencia aplica retención cero
+por defecto, antes de trabajar con menores se requieren consentimiento
+aplicable, acuerdos de tratamiento y decisiones explícitas de retención y
+eliminación.
 
 La sesión de LiveKit se configura con `llm=None`. El worker no construye
 prompts, no consulta RAG y no llama a Ollama. Su responsabilidad es transcribir,
@@ -388,12 +388,10 @@ fuente de descarga, metadatos canónicos ni evidencia de licencia.
 ```text
 Internet público
   ├─ navegador: entrada no confiable
-  ├─ LiveKit self-hosted: WSS, SFU y TURN administrados por el equipo
-  └─ Deepgram: STT/TTS con credencial exclusiva del worker
+  └─ LiveKit Cloud: WSS, SFU, TURN e Inference STT/TTS
 
 PowerEdge
   ├─ Next.js: autoridad de sesión, currículo y tutor
-  ├─ LiveKit Server + Caddy L4: señalización, SFU y TURN sin grabación
   ├─ worker: adaptador de voz sin LLM
   ├─ PDFs autorizados
   └─ índices reproducibles
@@ -403,13 +401,13 @@ Canal privado PowerEdge–Aule
 ```
 
 Ollama nunca escucha en `0.0.0.0` ni se publica mediante Tailscale Funnel. Las
-credenciales de LiveKit y Deepgram pertenecen exclusivamente a AImauta; no se
-reutilizan las de Nebu u otros servicios. El secreto de Deepgram solo existe en
-el worker, y los secretos de API de LiveKit nunca se entregan al navegador.
+credenciales del proyecto LiveKit Cloud pertenecen exclusivamente a AImauta;
+no se reutilizan las de Nebu u otros servicios y sus secretos de API nunca se
+entregan al navegador.
 
 La aplicación no persiste conversaciones, progreso ni analítica individual. El
 registro anti-replay conserva únicamente el estado mínimo de la sesión en
-memoria y desaparece al reiniciar. La instancia LiveKit procesa en memoria el
-audio necesario para transportarlo, y Deepgram procesa audio y transcripciones
-para operar STT/TTS; antes de un piloto con menores se deben definir
-consentimiento, DPA, retención y eliminación aplicables.
+memoria y desaparece al reiniciar. LiveKit Cloud procesa el audio necesario
+para transportarlo y LiveKit Inference usa Deepgram para STT/TTS con retención
+cero por defecto; antes de un piloto con menores se deben definir
+consentimiento, acuerdos, retención y eliminación aplicables.

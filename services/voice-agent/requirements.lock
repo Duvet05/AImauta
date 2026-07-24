@@ -751,7 +751,6 @@ livekit-agents==1.6.6 \
     --hash=sha256:c511553f6d4dd0e97c6b0953bdcc2471155ca0a72080d58518beabbbec1c5099
     # via
     #   aimauta-voice-agent (pyproject.toml)
-    #   livekit-plugins-deepgram
     #   livekit-plugins-silero
 livekit-api==1.2.0 \
     --hash=sha256:307f8e5cfb0358c3ca091814ab768af55896022151bcd7f951954ccefa036a24 \
@@ -821,10 +820,6 @@ livekit-local-inference==0.2.6 \
     --hash=sha256:d6379f9d5ee4753919d10a2cedd2e16e1cbf634e496ad21fb54564513b731e69 \
     --hash=sha256:e5026b2cfd5aa2c85d677cce426b39bab88ee114acbaa814941d3aca8612ba7e
     # via livekit-agents
-livekit-plugins-deepgram==1.6.6 \
-    --hash=sha256:384d38b9098c9262c380208053e07b48e8a4dd1526a42cef889b9d60e76ac0db \
-    --hash=sha256:c6fb33b397495519089f56f049c564cbc7e1f2a9f1a4f656cfab531f68b9e582
-    # via aimauta-voice-agent (pyproject.toml)
 livekit-plugins-silero==1.6.6 \
     --hash=sha256:80b415d1edbef731fedc66e9b0dff2627c2b76e084f2433b25ed94e9843ceeb5 \
     --hash=sha256:f2edd621d6ebf44d007d942203487f735d070c991f569bf9d975c5763108e48f
@@ -1045,7 +1040,6 @@ numpy==2.5.1 \
     # via
     #   livekit
     #   livekit-agents
-    #   livekit-plugins-deepgram
     #   livekit-plugins-silero
     #   onnxruntime
 onnxruntime==1.27.0 \

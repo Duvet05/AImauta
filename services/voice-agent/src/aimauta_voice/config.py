@@ -1,4 +1,5 @@
 from functools import lru_cache
+from urllib.parse import urlsplit
 
 from pydantic import Field, HttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -14,20 +15,35 @@ class Settings(BaseSettings):
     livekit_url: str
     livekit_api_key: str = Field(min_length=1)
     livekit_api_secret: str = Field(min_length=1)
-    deepgram_api_key: str = Field(min_length=1)
-    aimauta_app_url: HttpUrl = HttpUrl("http://127.0.0.1:3000")
+    aimauta_app_url: HttpUrl = HttpUrl("http://127.0.0.1:3309")
     aimauta_agent_secret: str = Field(min_length=32)
     request_timeout_seconds: float = Field(default=50.0, ge=2.0, le=120.0)
     max_session_seconds: int = Field(default=600, ge=60, le=900)
-    stt_model: str = "nova-3"
-    stt_language: str = "es"
-    tts_model: str = "aura-2-selena-es"
+    stt_model: str = "deepgram/nova-3"
+    stt_language: str = "es-419"
+    tts_model: str = "deepgram/aura-2"
+    tts_voice: str = "selena"
+    tts_language: str = "es-419"
 
     @field_validator("livekit_url")
     @classmethod
     def validate_livekit_url(cls, value: str) -> str:
-        if not value.startswith(("ws://", "wss://")):
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme not in {"ws", "wss"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
             raise ValueError("LIVEKIT_URL debe usar ws:// o wss://")
+        if parsed.scheme == "ws" and parsed.hostname not in {
+            "127.0.0.1",
+            "localhost",
+            "::1",
+        }:
+            raise ValueError(
+                "LIVEKIT_URL debe usar wss:// fuera de loopback"
+            )
         return value.rstrip("/")
 
     @field_validator("aimauta_app_url")
