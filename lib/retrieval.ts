@@ -490,6 +490,16 @@ export async function retrieveEvidence(input: {
     return [];
   }
 
+  const activity = getPageActivity(book.id, input.page);
+  if (activity.stage === "assessment" && activity.unitId === null) {
+    fail(book.id, "la página solicitada no tiene clasificación curricular");
+  }
+  // Resolve the curricular gate before opening or parsing any RAG index.
+  // Orientation, assessment and every fail-closed page return no evidence.
+  if (!activity.tutorAvailable) {
+    return [];
+  }
+
   const indexDir =
     process.env.AIMAUTA_INDEX_DIR ??
     path.resolve(process.cwd(), "data", "indexes");
@@ -497,13 +507,6 @@ export async function retrieveEvidence(input: {
 
   try {
     const index = await loadBookIndex(indexPath, book);
-    const activity = getPageActivity(book.id, input.page);
-    if (activity.stage === "assessment" && activity.unitId === null) {
-      fail(book.id, "la página solicitada no tiene clasificación curricular");
-    }
-    if (!activity.tutorAvailable) {
-      return [];
-    }
     const query = [input.question.trim(), input.attempt.trim()]
       .filter(Boolean)
       .join("\n");

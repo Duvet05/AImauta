@@ -51,7 +51,10 @@ export async function guideLearningTurn(input: {
     });
     return {
       message:
-        "Estás en la etapa Evaluamos. Aquí AImauta guarda silencio para que puedas demostrar lo que aprendiste por tu cuenta.",
+        verifiedActivity.stage === "assessment" &&
+        verifiedActivity.unitId !== null
+          ? "Estás en la etapa Evaluamos. Aquí AImauta guarda silencio para que puedas demostrar lo que aprendiste por tu cuenta."
+          : "Esta página no tiene tutor habilitado. AImauta no consultará el índice ni ofrecerá pistas aquí.",
       citations: [],
       mode: "assessment-locked",
       sessionToken: current.token,

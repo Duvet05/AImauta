@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate catalog
+        run: npm run catalog:validate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Build
+        run: npm run build
+
+      - name: Validate deployment manifests
+        run: |
+          AIMAUTA_WEB_ENV_FILE="$GITHUB_WORKSPACE/infra/web/web.env.example" \
+          AIMAUTA_RUNTIME_DIR="$RUNNER_TEMP/aimauta-runtime" \
+            docker compose -f infra/web/compose.yaml config --quiet
+          docker run --rm --entrypoint nginx \
+            -v "$GITHUB_WORKSPACE/infra/web/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            mirror.gcr.io/library/nginx@sha256:8a4f4b94275ff59d809477799cbbaf1a7ab65ed1871403d05e31fd66bdb8db82 \
+            -t
+
+      - name: Build production image
+        run: docker build --tag aimauta-web:ci .

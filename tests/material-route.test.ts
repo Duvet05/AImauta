@@ -4,7 +4,8 @@ import {
   beforeEach,
   describe,
   expect,
-  it
+  it,
+  vi
 } from "vitest";
 import {
   mkdtemp,
@@ -14,6 +15,9 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+
+const verifyOpenedPinnedFile = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/file-integrity", () => ({ verifyOpenedPinnedFile }));
 
 import {
   GET,
@@ -50,6 +54,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  verifyOpenedPinnedFile.mockResolvedValue(true);
   await preparePinnedFile();
 });
 
@@ -79,6 +84,19 @@ describe("ruta same-origin de materiales", () => {
 
   it("rechaza un archivo local cuyo tamaño cambió", async () => {
     await truncate(pdfPath, 6);
+
+    const response = await HEAD(
+      new Request(`http://localhost/api/materials/${bookId}/pdf`, {
+        method: "HEAD"
+      }),
+      { params: Promise.resolve({ bookId }) }
+    );
+
+    expect(response.status).toBe(503);
+  });
+
+  it("rechaza un archivo local cuyo checksum cambió", async () => {
+    verifyOpenedPinnedFile.mockResolvedValue(false);
 
     const response = await HEAD(
       new Request(`http://localhost/api/materials/${bookId}/pdf`, {

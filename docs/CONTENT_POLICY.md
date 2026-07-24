@@ -34,7 +34,8 @@ Antes de añadir un libro al catálogo deben cumplirse todos estos pasos:
 6. Revisar manualmente que el archivo corresponda a la ficha.
 7. Fijar tamaño y SHA-256 en el catálogo.
 8. Añadir una taxonomía normalizada y un currículo versionado que cubra todas
-   las páginas una sola vez.
+   las páginas una sola vez, incluya al menos una unidad y modele en cada
+   unidad `learn → practice → assessment` en ese orden.
 9. Ejecutar `npm run catalog:validate`, la sincronización y la indexación en
    PowerEdge.
 10. Revisar el reporte de calidad de extracción antes del despliegue.
@@ -42,20 +43,29 @@ Antes de añadir un libro al catálogo deben cumplirse todos estos pasos:
 Si falta la ficha oficial, la licencia es ambigua o la edición descargada no
 coincide, el material no se importa, no se muestra y no se indexa.
 
+La ruta local vuelve a verificar tamaño y SHA-256 antes de servir. Solo
+reutiliza ese resultado mientras dispositivo, inodo, tamaño, `mtime` y `ctime`
+permanezcan idénticos.
+
 ## Estados y publicación cerrada
 
 Cada entrada del catálogo tiene uno de estos estados:
 
 - `draft`: registro incompleto, solo administrativo;
-- `reviewing`: fuente, licencia, identidad y currículo bajo revisión;
-- `ready`: superó las puertas de publicación y puede llegar al estudiante;
+- `review`: fuente, licencia, identidad y currículo bajo revisión;
+- `published`: superó las puertas de publicación y puede llegar al estudiante;
 - `disabled`: retirado de la vista pública.
 
-Las funciones públicas solo devuelven `ready`. Los demás estados, un currículo
-ausente o ambiguo y cualquier fallo de validación se tratan como material no
-disponible. Cambiar el estado no sustituye la revisión: `ready` exige fuente
-oficial permitida, metadatos de licencia y atribución, tamaño y SHA-256 fijados,
-y exactamente un currículo versionado sin huecos ni solapamientos.
+Las funciones públicas solo devuelven `published`. Los demás estados, un
+currículo ausente o ambiguo y cualquier fallo de validación se tratan como
+material no disponible. Tamaño y SHA-256 son obligatorios en todos los estados:
+un borrador no puede representar un archivo de identidad desconocida. Cambiar
+el estado no sustituye la revisión: `published` exige fuente oficial permitida,
+metadatos de licencia y atribución, y exactamente un currículo versionado con
+unidades semánticamente completas, sin huecos ni solapamientos. La orientación
+por sí sola nunca constituye un currículo publicable y sus páginas nunca
+habilitan tutor ni consultas RAG; la ayuda requiere una sección explícita
+`learn` o `practice`.
 
 ## Materiales aprobados
 

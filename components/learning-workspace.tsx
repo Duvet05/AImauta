@@ -111,7 +111,12 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
   const attemptDraftsRef = useRef<Record<string, string>>({});
 
   const currentDraftKey = `${activity?.unitId ?? "orientation"}:${page}`;
-  const tutorAvailable = activity?.tutorAvailable ?? true;
+  const tutorAvailable = activity?.tutorAvailable ?? false;
+  const isAssessment =
+    activity?.stage === "assessment" && activity.unitId !== null;
+  const tutorDisabledReason = isAssessment
+    ? "La voz se pausa en Evaluamos para que resuelvas por tu cuenta."
+    : "El tutor no está habilitado en esta sección.";
 
   const applySession = useCallback((result: SessionResponse) => {
     canonicalSessionRef.current = result.state;
@@ -530,7 +535,7 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
                   sessionId={session.sessionId}
                   sessionToken={sessionToken}
                   disabled={!activity.tutorAvailable}
-                  disabledReason="La voz se pausa en Evaluamos para que resuelvas por tu cuenta."
+                  disabledReason={tutorDisabledReason}
                   onSessionUpdate={applyVoiceSession}
                 />
               </>
@@ -541,7 +546,13 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
             <div className="panel-heading">
               <span className="panel-step">1</span>
               <div>
-                <p>{tutorAvailable ? "Primero piensa tú" : "Tu momento de resolver"}</p>
+                <p>
+                  {tutorAvailable
+                    ? "Primero piensa tú"
+                    : isAssessment
+                      ? "Tu momento de resolver"
+                      : "Trabajo individual"}
+                </p>
                 <h2>Escribe tu intento</h2>
               </div>
             </div>
@@ -569,7 +580,11 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
                   !tutorAvailable
                 }
               >
-                {tutorAvailable ? "Revisar mi intento" : "Evaluación en curso"}
+                {tutorAvailable
+                  ? "Revisar mi intento"
+                  : isAssessment
+                    ? "Evaluación en curso"
+                    : "Tutor no disponible"}
                 {tutorAvailable ? <SparkIcon /> : <LockButtonIcon />}
               </button>
             </div>
@@ -626,7 +641,9 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
                 placeholder={
                   tutorAvailable
                     ? "Cuéntame dónde te quedaste…"
-                    : "El chat se reanudará después de Evaluamos."
+                    : isAssessment
+                      ? "El chat se reanudará después de Evaluamos."
+                      : "El chat no está habilitado en esta sección."
                 }
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
@@ -663,7 +680,9 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
               <ShieldIcon />
               {tutorAvailable
                 ? "Te dará pistas y preguntas, no la respuesta final."
-                : "En Evaluamos, AImauta no entrega pistas ni respuestas."}
+                : isAssessment
+                  ? "En Evaluamos, AImauta no entrega pistas ni respuestas."
+                  : "En esta sección, AImauta no consulta RAG ni entrega ayuda."}
             </p>
             {notice && sessionToken ? (
               <p className="workspace-notice" role="status">

@@ -24,15 +24,18 @@ El recorrido vertical actual incluye:
 7. un avatar 3D local que reacciona al audio aprobado del tutor, con una
    ilustración SVG accesible como respaldo.
 
-Solo los materiales con estado `ready` llegan al navegador. Para alcanzar ese
-estado deben tener fuente oficial permitida, licencia y atribución revisadas,
-tamaño y SHA-256 fijados, taxonomía válida y exactamente un currículo
-versionado sin huecos ni solapamientos. `draft`, `reviewing`, `disabled` o
-cualquier clasificación curricular desconocida se tratan como no disponibles.
+Solo los materiales con estado `published` llegan al navegador. Toda entrada,
+incluso en `draft`, `review` o `disabled`, debe fijar tamaño y SHA-256. Para
+publicarse debe tener además fuente oficial permitida, licencia y atribución
+revisadas, taxonomía válida y exactamente un currículo versionado, con al menos
+una unidad y cobertura íntegra sin huecos ni solapamientos. Cualquier estado o
+clasificación curricular desconocida se trata como no disponible.
 
-Durante `Evaluamos`, el estudiante conserva el PDF y su espacio de respuesta,
-pero el chat, las pistas y la voz quedan bloqueados. La restricción se valida
-también en el servidor: no depende únicamente de la interfaz.
+La ayuda se habilita exclusivamente en secciones `learn` y `practice`.
+`orientation`, las páginas no clasificadas y `assessment` no consultan RAG ni
+habilitan texto o voz. Durante `Evaluamos`, el estudiante conserva el PDF y su
+espacio de respuesta. La restricción se valida también en el servidor: no
+depende únicamente de la interfaz.
 
 La recuperación de evidencia excluye además cualquier fragmento perteneciente
 a páginas `Evaluamos`, incluso cuando esté cerca de una página habilitada.
@@ -211,6 +214,9 @@ AIMAUTA_CONTENT_DIR=/home/hii1sc/aimauta-runtime/content \
   npm run build
 docker build -t aimauta-voice-agent:local services/voice-agent
 ```
+
+`npm run build` vuelve a ejecutar automáticamente `catalog:validate` como
+puerta previa; no puede compilar un catálogo curricular inválido.
 
 La configuración parte de `.env.example`. En producción son obligatorios dos
 secretos aleatorios e independientes de al menos 32 caracteres:

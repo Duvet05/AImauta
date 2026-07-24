@@ -19,10 +19,11 @@ export type CatalogValidationIssue = {
 
 const catalogStatuses = new Set([
   "draft",
-  "reviewing",
-  "ready",
+  "review",
+  "published",
   "disabled"
 ]);
+const orderedUnitStages = ["learn", "practice", "assessment"] as const;
 const unitStages = new Set(["learn", "practice", "assessment"]);
 const safeIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const safePdfNamePattern = /^[a-z0-9][a-z0-9._-]*\.pdf$/;
@@ -178,25 +179,27 @@ function validateCatalogEntry(
     });
   }
 
-  if (entry.status === "ready") {
-    if (!isPositiveInteger(entry.expectedBytes)) {
-      issues.push({
-        code: "catalog.ready-missing-bytes",
-        id,
-        message: "Un material ready debe fijar expectedBytes."
-      });
-    }
-    if (
-      typeof entry.expectedSha256 !== "string" ||
-      !sha256Pattern.test(entry.expectedSha256)
-    ) {
-      issues.push({
-        code: "catalog.ready-invalid-checksum",
-        id,
-        message:
-          "Un material ready debe fijar un SHA-256 hexadecimal en minúsculas."
-      });
-    }
+  if (
+    !Number.isSafeInteger(entry.expectedBytes) ||
+    entry.expectedBytes <= 0
+  ) {
+    issues.push({
+      code: "catalog.invalid-bytes",
+      id,
+      message:
+        "Toda entrada debe fijar expectedBytes como un entero positivo seguro."
+    });
+  }
+  if (
+    typeof entry.expectedSha256 !== "string" ||
+    !sha256Pattern.test(entry.expectedSha256)
+  ) {
+    issues.push({
+      code: "catalog.invalid-checksum",
+      id,
+      message:
+        "Toda entrada debe fijar un SHA-256 hexadecimal en minúsculas."
+    });
   }
 }
 
@@ -250,9 +253,19 @@ function validateCurriculum(
     });
   }
 
+  if (curriculum.units.length === 0) {
+    issues.push({
+      code: "curriculum.empty-units",
+      id,
+      message:
+        "El currículo debe incluir al menos una unidad; orientación no puede clasificar por sí sola todo el libro."
+    });
+  }
+
   const unitIds = new Set<string>();
   const unitNumbers = new Set<number>();
-  for (const unit of curriculum.units) {
+  let expectedUnitStartPage = curriculum.orientation.endPage + 1;
+  for (const [unitIndex, unit] of curriculum.units.entries()) {
     if (!safeIdPattern.test(unit.id) || unitIds.has(unit.id)) {
       issues.push({
         code: "curriculum.invalid-unit-id",
@@ -286,11 +299,41 @@ function validateCurriculum(
         message: `La unidad ${unit.id} requiere título y competencia.`
       });
     }
-    if (unit.sections.length === 0) {
+    if (
+      unit.number !== unitIndex + 1 ||
+      unit.startPage !== expectedUnitStartPage
+    ) {
       issues.push({
-        code: "curriculum.empty-unit",
+        code: "curriculum.invalid-unit-sequence",
         id,
-        message: `La unidad ${unit.id} no tiene secciones.`
+        message:
+          `${unit.id} debe seguir el orden numérico y comenzar inmediatamente ` +
+          "después de la clasificación anterior."
+      });
+    }
+    expectedUnitStartPage = unit.endPage + 1;
+
+    const hasOrderedStages =
+      unit.sections.length === orderedUnitStages.length &&
+      orderedUnitStages.every(
+        (stage, index) => unit.sections[index]?.stage === stage
+      );
+    const hasContinuousStages =
+      unit.sections.length === orderedUnitStages.length &&
+      unit.sections[0]?.startPage === unit.startPage &&
+      unit.sections.at(-1)?.endPage === unit.endPage &&
+      unit.sections.every(
+        (section, index) =>
+          index === 0 ||
+          section.startPage === unit.sections[index - 1].endPage + 1
+      );
+    if (!hasOrderedStages || !hasContinuousStages) {
+      issues.push({
+        code: "curriculum.invalid-stage-structure",
+        id,
+        message:
+          `${unit.id} debe contener exactamente learn → practice → assessment ` +
+          "en ese orden y cubrir continuamente el rango de la unidad."
       });
     }
 
@@ -357,6 +400,27 @@ function validateCurriculum(
         message: `${unit.id} superpone etapas: ${summarizePages(unitOverlaps)}.`
       });
     }
+  }
+
+  if (
+    validRange(curriculum.orientation, pages) &&
+    curriculum.orientation.startPage !== 1
+  ) {
+    issues.push({
+      code: "curriculum.invalid-orientation-sequence",
+      id,
+      message: "La orientación debe comenzar en la primera página."
+    });
+  }
+  if (
+    curriculum.units.length > 0 &&
+    expectedUnitStartPage !== pages + 1
+  ) {
+    issues.push({
+      code: "curriculum.invalid-unit-sequence",
+      id,
+      message: "La última unidad debe terminar en la última página del libro."
+    });
   }
 
   const gaps: number[] = [];
@@ -438,11 +502,11 @@ export function validateCatalogCurriculum(
         message: "El material tiene más de un currículo activo."
       });
     }
-    if (entry.status === "ready" && matching.length !== 1) {
+    if (entry.status === "published" && matching.length !== 1) {
       issues.push({
-        code: "catalog.ready-missing-curriculum",
+        code: "catalog.published-missing-curriculum",
         id: entry.id,
-        message: "Un material ready debe tener exactamente un currículo."
+        message: "Un material published debe tener exactamente un currículo."
       });
     }
   }

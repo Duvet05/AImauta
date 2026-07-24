@@ -85,7 +85,9 @@ export async function createVoiceAccess(sessionToken: string): Promise<{
   const activity = getPageActivity(session.bookId, session.page);
   if (!activity.tutorAvailable) {
     throw new VoiceUnavailableError(
-      "El tutor de voz está en pausa durante Evaluamos."
+      activity.stage === "assessment" && activity.unitId !== null
+        ? "El tutor de voz está en pausa durante Evaluamos."
+        : "El tutor de voz no está habilitado en esta página."
     );
   }
 

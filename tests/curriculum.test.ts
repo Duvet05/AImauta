@@ -30,7 +30,18 @@ describe("currículo por página", () => {
     expect(getPageActivity(bookId, 49).tutorAvailable).toBe(true);
   });
 
-  it("clasifica todas las páginas del material ready", () => {
+  it("mantiene orientación sin tutor aunque esté clasificada", () => {
+    expect(getPageActivity(bookId, 1)).toMatchObject({
+      stage: "orientation",
+      tutorAvailable: false
+    });
+    expect(getPageActivity(secondBookId, 12)).toMatchObject({
+      stage: "orientation",
+      tutorAvailable: false
+    });
+  });
+
+  it("clasifica todas las páginas del material published", () => {
     for (const candidateBookId of [bookId, secondBookId]) {
       const book = getBook(candidateBookId);
       expect(book).toBeDefined();

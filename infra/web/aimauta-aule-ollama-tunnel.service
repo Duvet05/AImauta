@@ -1,0 +1,26 @@
+[Unit]
+Description=AImauta private Ollama tunnel to Aule
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ssh -F /dev/null -N -T -i /home/hii1sc/.ssh/aimauta_aule_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/home/hii1sc/.ssh/aimauta_aule_known_hosts -o ExitOnForwardFailure=yes -o ConnectTimeout=10 -o ConnectionAttempts=1 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o TCPKeepAlive=no -o LogLevel=ERROR -L 127.0.0.1:11435:127.0.0.1:11434 aule-admin@aule-server.tail92f367.ts.net
+Restart=always
+RestartSec=10
+TimeoutStopSec=10
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=default.target

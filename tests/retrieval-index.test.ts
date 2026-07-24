@@ -33,6 +33,24 @@ afterEach(async () => {
 });
 
 describe("contrato del índice RAG v2", () => {
+  it("no abre el índice RAG en páginas de orientación", async () => {
+    await publishIndex({
+      version: 1,
+      bookId,
+      sourceSha256: "legacy",
+      chunks: []
+    });
+
+    await expect(
+      retrieveEvidence({
+        bookId,
+        page: 1,
+        question: "¿Qué hago aquí?",
+        attempt: ""
+      })
+    ).resolves.toEqual([]);
+  });
+
   it("usa el intento del estudiante para ordenar la evidencia", async () => {
     await publishIndex(
       makeBookIndex([

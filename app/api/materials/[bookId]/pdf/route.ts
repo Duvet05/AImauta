@@ -1,5 +1,4 @@
-import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { open, type FileHandle } from "node:fs/promises";
 import { Readable } from "node:stream";
 import path from "node:path";
 
@@ -8,6 +7,7 @@ import {
   isAllowedOfficialSource,
   type Book
 } from "@/lib/catalog";
+import { verifyOpenedPinnedFile } from "@/lib/file-integrity";
 import { parseByteRange } from "@/lib/ranges";
 
 export const runtime = "nodejs";
@@ -40,10 +40,11 @@ async function localPdfResponse(
   }
 
   const filePath = path.join(contentDir, book.storageFile);
-  let fileSize: number;
+  let handle: FileHandle;
+  let fileSize = book.expectedBytes;
 
   try {
-    fileSize = (await stat(filePath)).size;
+    handle = await open(filePath, "r");
   } catch (error) {
     if (
       error instanceof Error &&
@@ -54,24 +55,41 @@ async function localPdfResponse(
     }
     throw error;
   }
-  if (fileSize !== book.expectedBytes) {
-    return Response.json(
-      { error: "El material local no coincide con la edición aprobada." },
-      { status: 503 }
-    );
-  }
 
   const headers = pdfHeaders();
   headers.set("Accept-Ranges", "bytes");
   headers.set("Cache-Control", "private, max-age=3600");
 
   try {
+    const metadata = await handle.stat();
+    fileSize = metadata.size;
+    if (
+      !metadata.isFile() ||
+      fileSize !== book.expectedBytes ||
+      !(await verifyOpenedPinnedFile(
+        filePath,
+        handle,
+        book.expectedBytes,
+        book.expectedSha256
+      ))
+    ) {
+      await handle.close();
+      return Response.json(
+        { error: "El material local no coincide con la edición aprobada." },
+        { status: 503 }
+      );
+    }
+
     const range = parseByteRange(request.headers.get("range"), fileSize);
     if (!range) {
       headers.set("Content-Length", String(fileSize));
-      const body = headOnly
-        ? null
-        : (Readable.toWeb(createReadStream(filePath)) as ReadableStream);
+      if (headOnly) {
+        await handle.close();
+        return new Response(null, { status: 200, headers });
+      }
+      const body = Readable.toWeb(
+        handle.createReadStream({ start: 0, autoClose: true })
+      ) as ReadableStream;
       return new Response(body, { status: 200, headers });
     }
 
@@ -81,13 +99,20 @@ async function localPdfResponse(
       "Content-Range",
       `bytes ${range.start}-${range.end}/${fileSize}`
     );
-    const body = headOnly
-      ? null
-      : (Readable.toWeb(
-          createReadStream(filePath, { start: range.start, end: range.end })
-        ) as ReadableStream);
+    if (headOnly) {
+      await handle.close();
+      return new Response(null, { status: 206, headers });
+    }
+    const body = Readable.toWeb(
+      handle.createReadStream({
+        start: range.start,
+        end: range.end,
+        autoClose: true
+      })
+    ) as ReadableStream;
     return new Response(body, { status: 206, headers });
   } catch (error) {
+    await handle.close().catch(() => undefined);
     if (error instanceof RangeError) {
       headers.set("Content-Range", `bytes */${fileSize}`);
       return new Response(null, { status: 416, headers });

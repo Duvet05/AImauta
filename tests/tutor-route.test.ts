@@ -19,8 +19,8 @@ beforeAll(async () => {
     JSON.stringify(
       makeBookIndex([
         {
-          id: "page-8",
-          page: 8,
+          id: "page-13",
+          page: 13,
           kind: "exercise",
           text: "Observa las cantidades de la situación y explica cómo las compararías."
         },
@@ -61,7 +61,7 @@ describe("POST /api/tutor", () => {
         body: JSON.stringify({
           sessionToken: issueLearningSession({
             bookId: "fichas-matematica-1-secundaria",
-            page: 8
+            page: 13
           }).token,
           message: "¿Cómo comparo las cantidades?",
           attempt: "Creo que debo ordenarlas."
@@ -73,8 +73,32 @@ describe("POST /api/tutor", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     await expect(response.json()).resolves.toMatchObject({
       mode: "guided-fallback",
-      citations: [{ sourceId: "S1", page: 8 }],
+      citations: [{ sourceId: "S1", page: 13 }],
       policy: { canRevealSolution: false }
+    });
+  });
+
+  it("no consulta RAG ni ofrece ayuda durante orientación", async () => {
+    const response = await POST(
+      new Request("http://aimauta.test/api/tutor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionToken: issueLearningSession({
+            bookId: "fichas-matematica-1-secundaria",
+            page: 8
+          }).token,
+          message: "¿Cómo comparo las cantidades?",
+          attempt: ""
+        })
+      })
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      mode: "assessment-locked",
+      citations: [],
+      activity: { stage: "orientation", tutorAvailable: false }
     });
   });
 

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isIP } from "node:net";
 
 type RateLimitBucket = {
   count: number;
@@ -89,11 +90,19 @@ export function consumeRateLimit(input: {
 
 export function requestRateLimitKey(request: Request): string {
   const trustProxy = process.env.AIMAUTA_TRUST_PROXY_HEADERS === "true";
-  const forwardedAddress = trustProxy
-    ? request.headers.get("cf-connecting-ip") ??
-      request.headers.get("x-real-ip") ??
-      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-    : null;
+  const forwardedFor = trustProxy
+    ? request.headers.get("x-forwarded-for")?.trim() ?? ""
+    : "";
+  // The production edge accepts traffic only from Tailscale Funnel, which
+  // overwrites X-Forwarded-For with one canonical client IP. Do not consult
+  // CF-Connecting-IP or X-Real-IP: Funnel does not sanitize those client
+  // headers, so trusting them would make the limiter trivially spoofable.
+  const forwardedAddress =
+    forwardedFor.length <= 45 &&
+    !forwardedFor.includes(",") &&
+    isIP(forwardedFor) !== 0
+      ? forwardedFor
+      : null;
   // A standard Web Request does not expose the peer socket address. When no
   // sanitizing proxy is trusted, use one shared fail-closed bucket rather than
   // a spoofable User-Agent bucket that an attacker can rotate indefinitely.

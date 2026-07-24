@@ -309,7 +309,7 @@ AIMAUTA_CONTENT_DIR=/home/hii1sc/aimauta-runtime/content \
   npm run content:index
 ```
 
-Sin `--book`, ambos comandos procesan todos los materiales `ready`. Para
+Sin `--book`, ambos comandos procesan todos los materiales `published`. Para
 repetir de forma selectiva uno de ellos puede añadirse, por ejemplo,
 `-- --book fichas-matematica-2-secundaria`.
 
@@ -393,6 +393,71 @@ excluye pruebas y ejecuta el worker como un usuario sin privilegios. No se
 despliega una revisión si falla una comprobación.
 
 ## Inicio de servicios
+
+### Perfil web público en PowerEdge
+
+El perfil reproducible de `infra/web/compose.yaml` separa el proceso Next.js
+del edge:
+
+```text
+Internet → Tailscale Funnel HTTPS en Aule
+         → reverse SSH Aule 127.0.0.1:3308
+         → Nginx PowerEdge 127.0.0.1:3308
+         → Next.js PowerEdge 127.0.0.1:3309
+         → Ollama Aule 127.0.0.1:11434
+```
+
+Nginx aplica límite de cuerpo, solicitudes y conexiones, bloquea externamente
+`/api/internal/turn` y sanea los encabezados de identidad antes de entregarlos
+a la aplicación. Next.js confía exclusivamente en el `X-Forwarded-For`
+canónico escrito por Funnel. El túnel conserva ese encabezado sin exponer
+ninguna escucha de PowerEdge. No se debe dirigir Funnel al puerto 3309.
+
+Desde un checkout limpio:
+
+```bash
+infra/web/init-env.sh /home/hii1sc/aimauta-runtime/web.env
+AIMAUTA_RELEASE="$(git rev-parse --short HEAD)" \
+  docker compose -f infra/web/compose.yaml build
+AIMAUTA_RELEASE="$(git rev-parse --short HEAD)" \
+  docker compose -f infra/web/compose.yaml up -d
+
+install -m 600 infra/web/aimauta-aule-ollama-tunnel.service \
+  /home/hii1sc/.config/systemd/user/aimauta-aule-ollama-tunnel.service
+install -m 600 infra/web/aimauta-aule-edge-tunnel.service \
+  /home/hii1sc/.config/systemd/user/aimauta-aule-edge-tunnel.service
+systemctl --user daemon-reload
+systemctl --user enable --now aimauta-aule-ollama-tunnel.service
+systemctl --user enable --now aimauta-aule-edge-tunnel.service
+```
+
+En Aule, con Tailscale `1.98.9` o posterior:
+
+```bash
+tailscale funnel --yes --bg --https=8443 http://127.0.0.1:3308
+```
+
+PowerEdge debe conservar `Linger=yes`. Funnel no se activa en versiones
+afectadas por TS-2026-008.
+
+La llave `aimauta_aule_edge_ed25519` es exclusiva de este reverse y no se
+reutiliza para Ollama. En Aule su entrada de `authorized_keys` debe restringirse
+a la IP Tailscale de PowerEdge y al listener exacto:
+
+```text
+from="100.120.80.60",restrict,port-forwarding,permitlisten="127.0.0.1:3308",permitopen="127.0.0.1:9",command="/bin/false" ssh-ed25519 <clave-pública> aimauta-poweredge-to-aule-edge
+```
+
+Antes de habilitar la unidad se verifica la huella fuera de banda y se prueba
+que la llave no puede abrir shell ni un segundo puerto.
+
+Este perfil habilita PDF y tutor de texto con Gemma. La voz permanece
+indisponible hasta desplegar LiveKit y el worker. Cuando se habilite, el entorno
+web debe recibir las cuatro variables `LIVEKIT_*`, el worker debe apuntar a
+`AIMAUTA_APP_URL=http://127.0.0.1:3309` y ambos deben compartir exactamente el
+mismo `AIMAUTA_AGENT_SECRET`.
+
+### Pila completa con voz
 
 Iniciar primero LiveKit solo después de superar la revisión de red:
 
@@ -485,9 +550,9 @@ docker logs --tail 100 aimauta-voice-agent
 
 Validar desde un navegador HTTPS:
 
-1. comprobar que la biblioteca solo muestra materiales `ready`, que la búsqueda
-   funciona y que los filtros **Nivel → Grado → Curso** se actualizan en
-   cascada;
+1. comprobar que la biblioteca solo muestra materiales `published`, que la
+   búsqueda funciona y que los filtros **Nivel → Grado → Curso** se actualizan
+   en cascada;
 2. abrir cada uno de los dos materiales y confirmar que PDF.js renderiza la
    página 13, que el texto es seleccionable y que funcionan zoom, ajuste al
    ancho, botones y teclado;
@@ -550,20 +615,29 @@ npm test
 
 AIMAUTA_CONTENT_DIR=/home/hii1sc/aimauta-runtime/content \
   AIMAUTA_INDEX_DIR=/home/hii1sc/aimauta-runtime/indexes \
-  npm run build
+npm run build
 
 /home/hii1sc/aimauta-runtime/voice-test-venv/bin/pytest \
   services/voice-agent/tests
 docker build -t aimauta-voice-agent:local services/voice-agent
+
+AIMAUTA_RELEASE="$(git rev-parse --short HEAD)" \
+  AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
+  docker compose -f infra/web/compose.yaml build --pull
+AIMAUTA_RELEASE="$(git rev-parse --short HEAD)" \
+  AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
+  docker compose -f infra/web/compose.yaml up -d --no-build --force-recreate
 ```
 
 La sincronización puede omitirse cuando el catálogo no incorpora un material ni
 una edición nueva; si se ejecuta, el pin evita una descarga distinta de la
 aprobada y el manifiesto conserva los registros de los demás libros. La
 indexación debe repetirse cuando cambian el PDF, el contrato del índice, el
-extractor o la versión curricular. Después se reinician Next.js y el worker
-mediante el administrador de servicios del host y se repite la validación
-posterior.
+extractor o la versión curricular. El perfil web se reconstruye y recrea
+mediante Compose; después se reinicia el worker, si está habilitado, y se repite
+la validación posterior.
 Reiniciar un contenedor existente no adopta la imagen recién construida: el
 administrador debe sustituir el contenedor por otro creado desde la nueva
 imagen. El worker no guarda estado durable dentro del contenedor.

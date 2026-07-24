@@ -18,7 +18,7 @@ export const courses = {
 export type EducationLevelId = keyof typeof educationLevels;
 export type CourseId = keyof typeof courses;
 export type GradeNumber = 1 | 2 | 3 | 4 | 5 | 6;
-export type CatalogStatus = "draft" | "reviewing" | "ready" | "disabled";
+export type CatalogStatus = "draft" | "review" | "published" | "disabled";
 export type MaterialType = "student-workbook" | "student-textbook";
 
 type CatalogEntryBase = {
@@ -37,6 +37,8 @@ type CatalogEntryBase = {
   sourcePdfUrl: string;
   discoveredViaUrl: string;
   storageFile: string;
+  expectedBytes: number;
+  expectedSha256: string;
   edition: string;
   licenseName: string;
   licenseUrl: string;
@@ -47,26 +49,22 @@ type CatalogEntryBase = {
   provenance: "official-minedu";
 };
 
-export type ReadyCatalogEntry = CatalogEntryBase & {
-  status: "ready";
-  expectedBytes: number;
-  expectedSha256: string;
+export type PublishedCatalogEntry = CatalogEntryBase & {
+  status: "published";
 };
 
-export type PendingCatalogEntry = CatalogEntryBase & {
-  status: Exclude<CatalogStatus, "ready">;
-  expectedBytes?: number;
-  expectedSha256?: string;
+export type UnpublishedCatalogEntry = CatalogEntryBase & {
+  status: Exclude<CatalogStatus, "published">;
 };
 
-export type CatalogEntry = ReadyCatalogEntry | PendingCatalogEntry;
+export type CatalogEntry = PublishedCatalogEntry | UnpublishedCatalogEntry;
 
 /**
  * Public material shape. The normalized taxonomy remains available through
  * `levelId`, `gradeNumber` and `courseId`; labels are derived for compatibility
  * with the existing UI and service metadata.
  */
-export type Book = ReadyCatalogEntry & {
+export type Book = PublishedCatalogEntry & {
   level: (typeof educationLevels)[EducationLevelId]["label"];
   grade: string;
   subject: (typeof courses)[CourseId]["label"];
@@ -75,7 +73,7 @@ export type Book = ReadyCatalogEntry & {
 const catalogEntries: readonly CatalogEntry[] = [
   {
     id: "fichas-matematica-1-secundaria",
-    status: "ready",
+    status: "published",
     title: "Fichas de Matemática 1",
     levelId: "secundaria",
     gradeNumber: 1,
@@ -109,7 +107,7 @@ const catalogEntries: readonly CatalogEntry[] = [
   },
   {
     id: "fichas-matematica-2-secundaria",
-    status: "ready",
+    status: "published",
     title: "Fichas de Matemática 2",
     levelId: "secundaria",
     gradeNumber: 2,
@@ -152,13 +150,13 @@ const gradeLabels: Readonly<Record<GradeNumber, string>> = {
   6: "6.º grado"
 };
 
-export function isReadyCatalogEntry(
+export function isPublishedCatalogEntry(
   entry: CatalogEntry
-): entry is ReadyCatalogEntry {
-  return entry.status === "ready";
+): entry is PublishedCatalogEntry {
+  return entry.status === "published";
 }
 
-function toBook(entry: ReadyCatalogEntry): Book {
+function toBook(entry: PublishedCatalogEntry): Book {
   return {
     ...entry,
     level: educationLevels[entry.levelId].label,
@@ -168,7 +166,7 @@ function toBook(entry: ReadyCatalogEntry): Book {
 }
 
 const publishedBooks: readonly Book[] = catalogEntries
-  .filter(isReadyCatalogEntry)
+  .filter(isPublishedCatalogEntry)
   .map(toBook);
 
 /**
@@ -184,7 +182,7 @@ export function getPublishedBooks(): readonly Book[] {
 }
 
 /**
- * Backwards-compatible public catalog. It deliberately exposes only ready
+ * Backwards-compatible public catalog. It deliberately exposes only published
  * materials.
  */
 export function getBooks(): readonly Book[] {
@@ -192,7 +190,7 @@ export function getBooks(): readonly Book[] {
 }
 
 /**
- * Public lookup. Draft, reviewing and disabled entries behave as unavailable.
+ * Public lookup. Draft, review and disabled entries behave as unavailable.
  */
 export function getBook(id: string): Book | undefined {
   return publishedBooks.find((book) => book.id === id);

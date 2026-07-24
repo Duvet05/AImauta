@@ -64,6 +64,56 @@ describe("límites de admisión", () => {
     expect(first).toBe(second);
   });
 
+  it("detrás del edge confía solo en un X-Forwarded-For canónico", () => {
+    process.env.AIMAUTA_TRUST_PROXY_HEADERS = "true";
+    const canonical = requestRateLimitKey(
+      new Request("http://aimauta.test", {
+        headers: {
+          "X-Forwarded-For": "203.0.113.41",
+          "CF-Connecting-IP": "198.51.100.1",
+          "X-Real-IP": "198.51.100.2"
+        }
+      })
+    );
+    const spoofedAuxiliaryHeaders = requestRateLimitKey(
+      new Request("http://aimauta.test", {
+        headers: {
+          "X-Forwarded-For": "203.0.113.41",
+          "CF-Connecting-IP": "192.0.2.1",
+          "X-Real-IP": "192.0.2.2"
+        }
+      })
+    );
+    const anotherClient = requestRateLimitKey(
+      new Request("http://aimauta.test", {
+        headers: { "X-Forwarded-For": "2001:db8::41" }
+      })
+    );
+
+    expect(canonical).toBe(spoofedAuxiliaryHeaders);
+    expect(canonical).not.toBe(anotherClient);
+  });
+
+  it("rechaza cadenas X-Forwarded-For y direcciones inválidas", () => {
+    process.env.AIMAUTA_TRUST_PROXY_HEADERS = "true";
+    const chained = requestRateLimitKey(
+      new Request("http://aimauta.test", {
+        headers: { "X-Forwarded-For": "203.0.113.41, 198.51.100.8" }
+      })
+    );
+    const invalid = requestRateLimitKey(
+      new Request("http://aimauta.test", {
+        headers: {
+          "X-Forwarded-For": "not-an-ip",
+          "CF-Connecting-IP": "203.0.113.41",
+          "X-Real-IP": "203.0.113.41"
+        }
+      })
+    );
+
+    expect(chained).toBe(invalid);
+  });
+
   it("comparte los buckets entre evaluaciones aisladas del módulo", async () => {
     const scope = `bundle-test-${crypto.randomUUID()}`;
     const key = crypto.randomUUID();

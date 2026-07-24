@@ -34,6 +34,12 @@ export type BookCurriculum = {
   units: readonly BookUnit[];
 };
 
+const orderedUnitStages: readonly UnitSection["stage"][] = [
+  "learn",
+  "practice",
+  "assessment"
+];
+
 export type PageActivity = {
   unitId: string | null;
   unitNumber: number | null;
@@ -283,9 +289,15 @@ const curriculumEntries: readonly BookCurriculum[] = [
   }
 ];
 
-const curriculumByBook: Readonly<Record<string, BookCurriculum>> =
-  Object.fromEntries(
-    curriculumEntries.map((curriculum) => [curriculum.bookId, curriculum])
+const curriculaByBook: ReadonlyMap<string, readonly BookCurriculum[]> =
+  curriculumEntries.reduce<Map<string, BookCurriculum[]>>(
+    (entries, curriculum) => {
+      const matching = entries.get(curriculum.bookId) ?? [];
+      matching.push(curriculum);
+      entries.set(curriculum.bookId, matching);
+      return entries;
+    },
+    new Map()
   );
 
 const stageLabels: Readonly<Record<LearningStage, string>> = {
@@ -312,6 +324,95 @@ function unavailableActivity(page: number): PageActivity {
   };
 }
 
+function hasText(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+const safeIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function validPageRange<T extends PageRange>(
+  range: T | null | undefined,
+  pages: number
+): range is T {
+  return (
+    range !== null &&
+    range !== undefined &&
+    Number.isInteger(range.startPage) &&
+    Number.isInteger(range.endPage) &&
+    range.startPage >= 1 &&
+    range.startPage <= range.endPage &&
+    range.endPage <= pages
+  );
+}
+
+/**
+ * Runtime safety boundary for curricular classification.
+ *
+ * The build validator reports detailed authoring errors, but requests must
+ * still fail closed if a malformed curriculum reaches a running process. A
+ * safe curriculum has an initial orientation followed by one or more ordered
+ * units, and every unit has exactly learn → practice → assessment with
+ * continuous, non-overlapping page ranges.
+ */
+export function isCurriculumStructureSafe(
+  curriculum: BookCurriculum,
+  pages: number
+): boolean {
+  if (
+    !Number.isInteger(pages) ||
+    pages < 1 ||
+    !hasText(curriculum.version) ||
+    !curriculum.orientation ||
+    !hasText(curriculum.orientation.title) ||
+    !validPageRange(curriculum.orientation, pages) ||
+    curriculum.orientation.startPage !== 1 ||
+    !Array.isArray(curriculum.units) ||
+    curriculum.units.length === 0
+  ) {
+    return false;
+  }
+
+  let expectedUnitStartPage = curriculum.orientation.endPage + 1;
+  const unitIds = new Set<string>();
+  for (const [unitIndex, unit] of curriculum.units.entries()) {
+    if (
+      !unit ||
+      !safeIdPattern.test(unit.id) ||
+      unitIds.has(unit.id) ||
+      !hasText(unit.title) ||
+      !hasText(unit.competency) ||
+      unit.number !== unitIndex + 1 ||
+      !validPageRange(unit, pages) ||
+      unit.startPage !== expectedUnitStartPage ||
+      !Array.isArray(unit.sections) ||
+      unit.sections.length !== orderedUnitStages.length
+    ) {
+      return false;
+    }
+    unitIds.add(unit.id);
+
+    let expectedSectionStartPage = unit.startPage;
+    for (const [sectionIndex, section] of unit.sections.entries()) {
+      if (
+        !section ||
+        section.stage !== orderedUnitStages[sectionIndex] ||
+        !validPageRange(section, pages) ||
+        section.startPage !== expectedSectionStartPage ||
+        section.endPage > unit.endPage
+      ) {
+        return false;
+      }
+      expectedSectionStartPage = section.endPage + 1;
+    }
+    if (expectedSectionStartPage !== unit.endPage + 1) {
+      return false;
+    }
+    expectedUnitStartPage = unit.endPage + 1;
+  }
+
+  return expectedUnitStartPage === pages + 1;
+}
+
 export function getCurriculumEntries(): readonly BookCurriculum[] {
   return curriculumEntries;
 }
@@ -319,14 +420,19 @@ export function getCurriculumEntries(): readonly BookCurriculum[] {
 export function getBookCurriculum(
   bookId: string
 ): BookCurriculum | undefined {
-  return curriculumByBook[bookId];
+  const matching = curriculaByBook.get(bookId);
+  return matching?.length === 1 ? matching[0] : undefined;
 }
 
 export function getBookUnits(bookId: string): readonly BookUnit[] {
-  if (!getBook(bookId)) {
+  const book = getBook(bookId);
+  if (!book) {
     return [];
   }
-  return getBookCurriculum(bookId)?.units ?? [];
+  const curriculum = getBookCurriculum(bookId);
+  return curriculum && isCurriculumStructureSafe(curriculum, book.pages)
+    ? curriculum.units
+    : [];
 }
 
 export function getPageActivity(
@@ -344,7 +450,10 @@ export function getPageActivity(
   }
 
   const curriculum = getBookCurriculum(bookId);
-  if (!curriculum) {
+  if (
+    !curriculum ||
+    !isCurriculumStructureSafe(curriculum, book.pages)
+  ) {
     return unavailableActivity(page);
   }
 
@@ -381,7 +490,10 @@ export function getPageActivity(
       stageLabel: stageLabels.orientation,
       startPage: orientation.startPage,
       endPage: orientation.endPage,
-      tutorAvailable: true
+      // Front matter can contain answer keys, diagnostics or other material
+      // that is not safe to infer from a generic "orientation" label.
+      // Assistance is enabled only by an explicit learn/practice section.
+      tutorAvailable: false
     };
   }
 

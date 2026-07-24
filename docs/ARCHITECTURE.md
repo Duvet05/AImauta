@@ -10,7 +10,7 @@ La iteración de biblioteca curricular integra catálogo, visor, currículo,
 estado pedagógico, avatar y canales de texto y voz bajo una misma autoridad del
 servidor. Sus propiedades principales son:
 
-- el catálogo publica de forma cerrada únicamente materiales `ready`;
+- el catálogo publica de forma cerrada únicamente materiales `published`;
 - el libro, la página, la etapa y el nivel de ayuda se validan en el servidor;
 - texto y voz reutilizan la misma recuperación y la misma política pedagógica;
 - `Evaluamos` bloquea el tutor sin bloquear el espacio de trabajo del alumno;
@@ -74,25 +74,33 @@ procedencia y archivo operativo.
 El ciclo de vida es:
 
 ```text
-draft → reviewing → ready
-                     │
-                     └─► disabled
+draft → review → published
+                    │
+                    └─► disabled
 ```
 
-Solo `ready` es visible mediante las funciones públicas del catálogo. Un
-material listo debe fijar `expectedBytes` y `expectedSha256`; una entrada
-`draft`, `reviewing` o `disabled` se comporta como inexistente para la
-aplicación. `npm run catalog:validate` comprueba además:
+Solo `published` es visible mediante las funciones públicas del catálogo. Toda
+entrada debe fijar `expectedBytes` y `expectedSha256`; una entrada `draft`,
+`review` o `disabled` se comporta como inexistente para la aplicación.
+`npm run catalog:validate` comprueba además:
 
 - taxonomía, URLs y nombre de archivo válidos;
 - fuente PDF dentro de la lista oficial permitida;
-- metadatos y pin de integridad obligatorios para `ready`;
+- metadatos y pin de integridad obligatorios para todos los estados;
 - exactamente un currículo versionado por material publicado;
+- al menos una unidad por currículo;
+- secuencia exacta `learn → practice → assessment` dentro de cada unidad;
 - cobertura de todas las páginas, sin huecos, duplicados ni solapamientos.
 
 La resolución curricular también es cerrada: una página sin clasificación
-inequívoca se convierte en una actividad no disponible y sin tutor. Así, una
-omisión de metadatos no habilita ayuda accidentalmente.
+inequívoca, o perteneciente a un currículo cuya estructura completa no sea
+segura, se convierte en una actividad no disponible y sin tutor ni RAG. Así,
+una orientación que abarque todo un libro sin unidades no habilita ayuda
+accidentalmente. `npm run build` ejecuta el validador automáticamente antes de
+compilar. Además, `orientation` es siempre una zona sin tutor: solo las etapas
+explícitas `learn` y `practice` pueden consultar RAG. Esto mantiene cerrado el
+caso de una portada u orientación sobredimensionada aunque supere por error la
+revisión editorial.
 
 La biblioteca recibe únicamente entradas publicadas y permite búsqueda textual
 y filtros encadenados por **Nivel → Grado → Curso**. Las opciones descendientes
