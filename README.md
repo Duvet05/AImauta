@@ -5,7 +5,7 @@ Perú. Mantiene el material visible, pide al estudiante que escriba o explique s
 intento y usa un tutor socrático para ofrecer una pregunta o una pista breve,
 sin resolver el ejercicio por él.
 
-## Estado de la segunda iteración
+## Estado de la tercera iteración
 
 El recorrido vertical actual incluye:
 
@@ -16,8 +16,10 @@ El recorrido vertical actual incluye:
    `Construimos`, `Comprobamos` y `Evaluamos`;
 4. un único servicio de tutoría para texto y voz, con RAG por página, política
    socrática y respaldo conservador cuando Ollama no responde;
-5. un canal de voz opcional con LiveKit, Deepgram y un worker preparado para
-   ejecutarse en PowerEdge.
+5. un canal de voz opcional con LiveKit self-hosted, Deepgram y un worker
+   preparado para ejecutarse en PowerEdge;
+6. un avatar 3D local que reacciona al audio aprobado del tutor, con una
+   ilustración SVG accesible como respaldo.
 
 Durante `Evaluamos`, el estudiante conserva el PDF y su espacio de respuesta,
 pero el chat, las pistas y la voz quedan bloqueados. La restricción se valida
@@ -110,16 +112,30 @@ conexión y limpia audio y micrófono.
 
 El worker inicia `AgentSession` con `record=False`, usa logging `WARN` con
 redacción, limita cada conexión a diez minutos, elimina la sala al terminar y
-expone su health check únicamente en `127.0.0.1`. Esto desactiva la grabación de
-Agent Insights, pero no elimina el tratamiento necesario para prestar el
-servicio: LiveKit y Deepgram siguen procesando audio y transcripciones en
-tránsito. Un piloto con estudiantes requiere consentimiento aplicable, acuerdos
-de tratamiento con los proveedores y una política explícita de retención y
-eliminación.
+expone su health check únicamente en `127.0.0.1`. La instancia LiveKit
+self-hosted no habilita grabación, Ingress, Egress, SIP ni exportación de
+telemetría, pero sigue procesando audio en tránsito; Deepgram procesa audio y
+transcripciones para STT/TTS. Un piloto con estudiantes requiere consentimiento
+aplicable, un acuerdo de tratamiento con Deepgram y una política explícita de
+retención y eliminación.
 
 Deepgram realiza STT y TTS; Silero aporta detección de voz. El worker llama a
 `POST /api/internal/turn` con un secreto de servicio y no se conecta
 directamente a Ollama.
+
+## Avatar local y privado
+
+El navegador carga bajo demanda un personaje 3D sintético CC0 de MakeHuman y
+lo renderiza con Three.js, que usa licencia MIT. No solicita cámara, no publica
+video y la política de permisos HTTP bloquea explícitamente cámara,
+captura de pantalla y geolocalización. No se envían rasgos, imágenes ni audio a
+un proveedor de avatar. La animación de la boca se calcula localmente con el
+nivel del audio remoto y solo acepta la pista del participante agente validado.
+
+Si WebGL no está disponible, el modelo no carga o el estudiante prefiere
+movimiento reducido, permanece una ilustración SVG local con los mismos estados
+de conexión. La procedencia, licencia, optimización y checksums del modelo se
+conservan en [`public/avatars/README.md`](public/avatars/README.md).
 
 ## Primer material autorizado
 
@@ -179,9 +195,10 @@ es un túnel SSH que publique únicamente
 `http://127.0.0.1:11435` en PowerEdge. No se debe usar Tailscale Funnel ni
 configurar Ollama en `0.0.0.0`.
 
-LiveKit y Deepgram deben usar proyectos o claves dedicados a AImauta, separados
-de Nebu y de cualquier otro sistema. Los secretos permanecen únicamente en los
-servicios de PowerEdge.
+La instancia LiveKit self-hosted y Deepgram deben usar claves dedicadas a
+AImauta, separadas de Nebu y de cualquier otro sistema. Los secretos permanecen
+únicamente en los servicios de PowerEdge. La configuración reproducible de
+LiveKit está documentada en [`infra/livekit`](infra/livekit/README.md).
 
 ## Límites de contenido y datos
 

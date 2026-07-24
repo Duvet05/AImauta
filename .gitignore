@@ -43,6 +43,9 @@ yarn-error.log*
 *.p12
 *.pfx
 *credentials*.json
+/infra/livekit/runtime/
+/infra/livekit/*.env
+!/infra/livekit/*.env.example
 
 # vercel
 .vercel

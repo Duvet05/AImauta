@@ -21,7 +21,14 @@ ENV PATH="/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-RUN useradd --create-home --uid 10001 aimauta
+RUN useradd --create-home --uid 10001 aimauta \
+    && rm -rf \
+        /usr/local/bin/pip \
+        /usr/local/bin/pip3 \
+        /usr/local/bin/pip3.12 \
+        /usr/local/lib/python3.12/ensurepip \
+        /usr/local/lib/python3.12/site-packages/pip \
+        /usr/local/lib/python3.12/site-packages/pip-*.dist-info
 COPY --from=builder /venv /venv
 WORKDIR /app
 COPY src ./src

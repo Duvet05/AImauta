@@ -1896,6 +1896,298 @@ svg {
   box-shadow: 0 0 0 4px rgba(200, 93, 82, 0.14);
 }
 
+.voice-presence {
+  display: grid;
+  grid-template-columns: 5.4rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: center;
+  min-height: 6rem;
+  margin-top: 0.7rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid rgba(23, 79, 70, 0.09);
+  border-radius: 0.7rem;
+  background:
+    radial-gradient(circle at 12% 50%, rgba(217, 237, 141, 0.2), transparent 35%),
+    #fbfaf5;
+}
+
+.voice-presence-copy {
+  min-width: 0;
+}
+
+.voice-avatar-privacy {
+  display: inline-block;
+  margin-top: 0.35rem;
+  color: #7a8984;
+  font-size: 0.59rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.tutor-avatar {
+  position: relative;
+  display: grid;
+  width: 5.2rem;
+  height: 5.2rem;
+  place-items: center;
+  isolation: isolate;
+}
+
+.tutor-avatar-orbit {
+  position: absolute;
+  z-index: -1;
+  inset: 0.15rem;
+  border: 1px solid rgba(23, 79, 70, 0.18);
+  border-radius: 50%;
+}
+
+.tutor-avatar-3d {
+  position: absolute;
+  z-index: 0;
+  inset: 0.28rem;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #e7f1dc;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease;
+}
+
+.tutor-avatar-3d-ready {
+  opacity: 1;
+}
+
+.tutor-avatar-3d canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.tutor-avatar-portrait {
+  position: relative;
+  z-index: 1;
+  width: 4.65rem;
+  height: 4.65rem;
+  overflow: visible;
+  opacity: 1;
+  transition: opacity 180ms ease;
+}
+
+.tutor-avatar-portrait-hidden {
+  opacity: 0;
+}
+
+.tutor-avatar-backdrop {
+  fill: #e7f1dc;
+}
+
+.tutor-avatar-shoulders,
+.tutor-avatar-collar {
+  fill: var(--forest);
+}
+
+.tutor-avatar-shirt-line {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.46);
+  stroke-linecap: round;
+  stroke-width: 2;
+}
+
+.tutor-avatar-neck,
+.tutor-avatar-face,
+.tutor-avatar-ear {
+  fill: #c9825f;
+}
+
+.tutor-avatar-neck {
+  fill: #b96f50;
+}
+
+.tutor-avatar-hair-back,
+.tutor-avatar-hair {
+  fill: #263f3a;
+}
+
+.tutor-avatar-brow,
+.tutor-avatar-nose,
+.tutor-avatar-mouth-rest {
+  fill: none;
+  stroke: #673b31;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.2;
+}
+
+.tutor-avatar-eye {
+  fill: #263f3a;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: tutor-avatar-blink 7s infinite;
+}
+
+.tutor-avatar-mouth-talk {
+  display: none;
+  fill: #63342f;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.tutor-avatar-headset,
+.tutor-avatar-microphone {
+  fill: none;
+  stroke: var(--coral);
+  stroke-linecap: round;
+  stroke-width: 3;
+}
+
+.tutor-avatar-headset-pad,
+.tutor-avatar-microphone-tip {
+  fill: var(--coral);
+}
+
+.tutor-avatar-audio-bars {
+  position: absolute;
+  z-index: 3;
+  right: -0.2rem;
+  bottom: 0.45rem;
+  display: flex;
+  height: 1.35rem;
+  align-items: center;
+  gap: 0.12rem;
+  padding: 0.25rem 0.3rem;
+  border: 2px solid white;
+  border-radius: 1rem;
+  background: var(--forest);
+  box-shadow: 0 4px 10px rgba(23, 45, 42, 0.18);
+  opacity: 0;
+  transform: scale(0.7);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.tutor-avatar-audio-bars i {
+  display: block;
+  width: 0.12rem;
+  height: 0.35rem;
+  border-radius: 1rem;
+  background: var(--lime);
+}
+
+.tutor-avatar-state {
+  position: absolute;
+  z-index: 3;
+  top: 0.35rem;
+  right: 0.15rem;
+  width: 0.72rem;
+  height: 0.72rem;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: #a8b2ae;
+  box-shadow: 0 2px 6px rgba(23, 45, 42, 0.17);
+}
+
+.tutor-avatar-connecting .tutor-avatar-orbit,
+.tutor-avatar-reconnecting .tutor-avatar-orbit {
+  border-top-color: var(--coral);
+  border-right-color: var(--coral);
+  animation: tutor-avatar-orbit 1.3s linear infinite;
+}
+
+.tutor-avatar-ready .tutor-avatar-state,
+.tutor-avatar-listening .tutor-avatar-state,
+.tutor-avatar-speaking .tutor-avatar-state {
+  background: #58a86a;
+}
+
+.tutor-avatar-connecting .tutor-avatar-state,
+.tutor-avatar-reconnecting .tutor-avatar-state {
+  background: #d39a37;
+}
+
+.tutor-avatar-error .tutor-avatar-state {
+  background: #c85d52;
+}
+
+.tutor-avatar-unavailable {
+  filter: saturate(0.38);
+  opacity: 0.78;
+}
+
+.tutor-avatar-listening .tutor-avatar-orbit {
+  border-color: rgba(88, 168, 106, 0.55);
+  box-shadow: 0 0 0 0 rgba(88, 168, 106, 0.2);
+  animation: tutor-avatar-listen 1.8s ease-out infinite;
+}
+
+.tutor-avatar-speaking .tutor-avatar-mouth-rest {
+  display: none;
+}
+
+.tutor-avatar-speaking .tutor-avatar-mouth-talk {
+  display: block;
+  animation: tutor-avatar-talk 420ms ease-in-out infinite alternate;
+}
+
+.tutor-avatar-speaking .tutor-avatar-audio-bars {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.tutor-avatar-speaking .tutor-avatar-audio-bars i {
+  animation: tutor-avatar-wave 540ms ease-in-out infinite alternate;
+}
+
+.tutor-avatar-speaking .tutor-avatar-audio-bars i:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.tutor-avatar-speaking .tutor-avatar-audio-bars i:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+.tutor-avatar-speaking .tutor-avatar-audio-bars i:nth-child(4) {
+  animation-delay: 360ms;
+}
+
+@keyframes tutor-avatar-blink {
+  0%,
+  46%,
+  49%,
+  100% {
+    transform: scaleY(1);
+  }
+  47%,
+  48% {
+    transform: scaleY(0.12);
+  }
+}
+
+@keyframes tutor-avatar-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes tutor-avatar-listen {
+  70%,
+  100% {
+    box-shadow: 0 0 0 0.45rem rgba(88, 168, 106, 0);
+  }
+}
+
+@keyframes tutor-avatar-talk {
+  to {
+    transform: scaleY(1.55) scaleX(0.85);
+  }
+}
+
+@keyframes tutor-avatar-wave {
+  to {
+    height: 0.8rem;
+  }
+}
+
 @keyframes voice-pulse {
   50% {
     opacity: 0.45;
@@ -1911,11 +2203,13 @@ svg {
 }
 
 .voice-status {
+  margin-top: 0;
   color: #5e6f6a;
 }
 
 .voice-disabled-message {
   display: flex;
+  margin-top: 0;
   gap: 0.45rem;
   align-items: flex-start;
   color: #774838;
@@ -2244,6 +2538,21 @@ svg {
 
   .voice-controls > :only-child {
     grid-column: auto;
+  }
+
+  .voice-presence {
+    grid-template-columns: 4.8rem minmax(0, 1fr);
+    padding-inline: 0.55rem;
+  }
+
+  .tutor-avatar {
+    width: 4.55rem;
+    height: 4.55rem;
+  }
+
+  .tutor-avatar-portrait {
+    width: 4.1rem;
+    height: 4.1rem;
   }
 
   .page-sync-overlay {

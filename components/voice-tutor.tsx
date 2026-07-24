@@ -3,12 +3,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
-  Participant,
   RemoteParticipant,
   Room as LiveKitRoom,
 } from "livekit-client";
+import { TutorAvatar } from "@/components/tutor-avatar";
 import type { PageActivity } from "@/lib/curriculum";
 import type { LearningSessionState } from "@/lib/learning-session";
+import { isExpectedVoiceAgent } from "@/lib/livekit-participant";
+import {
+  resolveTutorAvatarState,
+  type TutorAvatarConnection,
+} from "@/lib/tutor-avatar";
 
 type VoiceTutorProps = {
   sessionId: string;
@@ -24,13 +29,7 @@ export type VoiceSessionUpdate = {
   activity: PageActivity;
 };
 
-type VoiceConnection =
-  | "idle"
-  | "requesting"
-  | "connecting"
-  | "connected"
-  | "reconnecting"
-  | "error";
+type VoiceConnection = TutorAvatarConnection;
 
 type VoiceAccess = {
   token: string;
@@ -48,17 +47,7 @@ const voiceLabels: Record<VoiceConnection, string> = {
   error: "La conversación por voz necesita atención.",
 };
 
-const AIMAUTA_AGENT_NAME = "aimauta-socratic-tutor";
-const AIMAUTA_AGENT_NAME_ATTRIBUTE = "lk.agent.name";
 const AGENT_CONNECT_TIMEOUT_MS = 12_000;
-
-function isExpectedAgent(participant?: Participant): boolean {
-  return (
-    participant?.isAgent === true &&
-    participant.identity.startsWith("agent-") &&
-    participant.attributes[AIMAUTA_AGENT_NAME_ATTRIBUTE] === AIMAUTA_AGENT_NAME
-  );
-}
 
 export function VoiceTutor({
   sessionId,
@@ -78,10 +67,13 @@ export function VoiceTutor({
   const [connection, setConnection] = useState<VoiceConnection>("idle");
   const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
   const [agentSpeaking, setAgentSpeaking] = useState(false);
+  const [agentAudioTrack, setAgentAudioTrack] =
+    useState<MediaStreamTrack | null>(null);
   const [needsAudioStart, setNeedsAudioStart] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
   const clearRemoteAudio = useCallback(() => {
+    setAgentAudioTrack(null);
     const container = audioContainerRef.current;
     if (!container) return;
 
@@ -247,24 +239,41 @@ export function VoiceTutor({
       });
       roomRef.current = room;
 
-      room.on(livekit.RoomEvent.TrackSubscribed, (track) => {
-        if (track.kind !== livekit.Track.Kind.Audio) return;
+      room.on(
+        livekit.RoomEvent.TrackSubscribed,
+        (track, _publication, participant) => {
+          if (
+            track.kind !== livekit.Track.Kind.Audio ||
+            !isExpectedVoiceAgent(participant)
+          ) {
+            return;
+          }
 
-        const element = track.attach();
-        if (element instanceof HTMLAudioElement) {
-          element.autoplay = true;
-          element.setAttribute("playsinline", "");
-          element.dataset.aimautaRemoteAudio = "true";
-          audioContainerRef.current?.appendChild(element);
-          void element.play().catch(() => setNeedsAudioStart(true));
-        }
-      });
+          setAgentAudioTrack(track.mediaStreamTrack);
+          const element = track.attach();
+          if (element instanceof HTMLAudioElement) {
+            element.autoplay = true;
+            element.setAttribute("playsinline", "");
+            element.dataset.aimautaRemoteAudio = "true";
+            audioContainerRef.current?.appendChild(element);
+            void element.play().catch(() => setNeedsAudioStart(true));
+          }
+        },
+      );
 
-      room.on(livekit.RoomEvent.TrackUnsubscribed, (track) => {
-        for (const element of track.detach()) {
-          element.remove();
-        }
-      });
+      room.on(
+        livekit.RoomEvent.TrackUnsubscribed,
+        (track, _publication, participant) => {
+          if (!isExpectedVoiceAgent(participant)) return;
+
+          setAgentAudioTrack((current) =>
+            current === track.mediaStreamTrack ? null : current,
+          );
+          for (const element of track.detach()) {
+            element.remove();
+          }
+        },
+      );
 
       room.on(livekit.RoomEvent.Reconnecting, () => {
         setConnection("reconnecting");
@@ -280,7 +289,7 @@ export function VoiceTutor({
         void stopVoice();
       });
       room.on(livekit.RoomEvent.ParticipantDisconnected, (participant) => {
-        if (!isExpectedAgent(participant) || stoppingRef.current) return;
+        if (!isExpectedVoiceAgent(participant) || stoppingRef.current) return;
 
         setErrorMessage(
           "La sesión de voz terminó. Puedes activarla de nuevo si necesitas continuar.",
@@ -288,14 +297,16 @@ export function VoiceTutor({
         void stopVoice();
       });
       room.on(livekit.RoomEvent.ActiveSpeakersChanged, (speakers) => {
-        setAgentSpeaking(speakers.some((participant) => isExpectedAgent(participant)));
+        setAgentSpeaking(
+          speakers.some((participant) => isExpectedVoiceAgent(participant)),
+        );
       });
       room.on(
         livekit.RoomEvent.DataReceived,
         (payload, participant, _kind, topic) => {
           if (
             topic !== "aimauta.session.v1" ||
-            !isExpectedAgent(participant) ||
+            !isExpectedVoiceAgent(participant) ||
             _kind !== livekit.DataPacket_Kind.RELIABLE ||
             payload.byteLength === 0 ||
             payload.byteLength > 16_384
@@ -340,12 +351,12 @@ export function VoiceTutor({
 
       if (
         !Array.from(room.remoteParticipants.values()).some((participant) =>
-          isExpectedAgent(participant),
+          isExpectedVoiceAgent(participant),
         )
       ) {
         await new Promise<void>((resolve, reject) => {
           const onParticipantConnected = (participant: RemoteParticipant) => {
-            if (!isExpectedAgent(participant)) return;
+            if (!isExpectedVoiceAgent(participant)) return;
             cleanup();
             resolve();
           };
@@ -465,6 +476,12 @@ export function VoiceTutor({
       : connection === "connected" && !microphoneEnabled
         ? "Tutor conectado. Tu micrófono está silenciado."
         : voiceLabels[connection];
+  const avatarState = resolveTutorAvatarState({
+    connection,
+    disabled,
+    agentSpeaking,
+    microphoneEnabled,
+  });
 
   return (
     <section className="voice-tutor" aria-labelledby="voice-tutor-title">
@@ -482,16 +499,27 @@ export function VoiceTutor({
         />
       </div>
 
-      {disabled ? (
-        <p className="voice-disabled-message">
-          <LockMiniIcon />
-          {disabledReason ?? "La voz no está disponible en esta etapa."}
-        </p>
-      ) : (
+      <div className="voice-presence">
+        <TutorAvatar state={avatarState} audioTrack={agentAudioTrack} />
+        <div className="voice-presence-copy">
+          {disabled ? (
+            <p className="voice-disabled-message">
+              <LockMiniIcon />
+              {disabledReason ?? "La voz no está disponible en esta etapa."}
+            </p>
+          ) : (
+            <p className="voice-status" role="status" aria-live="polite">
+              {statusText}
+            </p>
+          )}
+          <span className="voice-avatar-privacy">
+            Avatar local · sin cámara
+          </span>
+        </div>
+      </div>
+
+      {!disabled ? (
         <>
-          <p className="voice-status" role="status" aria-live="polite">
-            {statusText}
-          </p>
           <div className="voice-controls">
             {isStarting ? (
               <>
@@ -555,7 +583,7 @@ export function VoiceTutor({
             </button>
           ) : null}
         </>
-      )}
+      ) : null}
 
       {errorMessage ? (
         <p className="voice-error" role="alert">

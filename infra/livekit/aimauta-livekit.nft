@@ -1,0 +1,9 @@
+table inet aimauta_livekit_guard {
+  chain input {
+    type filter hook input priority -10; policy accept;
+
+    # Caddy reaches both upstreams through loopback. Drop only external TCP;
+    # WebRTC 7881 and TURN/WebRTC UDP remain unaffected.
+    iifname != "lo" tcp dport { 7880, 5349 } counter drop comment "AImauta private upstreams"
+  }
+}

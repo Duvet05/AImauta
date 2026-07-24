@@ -106,16 +106,18 @@ AImauta está dirigido a menores de edad y aplica minimización de datos:
   conversación;
 - el worker usa `record=False` para desactivar la grabación de Agent Insights y
   logs `WARN` redactados;
+- el avatar usa un personaje sintético CC0, se renderiza en el navegador y no
+  solicita cámara ni publica video;
 - cualquier conjunto de evaluación debe ser sintético o estar anonimizado y
   autorizado.
 
-Estas medidas no eliminan el tratamiento externo necesario para la voz:
-LiveKit procesa el transporte de audio y paquetes de datos, y Deepgram procesa
-audio y transcripciones para STT/TTS. Antes de habilitar el canal para menores
-se deben documentar consentimiento aplicable, DPA, ubicación y subencargados,
-retención, eliminación y mecanismo para atender derechos. Desactivar Agent
-Insights evita una copia adicional de grabación, pero no convierte el flujo de
-voz en procesamiento exclusivamente local.
+Estas medidas no eliminan el tratamiento necesario para la voz: la instancia
+LiveKit self-hosted procesa el transporte de audio y paquetes de datos, y
+Deepgram procesa audio y transcripciones para STT/TTS. Antes de habilitar el
+canal para menores se deben documentar consentimiento aplicable, DPA con
+Deepgram, ubicación y subencargados, retención, eliminación y mecanismo para
+atender derechos. No habilitar grabaciones ni telemetría evita copias
+adicionales, pero Deepgram impide considerar el flujo exclusivamente local.
 
 Las credenciales de Ollama, LiveKit u otros servicios tampoco se versionan.
 

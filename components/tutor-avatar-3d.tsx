@@ -1,0 +1,392 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+
+import type {
+  Group,
+  Material,
+  Mesh,
+  Object3D,
+  PerspectiveCamera,
+  Scene,
+  Texture,
+  WebGLRenderer,
+} from "three";
+import type { TutorAvatarState } from "@/lib/tutor-avatar";
+
+type TutorAvatar3DProps = {
+  state: TutorAvatarState;
+  audioTrack: MediaStreamTrack | null;
+  onReadyChange: (ready: boolean) => void;
+};
+
+type MorphMesh = Mesh & {
+  morphTargetDictionary?: Record<string, number>;
+  morphTargetInfluences?: number[];
+};
+
+type AvatarRuntime = {
+  avatar: Group;
+  camera: PerspectiveCamera;
+  head: Object3D | null;
+  meshes: MorphMesh[];
+  renderer: WebGLRenderer;
+  scene: Scene;
+};
+
+const ACTIVE_STATES = new Set<TutorAvatarState>([
+  "connecting",
+  "ready",
+  "listening",
+  "speaking",
+  "reconnecting",
+]);
+
+const AVATAR_URL = "/avatars/aimauta-teacher.glb";
+const ANALYSIS_INTERVAL_MS = 1_000 / 30;
+
+function supportsWebGl(): boolean {
+  try {
+    const canvas = document.createElement("canvas");
+    const context =
+      canvas.getContext("webgl2", { failIfMajorPerformanceCaveat: true }) ??
+      canvas.getContext("webgl", { failIfMajorPerformanceCaveat: true });
+    context?.getExtension("WEBGL_lose_context")?.loseContext();
+    return Boolean(context);
+  } catch {
+    return false;
+  }
+}
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function setMorph(meshes: MorphMesh[], name: string, value: number) {
+  for (const mesh of meshes) {
+    const index = mesh.morphTargetDictionary?.[name];
+    if (
+      index === undefined ||
+      !mesh.morphTargetInfluences ||
+      index >= mesh.morphTargetInfluences.length
+    ) {
+      continue;
+    }
+    mesh.morphTargetInfluences[index] = value;
+  }
+}
+
+function disposeMaterial(material: Material, textures: Set<Texture>) {
+  for (const value of Object.values(material)) {
+    if (
+      value &&
+      typeof value === "object" &&
+      "isTexture" in value &&
+      value.isTexture === true
+    ) {
+      textures.add(value as Texture);
+    }
+  }
+  material.dispose();
+}
+
+function disposeAvatar(avatar: Group) {
+  const textures = new Set<Texture>();
+  avatar.traverse((object) => {
+    const mesh = object as Mesh;
+    if (!mesh.isMesh) return;
+
+    mesh.geometry?.dispose();
+    const materials = Array.isArray(mesh.material)
+      ? mesh.material
+      : [mesh.material];
+    for (const material of materials) {
+      if (material) disposeMaterial(material, textures);
+    }
+  });
+  for (const texture of textures) texture.dispose();
+}
+
+function disposeRenderer(renderer: WebGLRenderer) {
+  renderer.dispose();
+  renderer.forceContextLoss();
+  renderer.domElement.remove();
+}
+
+function disposeRuntime(runtime: AvatarRuntime) {
+  disposeAvatar(runtime.avatar);
+  disposeRenderer(runtime.renderer);
+}
+
+function createAudioAnalysisGraph(audioTrack: MediaStreamTrack) {
+  const context = new AudioContext({ latencyHint: "interactive" });
+  try {
+    const stream = new MediaStream([audioTrack]);
+    const source = context.createMediaStreamSource(stream);
+    const analyser = context.createAnalyser();
+    const silentOutput = context.createGain();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.35;
+    silentOutput.gain.value = 0;
+    source.connect(analyser);
+    analyser.connect(silentOutput);
+    silentOutput.connect(context.destination);
+    return { analyser, context, silentOutput, source };
+  } catch (error) {
+    void context.close().catch(() => undefined);
+    throw error;
+  }
+}
+
+/**
+ * Optional WebGL layer powered by Three.js. The model is loaded only after the
+ * learner starts voice, and mouth motion is derived locally from the validated
+ * agent audio track. The illustrated SVG remains the no-WebGL fallback.
+ */
+export function TutorAvatar3D({
+  state,
+  audioTrack,
+  onReadyChange,
+}: TutorAvatar3DProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mouthLevelRef = useRef(0);
+  const stateRef = useRef(state);
+  const [ready, setReady] = useState(false);
+  const enabled = ACTIVE_STATES.has(state);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  useEffect(() => {
+    if (
+      !enabled ||
+      !containerRef.current ||
+      prefersReducedMotion() ||
+      !supportsWebGl()
+    ) {
+      setReady(false);
+      onReadyChange(false);
+      return;
+    }
+
+    const target = containerRef.current;
+    let animationFrame = 0;
+    let cancelled = false;
+    let resizeObserver: ResizeObserver | null = null;
+    let runtime: AvatarRuntime | null = null;
+    let renderer: WebGLRenderer | null = null;
+    let resourcesDisposed = false;
+
+    const disposeResources = () => {
+      if (resourcesDisposed) return;
+      resourcesDisposed = true;
+      if (runtime) {
+        disposeRuntime(runtime);
+        runtime = null;
+      } else if (renderer) {
+        disposeRenderer(renderer);
+      }
+      renderer = null;
+    };
+
+    async function initialize() {
+      const [THREE, { GLTFLoader }, { MeshoptDecoder }] = await Promise.all([
+        import("three"),
+        import("three/addons/loaders/GLTFLoader.js"),
+        import("three/addons/libs/meshopt_decoder.module.js"),
+      ]);
+      if (cancelled) return;
+
+      const createdRenderer = new THREE.WebGLRenderer({
+        alpha: true,
+        antialias: true,
+        powerPreference: "high-performance",
+      });
+      renderer = createdRenderer;
+      createdRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+      createdRenderer.outputColorSpace = THREE.SRGBColorSpace;
+      createdRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+      createdRenderer.toneMappingExposure = 1.1;
+      target.appendChild(createdRenderer.domElement);
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(16, 1, 0.1, 20);
+      camera.position.set(0, 0.55, 4.2);
+      camera.lookAt(0, 0.55, 0);
+      scene.add(new THREE.HemisphereLight(0xfff9e9, 0x49645d, 2.5));
+      const keyLight = new THREE.DirectionalLight(0xffd9be, 4.5);
+      keyLight.position.set(2.5, 3.5, 4);
+      scene.add(keyLight);
+      const fillLight = new THREE.DirectionalLight(0xd9edff, 2);
+      fillLight.position.set(-3, 1.5, 2);
+      scene.add(fillLight);
+
+      const loader = new GLTFLoader();
+      loader.setMeshoptDecoder(MeshoptDecoder);
+      const gltf = await loader.loadAsync(AVATAR_URL);
+      const avatar = gltf.scene;
+      if (cancelled) {
+        disposeAvatar(avatar);
+        return;
+      }
+      const bounds = new THREE.Box3().setFromObject(avatar);
+      const size = bounds.getSize(new THREE.Vector3());
+      const center = bounds.getCenter(new THREE.Vector3());
+      const scale = size.y > 0 ? 2 / size.y : 1;
+      avatar.scale.setScalar(scale);
+      avatar.position.set(
+        -center.x * scale,
+        -center.y * scale,
+        -center.z * scale,
+      );
+
+      const meshes: MorphMesh[] = [];
+      avatar.traverse((object) => {
+        const mesh = object as MorphMesh;
+        if (mesh.isMesh && mesh.morphTargetInfluences) meshes.push(mesh);
+      });
+      scene.add(avatar);
+
+      runtime = {
+        avatar,
+        camera,
+        head: avatar.getObjectByName("Head") ?? null,
+        meshes,
+        renderer: createdRenderer,
+        scene,
+      };
+
+      const resize = () => {
+        const width = Math.max(1, target.clientWidth);
+        const height = Math.max(1, target.clientHeight);
+        createdRenderer.setSize(width, height, false);
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+      };
+      resizeObserver = new ResizeObserver(resize);
+      resizeObserver.observe(target);
+      resize();
+
+      let lastRenderedAt = 0;
+      const render = (now: number) => {
+        animationFrame = window.requestAnimationFrame(render);
+        if (now - lastRenderedAt < ANALYSIS_INTERVAL_MS) return;
+        lastRenderedAt = now;
+
+        const seconds = now / 1_000;
+        const speaking = stateRef.current === "speaking";
+        const mouth = speaking ? mouthLevelRef.current : 0;
+        const blinkPhase = now % 5_200;
+        const blink =
+          blinkPhase > 4_980
+            ? Math.sin(((blinkPhase - 4_980) / 220) * Math.PI)
+            : 0;
+
+        setMorph(meshes, "jawOpen", mouth * 0.6);
+        setMorph(meshes, "viseme_aa", mouth * 0.72);
+        setMorph(meshes, "mouthSmileLeft", speaking ? 0.03 : 0.08);
+        setMorph(meshes, "mouthSmileRight", speaking ? 0.03 : 0.08);
+        setMorph(meshes, "eyeBlinkLeft", blink);
+        setMorph(meshes, "eyeBlinkRight", blink);
+        avatar.rotation.y = Math.sin(seconds * 0.7) * 0.018;
+        avatar.rotation.x = Math.sin(seconds * 0.43) * 0.006;
+        if (runtime?.head) {
+          runtime.head.rotation.z = Math.sin(seconds * 0.55) * 0.012;
+        }
+        createdRenderer.render(scene, camera);
+      };
+      animationFrame = window.requestAnimationFrame(render);
+      setReady(true);
+      onReadyChange(true);
+    }
+
+    void initialize().catch(() => {
+      if (cancelled) return;
+      disposeResources();
+      setReady(false);
+      onReadyChange(false);
+    });
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(animationFrame);
+      resizeObserver?.disconnect();
+      mouthLevelRef.current = 0;
+      disposeResources();
+      onReadyChange(false);
+    };
+  }, [enabled, onReadyChange]);
+
+  useEffect(() => {
+    if (!ready || !audioTrack || audioTrack.readyState !== "live") {
+      mouthLevelRef.current = 0;
+      return;
+    }
+
+    let graph: ReturnType<typeof createAudioAnalysisGraph>;
+    try {
+      graph = createAudioAnalysisGraph(audioTrack);
+    } catch {
+      mouthLevelRef.current = 0;
+      return;
+    }
+    const { analyser, context, silentOutput, source } = graph;
+    const samples = new Float32Array(512);
+
+    let animationFrame = 0;
+    let lastAnalysisAt = 0;
+    let level = 0;
+
+    const resumeContext = () => {
+      if (context.state === "suspended") {
+        void context.resume().catch(() => undefined);
+      }
+    };
+    document.addEventListener("pointerdown", resumeContext, { passive: true });
+    document.addEventListener("keydown", resumeContext);
+    resumeContext();
+
+    const analyse = (now: number) => {
+      if (now - lastAnalysisAt >= ANALYSIS_INTERVAL_MS) {
+        analyser.getFloatTimeDomainData(samples);
+        let energy = 0;
+        for (const sample of samples) energy += sample * sample;
+        const rms = Math.sqrt(energy / samples.length);
+        const targetLevel = Math.min(1, Math.max(0, (rms - 0.012) * 12));
+        level +=
+          (targetLevel - level) * (targetLevel > level ? 0.55 : 0.22);
+        mouthLevelRef.current = level;
+        lastAnalysisAt = now;
+      }
+      animationFrame = window.requestAnimationFrame(analyse);
+    };
+    animationFrame = window.requestAnimationFrame(analyse);
+
+    const resetMouth = () => {
+      level = 0;
+      mouthLevelRef.current = 0;
+    };
+    audioTrack.addEventListener("ended", resetMouth);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      audioTrack.removeEventListener("ended", resetMouth);
+      document.removeEventListener("pointerdown", resumeContext);
+      document.removeEventListener("keydown", resumeContext);
+      resetMouth();
+      source.disconnect();
+      analyser.disconnect();
+      silentOutput.disconnect();
+      void context.close().catch(() => undefined);
+    };
+  }, [audioTrack, ready]);
+
+  return (
+    <div
+      className={`tutor-avatar-3d${ready ? " tutor-avatar-3d-ready" : ""}`}
+      ref={containerRef}
+      aria-hidden="true"
+    />
+  );
+}

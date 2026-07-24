@@ -1,0 +1,46 @@
+port: 7880
+# The signal/API listener is consumed only by the local Caddy, Next.js and
+# worker. RTC and TURN have their own public listeners below.
+bind_addresses:
+  - 127.0.0.1
+
+logging:
+  level: warn
+  pion_level: error
+  json: true
+  sample: true
+
+# This deployment is deliberately single-node and has no Redis dependency.
+rtc:
+  use_external_ip: false
+  node_ip: __LIVEKIT_NODE_IP__
+  tcp_port: 7881
+  # UDP mux keeps the MVP's firewall surface small. Revisit the range when
+  # capacity tests show that one UDP socket is no longer sufficient.
+  udp_port: 7882
+  use_ice_lite: false
+  allow_tcp_fallback: true
+  enable_loopback_candidate: false
+
+room:
+  # AImauta creates rooms with its authenticated loopback RoomService client.
+  auto_create: false
+  empty_timeout: 60
+  departure_timeout: 20
+  max_participants: 3
+  enabled_codecs:
+    - mime: audio/opus
+    - mime: audio/red
+
+turn:
+  enabled: true
+  domain: __LIVEKIT_TURN_DOMAIN__
+  # Caddy terminates public TLS :443 and forwards plaintext to loopback :5349.
+  external_tls: true
+  tls_port: 5349
+  udp_port: 3478
+  ttl_seconds: 300
+  # The default-empty allow list denies loopback, private, link-local,
+  # multicast and unspecified peers, which prevents TURN from reaching
+  # internal services.
+  allow_restricted_peer_cidrs: []

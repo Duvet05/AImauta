@@ -6,13 +6,14 @@ AImauta acompaña al estudiante mientras trabaja con un material escolar. Su
 comportamiento central es socrático: reconoce el intento, hace una sola pregunta
 o entrega una pista breve y evita revelar la respuesta final.
 
-La segunda iteración integra el currículo, el estado pedagógico y los canales de
-texto y voz bajo una misma autoridad del servidor. Sus propiedades principales
+La tercera iteración integra el currículo, el estado pedagógico, el avatar y los
+canales de texto y voz bajo una misma autoridad del servidor. Sus propiedades principales
 son:
 
 - el libro, la página, la etapa y el nivel de ayuda se validan en el servidor;
 - texto y voz reutilizan la misma recuperación y la misma política pedagógica;
 - `Evaluamos` bloquea el tutor sin bloquear el espacio de trabajo del alumno;
+- el avatar se renderiza localmente, sin cámara ni proveedor de video;
 - los PDFs y los índices permanecen fuera de Git;
 - la indisponibilidad de Ollama no rompe el acompañamiento básico.
 
@@ -20,11 +21,11 @@ son:
 
 ```text
 ┌──────────────────────── navegador del estudiante ────────────────────────┐
-│ visor PDF       intento escrito       chat       micrófono/altavoz       │
+│ visor PDF       intento escrito       chat       avatar/micrófono/altavoz│
 └──────┬──────────────────┬────────────────┬──────────────────┬────────────┘
        │                  │                │                  │ WebRTC/datos
        │                  ├─ POST /api/session               ▼
-       │                  └─ POST /api/tutor          LiveKit Cloud
+       │                  └─ POST /api/tutor    LiveKit self-hosted
        │                                   │                 │
        ▼                                   ▼                 ▼
 PowerEdge: Next.js ─────────────────► tutor-service   worker de voz
@@ -37,9 +38,10 @@ PowerEdge: Next.js ─────────────────► tutor-
                                           Ollama + Gemma
 ```
 
-LiveKit Cloud transporta audio y datos del canal de voz. PowerEdge conserva la
-autoridad pedagógica, el contenido y el worker. Aule solo sirve la inferencia de
-Gemma a través de Ollama y no se publica en Internet.
+LiveKit Server y su TURN integrado transportan audio y datos del canal de voz
+en infraestructura administrada por el equipo. PowerEdge conserva la autoridad
+pedagógica, el contenido y el worker. Aule solo sirve la inferencia de Gemma a
+través de Ollama y no se publica en Internet.
 
 ## Aplicación web y contratos HTTP
 
@@ -210,6 +212,23 @@ micrófono. Si ese agente no aparece en 12 segundos, se retira o se desconecta l
 sala, la activación falla de forma cerrada y se limpian conexión, pistas de
 audio y micrófono.
 
+### Avatar y audio remoto
+
+La interfaz solo adjunta y analiza pistas de audio pertenecientes al agente que
+supera las tres comprobaciones del contrato: `isAgent=true`, identidad
+`agent-*` y atributo `lk.agent.name=aimauta-socratic-tutor`. Una pista de otro
+participante no puede reproducirse ni controlar el avatar.
+
+Al activar la voz, el navegador carga de forma diferida Three.js y un GLB
+sintético CC0 alojado por la propia aplicación. Un `AnalyserNode` calcula
+únicamente el nivel RMS de la pista ya autorizada y anima localmente sus
+morph-targets; no genera una transcripción adicional ni transmite biometría,
+cámara o video. `Permissions-Policy` permite micrófono solo al mismo origen y
+bloquea cámara, captura de pantalla y geolocalización. El render se limita a 30
+FPS, libera WebGL y Web Audio al cerrar la voz, y cae a un SVG local si falla
+WebGL, el modelo o la carga dinámica.
+`prefers-reduced-motion` mantiene únicamente el respaldo sin animación.
+
 ### Datos de sincronización
 
 El audio viaja por WebRTC. El estado pedagógico se sincroniza con paquetes de
@@ -246,11 +265,11 @@ la red del host; no debe publicarse mediante el proxy ni el firewall. Un
 deadline autoritativo de diez minutos cierra el job y `delete_room_on_close`
 elimina la sala, desconectando también al navegador y deteniendo el micrófono.
 
-Desactivar Agent Insights no significa que el canal sea local: LiveKit procesa
-el transporte WebRTC y Deepgram procesa audio/transcripciones para STT y TTS.
-Antes de trabajar con menores se requieren consentimiento aplicable, acuerdos
-de tratamiento de datos y decisiones explícitas de retención y eliminación con
-ambos proveedores.
+No habilitar grabación u observabilidad no elimina el tratamiento: el LiveKit
+self-hosted procesa el transporte WebRTC y Deepgram procesa
+audio/transcripciones para STT y TTS. Antes de trabajar con menores se requieren
+consentimiento aplicable, un acuerdo de tratamiento con Deepgram y decisiones
+explícitas de retención y eliminación para la infraestructura operada.
 
 La sesión de LiveKit se configura con `llm=None`. El worker no construye
 prompts, no consulta RAG y no llama a Ollama. Su responsabilidad es transcribir,
@@ -279,11 +298,12 @@ reemplazar el ranking en otra iteración sin cambiar el contrato del tutor.
 ```text
 Internet público
   ├─ navegador: entrada no confiable
-  ├─ LiveKit Cloud: transporte de voz y datos
+  ├─ LiveKit self-hosted: WSS, SFU y TURN administrados por el equipo
   └─ Deepgram: STT/TTS con credencial exclusiva del worker
 
 PowerEdge
   ├─ Next.js: autoridad de sesión, currículo y tutor
+  ├─ LiveKit Server + Caddy L4: señalización, SFU y TURN sin grabación
   ├─ worker: adaptador de voz sin LLM
   ├─ PDFs autorizados
   └─ índices reproducibles
@@ -299,7 +319,7 @@ el worker, y los secretos de API de LiveKit nunca se entregan al navegador.
 
 La aplicación no persiste conversaciones, progreso ni analítica individual. El
 registro anti-replay conserva únicamente el estado mínimo de la sesión en
-memoria y desaparece al reiniciar. LiveKit y Deepgram sí procesan el audio y las
-transcripciones necesarios para operar la voz; antes de un piloto con menores
-se deben definir consentimiento, DPA, retención y eliminación con esos
-proveedores.
+memoria y desaparece al reiniciar. La instancia LiveKit procesa en memoria el
+audio necesario para transportarlo, y Deepgram procesa audio y transcripciones
+para operar STT/TTS; antes de un piloto con menores se deben definir
+consentimiento, DPA, retención y eliminación aplicables.

@@ -1,0 +1,48 @@
+logging:
+  logs:
+    default:
+      level: WARN
+
+storage:
+  module: file_system
+  root: /data/certificates
+
+apps:
+  tls:
+    certificates:
+      automate:
+        - __LIVEKIT_DOMAIN__
+        - __LIVEKIT_TURN_DOMAIN__
+
+  # One public TCP :443 is shared safely by SNI. The signal domain terminates
+  # WSS/HTTPS and reaches LiveKit :7880; the distinct TURN domain terminates
+  # TURN/TLS and reaches the embedded TURN listener :5349.
+  layer4:
+    servers:
+      main:
+        listen:
+          - ":443"
+        routes:
+          - match:
+              - tls:
+                  sni:
+                    - __LIVEKIT_TURN_DOMAIN__
+            handle:
+              - handler: tls
+              - handler: proxy
+                upstreams:
+                  - dial:
+                      - "127.0.0.1:5349"
+          - match:
+              - tls:
+                  sni:
+                    - __LIVEKIT_DOMAIN__
+            handle:
+              - handler: tls
+                connection_policies:
+                  - alpn:
+                      - http/1.1
+              - handler: proxy
+                upstreams:
+                  - dial:
+                      - "127.0.0.1:7880"

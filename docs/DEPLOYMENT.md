@@ -13,14 +13,20 @@ expresamente que corresponden a Aule o a una consola de proveedor.
 
 ## Topología
 
-- **PowerEdge:** Next.js, PDFs, índices/RAG y worker de LiveKit.
+- **PowerEdge:** Next.js, PDFs, índices/RAG, LiveKit Server self-hosted, Caddy
+  L4 y worker de voz.
 - **Aule:** Ollama con Gemma, escuchando solamente en loopback.
-- **LiveKit Cloud:** señalización, SFU, TURN y dispatch del piloto de voz.
+- **LiveKit self-hosted:** señalización, SFU, TURN y dispatch; no se usa
+  LiveKit Cloud.
 - **Deepgram:** STT y TTS del worker.
 - **Tailscale + SSH:** canal privado PowerEdge–Aule para Ollama.
 
 Los colegas acceden a la aplicación por el proxy HTTPS y a LiveKit por WebRTC;
 no necesitan pertenecer a la tailnet. Ollama no se publica en Internet.
+LiveKit solo se inicia cuando PowerEdge dispone de IPv4 pública estática o NAT
+uno-a-uno con los puertos WebRTC preservados. Si la red universitaria usa CGNAT
+o NAT simétrico, la pila se mueve a una VM pública administrada por el equipo;
+un Funnel HTTP no sustituye ICE/TURN.
 
 ## Rutas
 
@@ -29,6 +35,7 @@ Código y build:       /home/hii1sc/aimauta-build
 PDFs:                 /home/hii1sc/aimauta-runtime/content
 Índices:              /home/hii1sc/aimauta-runtime/indexes
 Entorno del worker:   /home/hii1sc/aimauta-runtime/voice-agent.env
+Entorno de LiveKit:   /home/hii1sc/aimauta-runtime/livekit.env
 Entorno de pruebas:   /home/hii1sc/aimauta-runtime/voice-test-venv
 ```
 
@@ -41,7 +48,8 @@ repositorio.
 - Python 3.12 o 3.13 en PowerEdge para ejecutar las pruebas del worker.
 - Tailscale y acceso SSH por llave desde PowerEdge hacia Aule.
 - Ollama y `gemma4:e4b-it-qat` instalados en Aule.
-- Un proyecto y credenciales de LiveKit dedicados a AImauta.
+- IPv4 pública estática, dos DNS propios y conectividad TCP/UDP para la
+  instancia LiveKit self-hosted.
 - Una clave de Deepgram dedicada a AImauta.
 - Un proxy HTTPS administrado delante de Next.js.
 
@@ -143,17 +151,53 @@ token el límite de 40 turnos. El registro se pierde al reiniciar y no funciona
 entre réplicas sin un almacén compartido; el despliegue documentado es de una
 sola instancia y no ofrece progreso durable.
 
-Desde las consolas de los proveedores:
-
-- crear un proyecto de LiveKit exclusivo para AImauta y obtener URL, API key y
-  API secret;
-- crear una clave de Deepgram exclusiva para AImauta, con cuota y rotación
-  propias;
-- si LiveKit permite separar identidades dentro del mismo proyecto, usar un par
-  de credenciales para la API web y otro para el worker.
+La configuración self-hosted genera en PowerEdge un par LiveKit exclusivo para
+AImauta y lo monta como archivo, sin incorporarlo al entorno inspeccionable del
+contenedor. Desde la consola de Deepgram se crea una clave exclusiva con cuota
+y rotación propias.
 
 Los secretos no se imprimen en comandos de diagnóstico, no se registran en logs
 y no se incorporan a Git.
+
+## LiveKit Server self-hosted
+
+La configuración reproducible está en
+[`infra/livekit`](../infra/livekit/README.md). Fija LiveKit Server y Caddy L4
+por versión y digest AMD64, ejecuta ambos como el UID/GID no-root del operador,
+monta la key pair como archivo de solo lectura y conserva certificados fuera de
+Git.
+
+Preparar sin iniciar ni publicar servicios:
+
+```bash
+cd /home/hii1sc/aimauta-build
+
+infra/livekit/init-env.sh \
+  /home/hii1sc/aimauta-runtime/livekit.env \
+  livekit.ejemplo.edu \
+  turn.ejemplo.edu \
+  203.0.113.10
+
+infra/livekit/render-config.sh \
+  /home/hii1sc/aimauta-runtime/livekit.env
+
+docker compose \
+  --env-file /home/hii1sc/aimauta-runtime/livekit.env \
+  -f infra/livekit/compose.yaml \
+  config --quiet
+```
+
+Antes de `up -d`, los dos DNS deben resolver a la IPv4 declarada y los
+firewalls del host y del proveedor deben permitir solo TCP 443/7881 y UDP
+3478/7882. LiveKit fija 7880 a loopback y el firewall rechaza 5349 desde
+interfaces externas: Next.js, el worker y Caddy consumen esos upstreams
+localmente. Caddy comparte TCP 443 por SNI entre WSS y TURN/TLS. La guía
+específica contiene el procedimiento de salud, prueba WebRTC, actualización y
+rotación.
+
+El fragmento nftables incluido bloquea únicamente los upstreams TCP 7880/5349
+fuera de loopback, sin cambiar SSH ni los puertos públicos WebRTC. Debe quedar
+integrado y verificado en el ruleset persistente antes de iniciar la pila.
 
 ## Entorno de Next.js
 
@@ -172,15 +216,15 @@ OLLAMA_BASE_URL=http://127.0.0.1:11435
 OLLAMA_MODEL=gemma4:e4b-it-qat
 OLLAMA_TIMEOUT_MS=45000
 
-LIVEKIT_URL=wss://proyecto-aimauta.livekit.cloud
-LIVEKIT_API_URL=https://proyecto-aimauta.livekit.cloud
-LIVEKIT_API_KEY=clave-api-web-de-aimauta
-LIVEKIT_API_SECRET=secreto-api-web-de-aimauta
+LIVEKIT_URL=wss://livekit.ejemplo.edu
+LIVEKIT_API_URL=http://127.0.0.1:7880
+LIVEKIT_API_KEY=clave-self-hosted-de-aimauta
+LIVEKIT_API_SECRET=secreto-self-hosted-de-aimauta
 ```
 
-`LIVEKIT_API_URL` puede derivarse de `LIVEKIT_URL`, pero se recomienda
-declararla para que el destino administrativo sea explícito. `DEEPGRAM_API_KEY`
-no pertenece al proceso web.
+`LIVEKIT_API_URL` no se deriva de la URL pública: se fija al listener local para
+que RoomService y AgentDispatch no dependan de DNS, TLS ni de un recorrido por
+Internet. `DEEPGRAM_API_KEY` no pertenece al proceso web.
 
 Aplicar permisos restringidos:
 
@@ -204,9 +248,9 @@ principal y distribuido debe vivir en el proxy.
 Crear `/home/hii1sc/aimauta-runtime/voice-agent.env`:
 
 ```dotenv
-LIVEKIT_URL=wss://proyecto-aimauta.livekit.cloud
-LIVEKIT_API_KEY=clave-api-worker-de-aimauta
-LIVEKIT_API_SECRET=secreto-api-worker-de-aimauta
+LIVEKIT_URL=ws://127.0.0.1:7880
+LIVEKIT_API_KEY=clave-self-hosted-de-aimauta
+LIVEKIT_API_SECRET=secreto-self-hosted-de-aimauta
 DEEPGRAM_API_KEY=clave-deepgram-de-aimauta
 
 AIMAUTA_APP_URL=http://127.0.0.1:3000
@@ -220,8 +264,8 @@ MAX_SESSION_SECONDS=600
 ```
 
 `AIMAUTA_AGENT_SECRET` es el único **secreto propio de AImauta** compartido
-entre ambos procesos. Ambos también conocen `LIVEKIT_URL` y se autentican ante
-el mismo proyecto de LiveKit, idealmente con pares de credenciales distintos.
+entre ambos procesos. Next.js, worker y LiveKit Server usan el mismo par
+self-hosted durante este MVP single-node; ese par nunca llega al navegador.
 El worker no recibe `OLLAMA_BASE_URL`, `OLLAMA_MODEL`,
 `AIMAUTA_SESSION_SECRET` ni acceso a los índices.
 
@@ -231,13 +275,13 @@ Aplicar permisos:
 chmod 600 /home/hii1sc/aimauta-runtime/voice-agent.env
 ```
 
-El código inicia LiveKit Agents con `record=False`; Agent Insights no debe
-grabar ni subir audio, transcripciones, trazas o logs. `WARN` reduce el logging
+El código inicia LiveKit Agents con `record=False`; no se habilita grabación,
+Egress, Ingress, SIP ni un backend de observabilidad de LiveKit. `WARN` reduce el logging
 operativo y los mensajes propios del worker están redactados, pero esto no
-elimina el tratamiento necesario del servicio: LiveKit transporta el audio y
-Deepgram procesa audio/transcripciones para STT y TTS. Antes de habilitar voz
-para menores deben existir consentimiento aplicable, DPA con los proveedores y
-una política verificada de retención y eliminación.
+elimina el tratamiento necesario: la instancia administrada por el equipo
+transporta el audio y Deepgram procesa audio/transcripciones para STT y TTS.
+Antes de habilitar voz para menores deben existir consentimiento aplicable, DPA
+con Deepgram y una política verificada de retención y eliminación.
 
 `MAX_SESSION_SECONDS=600` corta STT/TTS y el job aunque el navegador permanezca
 conectado. El worker elimina la sala al cerrar; el navegador también aplica el
@@ -321,6 +365,15 @@ despliega una revisión si falla una comprobación.
 
 ## Inicio de servicios
 
+Iniciar primero LiveKit solo después de superar la revisión de red:
+
+```bash
+docker compose \
+  --env-file /home/hii1sc/aimauta-runtime/livekit.env \
+  -f /home/hii1sc/aimauta-build/infra/livekit/compose.yaml \
+  up -d
+```
+
 Iniciar Next.js en loopback:
 
 ```bash
@@ -335,6 +388,12 @@ docker run -d \
   --name aimauta-voice-agent \
   --restart unless-stopped \
   --network host \
+  --read-only \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
+  --pids-limit 512 \
+  --stop-timeout 660 \
+  --tmpfs /tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777 \
   --env-file /home/hii1sc/aimauta-runtime/voice-agent.env \
   aimauta-voice-agent:local
 ```
@@ -342,6 +401,8 @@ docker run -d \
 `--network host` permite que el contenedor alcance
 `AIMAUTA_APP_URL=http://127.0.0.1:3000` sin publicar otro puerto. El proceso se
 registra en LiveKit con el nombre exacto `aimauta-socratic-tutor`.
+El filesystem de la imagen es de solo lectura; únicamente `/tmp` es efímero, y
+el proceso no recibe capacidades Linux ni puede elevar privilegios.
 El health server del worker está fijado a `127.0.0.1`; no se debe cambiar a
 `0.0.0.0`, publicar su puerto ni añadirlo al proxy. Con red de host, cualquier
 escucha en todas las interfaces quedaría expuesta directamente por el
@@ -383,6 +444,11 @@ curl --fail http://127.0.0.1:3000/
 curl --fail --head \
   http://127.0.0.1:3000/api/materials/fichas-matematica-1-secundaria/pdf
 curl --fail http://127.0.0.1:11435/api/tags
+curl --fail http://127.0.0.1:7880/
+docker compose \
+  --env-file /home/hii1sc/aimauta-runtime/livekit.env \
+  -f /home/hii1sc/aimauta-build/infra/livekit/compose.yaml \
+  ps
 docker logs --tail 100 aimauta-voice-agent
 ```
 
@@ -401,8 +467,8 @@ Validar desde un navegador HTTPS:
 6. comprobar en LiveKit que la sala recibió el dispatch
    `aimauta-socratic-tutor`;
 7. comprobar que la metadata de sala no contiene `session_token`, que el worker
-   acepta solamente `student-<sessionId>` y que Agent Insights no creó una
-   grabación de la sesión.
+   acepta solamente `student-<sessionId>` y que no existe grabación, Egress ni
+   exportación de telemetría de la sesión.
 
 La validación no debe imprimir tokens pedagógicos, transcripciones,
 `AIMAUTA_AGENT_SECRET`, credenciales de LiveKit ni la clave de Deepgram.
@@ -467,8 +533,9 @@ imagen. El worker no guarda estado durable dentro del contenedor.
 - Mantener `record=False`, logs `WARN` redactados y el health del worker en
   `127.0.0.1`; no publicar el health aun cuando Docker use `--network host`.
 - No respaldar conversaciones ni datos de menores.
-- Revisar consentimiento, DPA, retención y eliminación de LiveKit y Deepgram
-  antes de habilitar voz para estudiantes.
+- Mantener LiveKit self-hosted sin Ingress, Egress, SIP ni grabaciones, y
+  revisar consentimiento, DPA, retención y eliminación de Deepgram antes de
+  habilitar voz para estudiantes.
 - Rotar por separado los secretos de sesión, worker, LiveKit y Deepgram ante
   cualquier exposición.
 - Regenerar los índices desde el PDF autorizado en vez de tratarlos como datos
