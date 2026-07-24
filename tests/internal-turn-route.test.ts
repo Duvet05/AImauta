@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { POST } from "@/app/api/internal/turn/route";
 import { issueLearningSession } from "@/lib/learning-session";
+import { makeBookIndex } from "./book-index-fixture";
 
 let indexDir: string;
 const agentSecret = "test-agent-secret-with-more-than-thirty-two-characters";
@@ -13,19 +14,16 @@ beforeAll(async () => {
   indexDir = await mkdtemp(path.join(tmpdir(), "aimauta-internal-index-"));
   await writeFile(
     path.join(indexDir, "fichas-matematica-1-secundaria.json"),
-    JSON.stringify({
-      version: 1,
-      bookId: "fichas-matematica-1-secundaria",
-      sourceSha256: "test",
-      chunks: [
+    JSON.stringify(
+      makeBookIndex([
         {
           id: "page-13",
           page: 13,
           kind: "exercise",
           text: "Compara las fracciones y explica qué dato observas primero."
         }
-      ]
-    })
+      ])
+    )
   );
   process.env.AIMAUTA_INDEX_DIR = indexDir;
   process.env.AIMAUTA_SESSION_SECRET =

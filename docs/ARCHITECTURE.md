@@ -6,10 +6,11 @@ AImauta acompaña al estudiante mientras trabaja con un material escolar. Su
 comportamiento central es socrático: reconoce el intento, hace una sola pregunta
 o entrega una pista breve y evita revelar la respuesta final.
 
-La tercera iteración integra el currículo, el estado pedagógico, el avatar y los
-canales de texto y voz bajo una misma autoridad del servidor. Sus propiedades principales
-son:
+La iteración de biblioteca curricular integra catálogo, visor, currículo,
+estado pedagógico, avatar y canales de texto y voz bajo una misma autoridad del
+servidor. Sus propiedades principales son:
 
+- el catálogo publica de forma cerrada únicamente materiales `ready`;
 - el libro, la página, la etapa y el nivel de ayuda se validan en el servidor;
 - texto y voz reutilizan la misma recuperación y la misma política pedagógica;
 - `Evaluamos` bloquea el tutor sin bloquear el espacio de trabajo del alumno;
@@ -56,9 +57,46 @@ La aplicación usa Next.js con App Router y TypeScript. El catálogo vive en
 | `POST /api/livekit/token` | navegador | crear la sala y emitir un JWT de participante |
 | `POST /api/internal/turn` | worker | procesar un turno de voz mediante el mismo tutor |
 
-El `iframe` nunca carga directamente una URL arbitraria. Usa la ruta
-same-origin de materiales, de modo que el servidor elige la fuente autorizada y
-el cliente no puede sustituirla.
+El visor integra PDF.js en el navegador: renderiza en `canvas`, añade una capa
+de texto seleccionable, ofrece zoom, ajuste al ancho y navegación por teclado,
+y carga su worker como módulo local. Tanto PDF.js como su respaldo nativo usan
+la ruta same-origin de materiales; ninguna URL arbitraria del cliente se carga
+directamente. El `iframe` queda limitado al caso en que PDF.js falla de forma
+definitiva o repetida.
+
+## Catálogo curricular v2 y publicación fail-closed
+
+`lib/catalog.ts` separa la vista administrativa de la vista pública. Cada
+entrada usa identificadores normalizados para nivel, grado, curso, tipo de
+material e idioma, además de metadatos de edición, licencia, atribución,
+procedencia y archivo operativo.
+
+El ciclo de vida es:
+
+```text
+draft → reviewing → ready
+                     │
+                     └─► disabled
+```
+
+Solo `ready` es visible mediante las funciones públicas del catálogo. Un
+material listo debe fijar `expectedBytes` y `expectedSha256`; una entrada
+`draft`, `reviewing` o `disabled` se comporta como inexistente para la
+aplicación. `npm run catalog:validate` comprueba además:
+
+- taxonomía, URLs y nombre de archivo válidos;
+- fuente PDF dentro de la lista oficial permitida;
+- metadatos y pin de integridad obligatorios para `ready`;
+- exactamente un currículo versionado por material publicado;
+- cobertura de todas las páginas, sin huecos, duplicados ni solapamientos.
+
+La resolución curricular también es cerrada: una página sin clasificación
+inequívoca se convierte en una actividad no disponible y sin tutor. Así, una
+omisión de metadatos no habilita ayuda accidentalmente.
+
+La biblioteca recibe únicamente entradas publicadas y permite búsqueda textual
+y filtros encadenados por **Nivel → Grado → Curso**. Las opciones descendientes
+se recalculan al cambiar un filtro para no ofrecer combinaciones inexistentes.
 
 ## Sesiones anónimas controladas por el servidor
 
@@ -121,10 +159,12 @@ cliente y escriba su propio valor canónico. Estos límites en memoria reducen
 abuso accidental, pero son single-instance; el bucket compartido no es apto
 para una clase y tampoco sustituye un límite adicional en el edge o proxy.
 
-## Currículo de ocho fichas
+## Currículos versionados de ocho fichas
 
-Las páginas 1 a 12 se consideran orientación (`Explora`). Las páginas 13 a 100
-se dividen en ocho fichas y tres etapas:
+En ambos materiales, las páginas 1 a 12 se consideran orientación (`Explora`).
+Las páginas 13 a 100 se dividen en ocho fichas y tres etapas.
+
+### Fichas de Matemática 1
 
 | Ficha | Tema | Construimos | Comprobamos | Evaluamos |
 | ---: | --- | ---: | ---: | ---: |
@@ -136,6 +176,23 @@ se dividen en ocho fichas y tres etapas:
 | 6 | Inecuaciones y límites de velocidad | 65–68 | 69–72 | 73–74 |
 | 7 | Cuadriláteros con el mecano | 75–78 | 79–81 | 82–86 |
 | 8 | Probabilidad en promociones comerciales | 87–90 | 91–94 | 95–100 |
+
+### Fichas de Matemática 2
+
+| Ficha | Tema | Construimos | Comprobamos | Evaluamos |
+| ---: | --- | ---: | ---: | ---: |
+| 1 | Orden y comparación de fracciones | 13–16 | 17–20 | 21–22 |
+| 2 | Funciones lineales en la vida cotidiana | 23–26 | 27–30 | 31–32 |
+| 3 | Transformaciones en el plano cartesiano | 33–35 | 36–40 | 41–44 |
+| 4 | Información estadística para tomar decisiones | 45–47 | 48–52 | 53–56 |
+| 5 | Porcentajes en la vida cotidiana | 57–59 | 60–64 | 65–66 |
+| 6 | Progresiones aritméticas | 67–70 | 71–74 | 75–76 |
+| 7 | Ubicación y escalas en mapas | 77–79 | 80–83 | 84–86 |
+| 8 | Probabilidad para tomar decisiones | 87–90 | 91–94 | 95–100 |
+
+Cada currículo declara una versión independiente del código del extractor. Esa
+versión queda fijada en el índice y debe coincidir con el despliegue que lo
+consume.
 
 `Construimos` y `Comprobamos` permiten el tutor. En `Evaluamos`, el alumno puede
 leer y escribir, pero la ayuda se bloquea en varias capas:
@@ -280,18 +337,43 @@ indisponibilidad sin inventar una pista.
 ## Contenido, integridad y RAG
 
 La ruta de materiales busca primero el PDF en `AIMAUTA_CONTENT_DIR`. Si no
-existe y el proxy remoto está habilitado, solo acepta URLs oficiales incluidas
-en la lista permitida.
+existe, responde de forma cerrada. El proxy remoto es una opción explícita,
+deshabilitada por defecto, y aun habilitado solo acepta URLs oficiales
+incluidas en la lista permitida.
 
 `npm run content:sync` comprueba dominio y ruta, tipo PDF, firma `%PDF-`, tamaño
-y SHA-256 antes de publicar el archivo. `npm run content:index` vuelve a
-verificar el checksum, extrae texto por página, comprueba el total de páginas y
-genera fragmentos con procedencia en `AIMAUTA_INDEX_DIR`.
+y SHA-256 antes de publicar el archivo. Impone tiempo máximo y límite de bytes,
+y escribe de forma atómica un manifiesto runtime v2 acumulativo con fuente,
+tamaño, checksum y fecha de sincronización por libro.
+
+`npm run content:index` vuelve a verificar el checksum, extrae texto por
+página, comprueba el total de páginas y genera un índice v2 con:
+
+- versión del contrato y del extractor;
+- checksum del PDF, taxonomía y número de páginas;
+- versión curricular;
+- licencia y atribución;
+- etapa y ficha de cada fragmento;
+- marca `teacherOnly`;
+- reporte de páginas sin texto, conteos atípicos y posibles fragmentos
+  reservados para docentes.
+
+La carga del índice comprueba límites de tamaño y estructura, exige que
+checksum, taxonomía y currículo coincidan con el catálogo actual, valida la
+presencia de licencia y contrasta las estadísticas derivables de páginas sin
+texto y material docente. Los índices incompatibles fallan de forma cerrada;
+la memoria caché se invalida por tamaño y fecha de modificación.
 
 La recuperación léxica combina coincidencia con la consulta, cercanía a la
-página visible y un refuerzo pequeño para ejercicios. Está acotada al libro
-firmado en la sesión y devuelve citas de página. Un índice vectorial puede
-reemplazar el ranking en otra iteración sin cambiar el contrato del tutor.
+página visible y un refuerzo pequeño para ejercicios. Está acotada al libro y
+a la ficha firmados en la sesión, a una ventana de dos páginas, y excluye tanto
+`Evaluamos` como los fragmentos `teacherOnly`. Devuelve citas de página. Un
+índice vectorial puede reemplazar el ranking en otra iteración sin cambiar el
+contrato del tutor.
+
+Los dos PDFs se importan únicamente desde el Repositorio Institucional del
+MINEDU. `librosescolaresperu.com` participa solo en el descubrimiento y no es
+fuente de descarga, metadatos canónicos ni evidencia de licencia.
 
 ## Límites de confianza
 

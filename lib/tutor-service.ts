@@ -67,7 +67,8 @@ export async function guideLearningTurn(input: {
   const retrievedEvidence = await retrieveEvidence({
     bookId: verified.bookId,
     page: verified.page,
-    query: input.message
+    question: input.message,
+    attempt: input.attempt
   });
   const evidence = retrievedEvidence
     .filter(

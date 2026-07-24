@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-import { BookCard } from "@/components/book-card";
 import { BrandMark } from "@/components/brand-mark";
+import { CatalogLibrary } from "@/components/catalog-library";
 import { getBooks } from "@/lib/catalog";
 
 export default async function CatalogPage() {
@@ -105,23 +105,14 @@ export default async function CatalogPage() {
             <h2>¿Qué quieres aprender hoy?</h2>
           </div>
           <p>
-            {books.length} {books.length === 1 ? "material disponible" : "materiales disponibles"}
+            {books.length}{" "}
+            {books.length === 1
+              ? "material disponible"
+              : "materiales disponibles"}
           </p>
         </div>
 
-        {books.length > 0 ? (
-          <div className="book-grid">
-            {books.map((book, index) => (
-              <BookCard book={book} index={index} key={book.id} />
-            ))}
-          </div>
-        ) : (
-          <div className="empty-library">
-            <span aria-hidden="true">⌁</span>
-            <h3>La biblioteca se está preparando</h3>
-            <p>Vuelve pronto para comenzar con el primer material.</p>
-          </div>
-        )}
+        <CatalogLibrary books={books} />
       </section>
 
       <footer className="site-footer shell">

@@ -34,6 +34,7 @@ un Funnel HTTP no sustituye ICE/TURN.
 Código y build:       /home/hii1sc/aimauta-build
 PDFs:                 /home/hii1sc/aimauta-runtime/content
 Índices:              /home/hii1sc/aimauta-runtime/indexes
+Manifiestos:          /home/hii1sc/aimauta-runtime/manifests
 Entorno del worker:   /home/hii1sc/aimauta-runtime/voice-agent.env
 Entorno de LiveKit:   /home/hii1sc/aimauta-runtime/livekit.env
 Entorno de pruebas:   /home/hii1sc/aimauta-runtime/voice-test-venv
@@ -64,7 +65,8 @@ En PowerEdge:
 install -d -m 0750 \
   /home/hii1sc/aimauta-build \
   /home/hii1sc/aimauta-runtime/content \
-  /home/hii1sc/aimauta-runtime/indexes
+  /home/hii1sc/aimauta-runtime/indexes \
+  /home/hii1sc/aimauta-runtime/manifests
 
 git clone git@github.com:Duvet05/AImauta.git \
   /home/hii1sc/aimauta-build
@@ -206,6 +208,7 @@ Crear `/home/hii1sc/aimauta-build/.env.local`:
 ```dotenv
 AIMAUTA_CONTENT_DIR=/home/hii1sc/aimauta-runtime/content
 AIMAUTA_INDEX_DIR=/home/hii1sc/aimauta-runtime/indexes
+AIMAUTA_MANIFEST_DIR=/home/hii1sc/aimauta-runtime/manifests
 AIMAUTA_REMOTE_CONTENT_PROXY=false
 
 AIMAUTA_SESSION_SECRET=valor-aleatorio-exclusivo-de-sesion
@@ -295,17 +298,41 @@ Cada entrada del catálogo debe haber superado
 ```bash
 cd /home/hii1sc/aimauta-build
 
+npm run catalog:validate
+
 AIMAUTA_CONTENT_DIR=/home/hii1sc/aimauta-runtime/content \
-  npm run content:sync -- --book fichas-matematica-1-secundaria
+  AIMAUTA_MANIFEST_DIR=/home/hii1sc/aimauta-runtime/manifests \
+  npm run content:sync
 
 AIMAUTA_CONTENT_DIR=/home/hii1sc/aimauta-runtime/content \
   AIMAUTA_INDEX_DIR=/home/hii1sc/aimauta-runtime/indexes \
   npm run content:index
 ```
 
-La sincronización verifica dominio, firma PDF, tamaño y SHA-256. La indexación
-vuelve a comprobar el checksum y el total de páginas. Un fallo detiene el
-despliegue; no se omiten estas verificaciones.
+Sin `--book`, ambos comandos procesan todos los materiales `ready`. Para
+repetir de forma selectiva uno de ellos puede añadirse, por ejemplo,
+`-- --book fichas-matematica-2-secundaria`.
+
+La validación del catálogo comprueba taxonomía, fuente, pin de integridad y
+cobertura curricular sin huecos ni solapamientos. La sincronización verifica
+dominio y ruta, tipo y firma PDF, tamaño y SHA-256; limita tiempo y bytes antes
+de publicar el archivo. Después fusiona el resultado en
+`content-manifest.generated.json`, un manifiesto runtime v2 acumulativo escrito
+de forma atómica.
+
+La indexación vuelve a comprobar checksum y total de páginas y genera el
+contrato v2 con linaje del PDF, taxonomía, currículo, licencia y reporte de
+calidad. La salida resume:
+
+- páginas sin texto indexable;
+- páginas con conteos de palabras atípicamente bajos o altos;
+- fragmentos detectados como posibles respuestas o material docente.
+
+El operador debe revisar ese reporte ante resultados inesperados. El runtime
+rechaza índices con versión, estructura, checksum, taxonomía o currículo
+incoherentes, sin licencia declarada o con estadísticas derivables de páginas
+sin texto y material docente inconsistentes. Un fallo detiene el despliegue; no
+se omiten estas comprobaciones ni se reutiliza un índice de otra edición.
 
 ## Pruebas y builds
 
@@ -315,6 +342,7 @@ En PowerEdge:
 
 ```bash
 cd /home/hii1sc/aimauta-build
+npm run catalog:validate
 npm run lint
 npm run typecheck
 npm test
@@ -324,10 +352,11 @@ AIMAUTA_CONTENT_DIR=/home/hii1sc/aimauta-runtime/content \
   npm run build
 ```
 
-Las pruebas cubren, entre otros contratos, las ocho fichas, la firma, revisión,
-anti-replay, expiración y límite de 40 turnos, los rate limits, la exclusión de
-`Evaluamos` en RAG, los movimientos pedagógicos cerrados, el endpoint interno y
-la indisponibilidad controlada de LiveKit.
+Las pruebas cubren, entre otros contratos, la publicación fail-closed del
+catálogo, ambos currículos, la firma, revisión, anti-replay, expiración y límite
+de 40 turnos, los rate limits, el índice v2, la exclusión de `Evaluamos` y
+material docente en RAG, los movimientos pedagógicos cerrados, el endpoint
+interno y la indisponibilidad controlada de LiveKit.
 
 ### Worker de voz
 
@@ -443,6 +472,8 @@ Comprobaciones locales en PowerEdge:
 curl --fail http://127.0.0.1:3000/
 curl --fail --head \
   http://127.0.0.1:3000/api/materials/fichas-matematica-1-secundaria/pdf
+curl --fail --head \
+  http://127.0.0.1:3000/api/materials/fichas-matematica-2-secundaria/pdf
 curl --fail http://127.0.0.1:11435/api/tags
 curl --fail http://127.0.0.1:7880/
 docker compose \
@@ -454,19 +485,27 @@ docker logs --tail 100 aimauta-voice-agent
 
 Validar desde un navegador HTTPS:
 
-1. abrir **Fichas de Matemática 1** y confirmar que inicia en la página 13;
-2. escribir un intento y comprobar que el chat devuelve una sola pista o
+1. comprobar que la biblioteca solo muestra materiales `ready`, que la búsqueda
+   funciona y que los filtros **Nivel → Grado → Curso** se actualizan en
+   cascada;
+2. abrir cada uno de los dos materiales y confirmar que PDF.js renderiza la
+   página 13, que el texto es seleccionable y que funcionan zoom, ajuste al
+   ancho, botones y teclado;
+3. comprobar que el worker de PDF.js se carga desde la propia aplicación y que
+   el `iframe` nativo aparece únicamente al simular un fallo definitivo o
+   repetido de PDF.js;
+4. escribir un intento y comprobar que el chat devuelve una sola pista o
    pregunta con cita de página;
-3. activar la voz y comprobar que el micrófono permanece apagado hasta que se
+5. activar la voz y comprobar que el micrófono permanece apagado hasta que se
    conecta el agente exacto; luego conceder permiso y confirmar un ciclo
    STT → tutor interno → TTS;
-4. comprobar que un turno de voz actualiza turnos y nivel de apoyo en la
+6. comprobar que un turno de voz actualiza turnos y nivel de apoyo en la
    interfaz, sin incrementar automáticamente el contador de intentos;
-5. navegar a una página `Evaluamos`, por ejemplo la 21, y confirmar que chat,
+7. navegar a una página `Evaluamos`, por ejemplo la 21, y confirmar que chat,
    revisión y voz quedan bloqueados;
-6. comprobar en LiveKit que la sala recibió el dispatch
+8. comprobar en LiveKit que la sala recibió el dispatch
    `aimauta-socratic-tutor`;
-7. comprobar que la metadata de sala no contiene `session_token`, que el worker
+9. comprobar que la metadata de sala no contiene `session_token`, que el worker
    acepta solamente `student-<sessionId>` y que no existe grabación, Egress ni
    exportación de telemetría de la sesión.
 
@@ -484,6 +523,8 @@ git switch main
 git pull --ff-only origin main
 npm ci
 
+npm run catalog:validate
+
 /home/hii1sc/aimauta-runtime/voice-test-venv/bin/pip install \
   --require-hashes \
   -r /home/hii1sc/aimauta-build/services/voice-agent/requirements.lock
@@ -494,6 +535,10 @@ npm ci
 /home/hii1sc/aimauta-runtime/voice-test-venv/bin/pip install \
   --no-deps \
   -e /home/hii1sc/aimauta-build/services/voice-agent
+
+AIMAUTA_CONTENT_DIR=/home/hii1sc/aimauta-runtime/content \
+  AIMAUTA_MANIFEST_DIR=/home/hii1sc/aimauta-runtime/manifests \
+  npm run content:sync
 
 AIMAUTA_CONTENT_DIR=/home/hii1sc/aimauta-runtime/content \
   AIMAUTA_INDEX_DIR=/home/hii1sc/aimauta-runtime/indexes \
@@ -512,9 +557,13 @@ AIMAUTA_CONTENT_DIR=/home/hii1sc/aimauta-runtime/content \
 docker build -t aimauta-voice-agent:local services/voice-agent
 ```
 
-La sincronización se repite solo cuando el catálogo incorpora un material o una
-edición aprobada. Después se reinician Next.js y el worker mediante el
-administrador de servicios del host y se repite la validación posterior.
+La sincronización puede omitirse cuando el catálogo no incorpora un material ni
+una edición nueva; si se ejecuta, el pin evita una descarga distinta de la
+aprobada y el manifiesto conserva los registros de los demás libros. La
+indexación debe repetirse cuando cambian el PDF, el contrato del índice, el
+extractor o la versión curricular. Después se reinician Next.js y el worker
+mediante el administrador de servicios del host y se repite la validación
+posterior.
 Reiniciar un contenedor existente no adopta la imagen recién construida: el
 administrador debe sustituir el contenedor por otro creado desde la nueva
 imagen. El worker no guarda estado durable dentro del contenedor.
@@ -525,6 +574,8 @@ imagen. El worker no guarda estado durable dentro del contenedor.
   `127.0.0.1:11435 → Aule 127.0.0.1:11434`.
 - No usar Funnel ni una escucha `0.0.0.0` para Ollama.
 - Mantener `AIMAUTA_REMOTE_CONTENT_PROXY=false` cuando exista la copia local.
+- Conservar PDFs, manifiestos e índices fuera de Git y regenerar los derivados
+  únicamente desde la fuente oficial fijada.
 - En despliegue público, sanear y reescribir las cabeceras de forwarding en el
   proxy y recién entonces usar `AIMAUTA_TRUST_PROXY_HEADERS=true`.
 - Aplicar rate limits adicionales en el edge; los contadores de la aplicación

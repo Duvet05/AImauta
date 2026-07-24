@@ -3,7 +3,11 @@ import { stat } from "node:fs/promises";
 import { Readable } from "node:stream";
 import path from "node:path";
 
-import { getBook, isAllowedOfficialSource } from "@/lib/catalog";
+import {
+  getBook,
+  isAllowedOfficialSource,
+  type Book
+} from "@/lib/catalog";
 import { parseByteRange } from "@/lib/ranges";
 
 export const runtime = "nodejs";
@@ -24,15 +28,18 @@ function pdfHeaders(): Headers {
 
 async function localPdfResponse(
   request: Request,
-  storageFile: string,
+  book: Book,
   headOnly: boolean
 ): Promise<Response | null> {
   const contentDir = process.env.AIMAUTA_CONTENT_DIR;
-  if (!contentDir || path.basename(storageFile) !== storageFile) {
+  if (
+    !contentDir ||
+    path.basename(book.storageFile) !== book.storageFile
+  ) {
     return null;
   }
 
-  const filePath = path.join(contentDir, storageFile);
+  const filePath = path.join(contentDir, book.storageFile);
   let fileSize: number;
 
   try {
@@ -46,6 +53,12 @@ async function localPdfResponse(
       return null;
     }
     throw error;
+  }
+  if (fileSize !== book.expectedBytes) {
+    return Response.json(
+      { error: "El material local no coincide con la edición aprobada." },
+      { status: 503 }
+    );
   }
 
   const headers = pdfHeaders();
@@ -85,17 +98,17 @@ async function localPdfResponse(
 
 async function remotePdfResponse(
   request: Request,
-  sourcePdfUrl: string,
+  book: Book,
   headOnly: boolean
 ): Promise<Response> {
-  if (process.env.AIMAUTA_REMOTE_CONTENT_PROXY === "false") {
+  if (process.env.AIMAUTA_REMOTE_CONTENT_PROXY !== "true") {
     return Response.json(
       { error: "El proxy de contenido remoto está deshabilitado." },
       { status: 503 }
     );
   }
 
-  const source = new URL(sourcePdfUrl);
+  const source = new URL(book.sourcePdfUrl);
   if (!isAllowedOfficialSource(source)) {
     return Response.json(
       { error: "La fuente del material no está autorizada." },
@@ -113,12 +126,38 @@ async function remotePdfResponse(
     method: headOnly ? "HEAD" : "GET",
     headers: upstreamHeaders,
     cache: "no-store",
-    redirect: "error"
+    redirect: "error",
+    signal: AbortSignal.timeout(30_000)
   });
 
   if (!upstream.ok && upstream.status !== 206) {
     return Response.json(
       { error: "No se pudo obtener el material desde la fuente oficial." },
+      { status: 502 }
+    );
+  }
+  if (
+    !upstream.headers
+      .get("content-type")
+      ?.toLocaleLowerCase("en-US")
+      .includes("application/pdf")
+  ) {
+    await upstream.body?.cancel();
+    return Response.json(
+      { error: "La fuente oficial no devolvió un archivo PDF." },
+      { status: 502 }
+    );
+  }
+
+  const contentLength = Number(upstream.headers.get("content-length"));
+  if (
+    !range &&
+    Number.isFinite(contentLength) &&
+    contentLength !== book.expectedBytes
+  ) {
+    await upstream.body?.cancel();
+    return Response.json(
+      { error: "El archivo remoto no coincide con la edición aprobada." },
       { status: 502 }
     );
   }
@@ -156,12 +195,12 @@ async function handle(
     return Response.json({ error: "Material no encontrado." }, { status: 404 });
   }
 
-  const local = await localPdfResponse(request, book.storageFile, headOnly);
+  const local = await localPdfResponse(request, book, headOnly);
   if (local) {
     return local;
   }
 
-  return remotePdfResponse(request, book.sourcePdfUrl, headOnly);
+  return remotePdfResponse(request, book, headOnly);
 }
 
 export async function GET(

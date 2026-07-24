@@ -33,29 +33,68 @@ Antes de añadir un libro al catálogo deben cumplirse todos estos pasos:
 5. Registrar la URL oficial de descarga; nunca una copia de terceros.
 6. Revisar manualmente que el archivo corresponda a la ficha.
 7. Fijar tamaño y SHA-256 en el catálogo.
-8. Ejecutar la sincronización y la indexación en PowerEdge.
+8. Añadir una taxonomía normalizada y un currículo versionado que cubra todas
+   las páginas una sola vez.
+9. Ejecutar `npm run catalog:validate`, la sincronización y la indexación en
+   PowerEdge.
+10. Revisar el reporte de calidad de extracción antes del despliegue.
 
 Si falta la ficha oficial, la licencia es ambigua o la edición descargada no
 coincide, el material no se importa, no se muestra y no se indexa.
 
-## Primer material aprobado
+## Estados y publicación cerrada
 
-El material inicial es:
+Cada entrada del catálogo tiene uno de estos estados:
 
-- **Título:** Fichas de Matemática 1.
+- `draft`: registro incompleto, solo administrativo;
+- `reviewing`: fuente, licencia, identidad y currículo bajo revisión;
+- `ready`: superó las puertas de publicación y puede llegar al estudiante;
+- `disabled`: retirado de la vista pública.
+
+Las funciones públicas solo devuelven `ready`. Los demás estados, un currículo
+ausente o ambiguo y cualquier fallo de validación se tratan como material no
+disponible. Cambiar el estado no sustituye la revisión: `ready` exige fuente
+oficial permitida, metadatos de licencia y atribución, tamaño y SHA-256 fijados,
+y exactamente un currículo versionado sin huecos ni solapamientos.
+
+## Materiales aprobados
+
+### Fichas de Matemática 1
+
 - **Entidad:** Ministerio de Educación del Perú.
 - **Ficha oficial:**
   [handle 20.500.12799/10834](https://repositorio.minedu.gob.pe/handle/20.500.12799/10834).
+- **Edición:** primera reimpresión, setiembre de 2024.
+- **Tamaño fijado:** 32 895 443 bytes.
+- **SHA-256:** `c220ec82ed676a813977d61afea236e761c5253ef0beb0b0de9afccaf2eeaac0`.
 - **Licencia registrada:**
   [Creative Commons Atribución 4.0 Internacional](https://creativecommons.org/licenses/by/4.0/).
-- **Atribución:** Ministerio de Educación del Perú y autores consignados en la
-  ficha oficial.
-- **Descubrimiento:** página de referencia en
-  `librosescolaresperu.com`.
+- **Atribución:** Ministerio de Educación del Perú; Larisa Mansilla Fernández;
+  Olber Muñoz Solís; Juan Carlos Chávez Espino; Hugo Luis Támara Salazar;
+  Hubner Luque Cristóbal Jave; Enrique García Manyari; Emilia Gabriela Del
+  Busto Sipán.
 
-La licencia y la identidad del archivo se revisan por edición. La aprobación de
-este PDF no aprueba automáticamente otros materiales del mismo sitio, colección
-o entidad.
+### Fichas de Matemática 2
+
+- **Entidad:** Ministerio de Educación del Perú.
+- **Ficha oficial:**
+  [handle 20.500.12799/10835](https://repositorio.minedu.gob.pe/handle/20.500.12799/10835).
+- **Edición:** primera reimpresión, setiembre de 2024.
+- **Tamaño fijado:** 31 997 485 bytes.
+- **SHA-256:** `c5c116ed7c6f091630e39d1cbeb0aa6fa2095157734daa33c5eb58ae470089a0`.
+- **Licencia registrada:**
+  [Creative Commons Atribución 4.0 Internacional](https://creativecommons.org/licenses/by/4.0/).
+- **Atribución:** Ministerio de Educación del Perú; Larisa Mansilla Fernández;
+  Olber Muñoz Solís; Juan Carlos Chávez Espino; Hugo Luis Támara Salazar;
+  Hubner Luque Cristóbal Jave; Enrique García Manyari; Marilú Yésica Quispe
+  Amar.
+
+Ambos materiales fueron descubiertos mediante páginas de referencia de
+`librosescolaresperu.com`, pero se descargan exclusivamente desde el
+Repositorio Institucional del MINEDU. Los metadatos canónicos y la evidencia
+de licencia también proceden de la ficha oficial. La licencia y la identidad
+se revisan por edición: aprobar un PDF no aprueba automáticamente otros
+materiales del mismo sitio, colección o entidad.
 
 ## Almacenamiento
 
@@ -73,6 +112,7 @@ En PowerEdge se almacenan en:
 ```text
 /home/hii1sc/aimauta-runtime/content
 /home/hii1sc/aimauta-runtime/indexes
+/home/hii1sc/aimauta-runtime/manifests
 ```
 
 Git contiene solamente el catálogo de metadatos revisados, el código y la
@@ -88,8 +128,14 @@ La interfaz debe mostrar, como mínimo:
 - nombre y enlace de la licencia;
 - enlace a la ficha oficial.
 
-Cada índice conserva el `bookId`, la página y el SHA-256 del PDF de origen. Así,
-una cita del tutor puede rastrearse hasta una página de una edición concreta.
+El manifiesto runtime v2 conserva por libro la fuente oficial, el archivo,
+tamaño, SHA-256 y fecha de sincronización, y se actualiza de forma acumulativa
+y atómica. Cada índice v2 conserva el `bookId`, la página, SHA-256 del PDF,
+taxonomía, versión curricular, versión del extractor, licencia y atribución.
+También registra un reporte de páginas sin texto, conteos atípicos y posibles
+fragmentos reservados para docentes. Así, una cita del tutor puede rastrearse
+hasta una página de una edición concreta y una extracción inesperada puede
+detenerse para revisión.
 
 ## Privacidad de estudiantes
 
@@ -125,7 +171,7 @@ Las credenciales de Ollama, LiveKit u otros servicios tampoco se versionan.
 
 Si cambia la licencia, falla el checksum o un titular solicita revisión:
 
-1. se deshabilita el material en el catálogo;
+1. se cambia el material a `disabled` en el catálogo;
 2. se detienen nuevas sincronizaciones;
 3. se retira el PDF y su índice del almacenamiento operativo;
 4. se conserva únicamente el registro administrativo mínimo necesario para

@@ -5,21 +5,30 @@ Perú. Mantiene el material visible, pide al estudiante que escriba o explique s
 intento y usa un tutor socrático para ofrecer una pregunta o una pista breve,
 sin resolver el ejercicio por él.
 
-## Estado de la tercera iteración
+## Estado de la iteración de biblioteca curricular
 
 El recorrido vertical actual incluye:
 
-1. un catálogo de materiales autorizados y un visor PDF **same-origin**;
-2. sesiones anónimas con estado pedagógico firmado mediante HMAC y validado por
+1. un catálogo v2 con taxonomía normalizada, publicación **fail-closed** y
+   filtros encadenados por nivel, grado y curso;
+2. un visor **same-origin** basado en PDF.js, con texto seleccionable,
+   navegación, zoom y un `iframe` nativo únicamente como respaldo;
+3. dos materiales oficiales de Matemática, cada uno con currículo versionado
+   de ocho fichas y cobertura completa de páginas;
+4. sesiones anónimas con estado pedagógico firmado mediante HMAC y validado por
    el servidor;
-3. las ocho fichas de **Fichas de Matemática 1**, divididas en las etapas
-   `Construimos`, `Comprobamos` y `Evaluamos`;
-4. un único servicio de tutoría para texto y voz, con RAG por página, política
+5. un único servicio de tutoría para texto y voz, con RAG por página, política
    socrática y respaldo conservador cuando Ollama no responde;
-5. un canal de voz opcional con LiveKit self-hosted, Deepgram y un worker
+6. un canal de voz opcional con LiveKit self-hosted, Deepgram y un worker
    preparado para ejecutarse en PowerEdge;
-6. un avatar 3D local que reacciona al audio aprobado del tutor, con una
+7. un avatar 3D local que reacciona al audio aprobado del tutor, con una
    ilustración SVG accesible como respaldo.
+
+Solo los materiales con estado `ready` llegan al navegador. Para alcanzar ese
+estado deben tener fuente oficial permitida, licencia y atribución revisadas,
+tamaño y SHA-256 fijados, taxonomía válida y exactamente un currículo
+versionado sin huecos ni solapamientos. `draft`, `reviewing`, `disabled` o
+cualquier clasificación curricular desconocida se tratan como no disponibles.
 
 Durante `Evaluamos`, el estudiante conserva el PDF y su espacio de respuesta,
 pero el chat, las pistas y la voz quedan bloqueados. La restricción se valida
@@ -137,21 +146,34 @@ movimiento reducido, permanece una ilustración SVG local con los mismos estados
 de conexión. La procedencia, licencia, optimización y checksums del modelo se
 conservan en [`public/avatars/README.md`](public/avatars/README.md).
 
-## Primer material autorizado
+## Biblioteca curricular y visor
 
-El catálogo inicial contiene **Fichas de Matemática 1**, del Ministerio de
-Educación del Perú:
+El catálogo público contiene dos cuadernos del Ministerio de Educación del
+Perú. Ambos corresponden a la primera reimpresión de setiembre de 2024 y
+registran licencia
+[Creative Commons Atribución 4.0](https://creativecommons.org/licenses/by/4.0/):
 
-- ficha oficial:
-  [Repositorio Institucional del MINEDU, handle 10834](https://repositorio.minedu.gob.pe/handle/20.500.12799/10834);
-- licencia verificada:
-  [Creative Commons Atribución 4.0](https://creativecommons.org/licenses/by/4.0/);
-- procedencia de descubrimiento:
-  `librosescolaresperu.com`;
-- procedencia de importación: exclusivamente la descarga oficial del MINEDU.
+| Material | Ficha oficial | Tamaño fijado | SHA-256 |
+| --- | --- | ---: | --- |
+| Fichas de Matemática 1 | [MINEDU 10834](https://repositorio.minedu.gob.pe/handle/20.500.12799/10834) | 32 895 443 bytes | `c220ec82ed676a813977d61afea236e761c5253ef0beb0b0de9afccaf2eeaac0` |
+| Fichas de Matemática 2 | [MINEDU 10835](https://repositorio.minedu.gob.pe/handle/20.500.12799/10835) | 31 997 485 bytes | `c5c116ed7c6f091630e39d1cbeb0aa6fa2095157734daa33c5eb58ae470089a0` |
 
-El sitio de terceros se usa para descubrir materiales, no como fuente de
-descarga ni como evidencia de licencia.
+`librosescolaresperu.com` se usa únicamente para descubrir materiales. La
+importación usa exclusivamente la descarga oficial del MINEDU; los metadatos
+canónicos y la evidencia de licencia proceden de la ficha oficial, y la
+identidad de la edición se contrasta con el PDF.
+
+La biblioteca permite buscar y filtrar en cascada por
+**Nivel → Grado → Curso**. Al abrir un material, PDF.js renderiza el archivo
+local servido por `/api/materials/:bookId/pdf`, con su worker alojado por la
+propia aplicación y una capa de texto seleccionable. El `iframe` nativo se
+activa solo si el render de PDF.js falla de forma definitiva o repetida.
+
+La sincronización publica además un manifiesto runtime v2 acumulativo y
+atómico. La indexación genera un índice v2 ligado al checksum, taxonomía,
+versión curricular y licencia; su reporte de calidad señala páginas sin texto,
+valores atípicos y posibles fragmentos reservados para docentes. Los índices
+incompatibles o malformados se rechazan antes de recuperar evidencia.
 
 ## Ejecución y compilación
 
@@ -166,6 +188,7 @@ Rutas operativas:
 /home/hii1sc/aimauta-build
 /home/hii1sc/aimauta-runtime/content
 /home/hii1sc/aimauta-runtime/indexes
+/home/hii1sc/aimauta-runtime/manifests
 ```
 
 Secuencia resumida en PowerEdge:
@@ -173,7 +196,10 @@ Secuencia resumida en PowerEdge:
 ```bash
 cd /home/hii1sc/aimauta-build
 npm ci
-AIMAUTA_CONTENT_DIR=/home/hii1sc/aimauta-runtime/content npm run content:sync
+npm run catalog:validate
+AIMAUTA_CONTENT_DIR=/home/hii1sc/aimauta-runtime/content \
+  AIMAUTA_MANIFEST_DIR=/home/hii1sc/aimauta-runtime/manifests \
+  npm run content:sync
 AIMAUTA_CONTENT_DIR=/home/hii1sc/aimauta-runtime/content \
   AIMAUTA_INDEX_DIR=/home/hii1sc/aimauta-runtime/indexes \
   npm run content:index

@@ -8,6 +8,7 @@ import {
   issueLearningSession,
   moveLearningSession
 } from "@/lib/learning-session";
+import { makeBookIndex } from "./book-index-fixture";
 
 let indexDir: string;
 
@@ -15,11 +16,8 @@ beforeAll(async () => {
   indexDir = await mkdtemp(path.join(tmpdir(), "aimauta-index-"));
   await writeFile(
     path.join(indexDir, "fichas-matematica-1-secundaria.json"),
-    JSON.stringify({
-      version: 1,
-      bookId: "fichas-matematica-1-secundaria",
-      sourceSha256: "test",
-      chunks: [
+    JSON.stringify(
+      makeBookIndex([
         {
           id: "page-8",
           page: 8,
@@ -38,8 +36,8 @@ beforeAll(async () => {
           kind: "exercise",
           text: "La evaluación contiene la clave especial que busca el estudiante."
         }
-      ]
-    })
+      ])
+    )
   );
   process.env.AIMAUTA_INDEX_DIR = indexDir;
   process.env.AIMAUTA_SESSION_SECRET =

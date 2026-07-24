@@ -1,0 +1,443 @@
+.panel {
+  position: relative;
+}
+
+.toolbar {
+  grid-template-columns: minmax(10rem, 1fr) auto;
+  gap: 0.75rem;
+}
+
+.documentTitle {
+  align-self: center;
+}
+
+.toolbarActions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.pageControls {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.pageForm {
+  position: relative;
+}
+
+.pageForm input {
+  width: 3.25rem;
+  min-height: 44px;
+}
+
+.pageInputError {
+  position: absolute;
+  z-index: 8;
+  top: calc(100% + 0.55rem);
+  left: 50%;
+  width: max-content;
+  max-width: min(17rem, 80vw);
+  padding: 0.45rem 0.6rem;
+  border: 1px solid rgb(184 83 69 / 0.25);
+  border-radius: 0.45rem;
+  color: #7a4035;
+  background: #fff4f1;
+  box-shadow: 0 8px 22px rgb(38 55 50 / 0.14);
+  font-size: 0.68rem;
+  line-height: 1.35;
+  transform: translateX(-50%);
+}
+
+.iconButton {
+  flex: 0 0 auto;
+}
+
+.zoomControls {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  border: 1px solid rgb(23 79 70 / 0.14);
+  border-radius: 0.55rem;
+  background: white;
+}
+
+.zoomControls > span {
+  min-width: 3.25rem;
+  color: #5e6f6a;
+  font-size: 0.67rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.compactButton,
+.fitButton {
+  min-height: 36px;
+  border: 0;
+  border-radius: 0.4rem;
+  color: #174f46;
+  background: transparent;
+  font-size: 0.67rem;
+  font-weight: 700;
+}
+
+.compactButton {
+  display: grid;
+  width: 36px;
+  padding: 0;
+  place-items: center;
+}
+
+.compactButton svg {
+  width: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.fitButton {
+  padding-inline: 0.55rem;
+}
+
+.compactButton:hover:not(:disabled),
+.compactButton:focus-visible,
+.fitButton:hover:not(:disabled),
+.fitButton:focus-visible,
+.fitButton[aria-pressed="true"] {
+  background: #dbece3;
+}
+
+.compactButton:disabled,
+.fitButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.openPdfLink {
+  flex: 0 0 auto;
+  min-height: 44px;
+  align-items: center;
+}
+
+.viewerViewport {
+  position: relative;
+  display: grid;
+  overflow: auto;
+  min-height: 0;
+  flex: 1;
+  padding: 1rem;
+  align-content: start;
+  justify-items: center;
+  background:
+    radial-gradient(circle at 50% 10%, rgb(255 255 255 / 0.55), transparent 28rem),
+    #dfe3dd;
+  overscroll-behavior: contain;
+  scrollbar-color: rgb(23 79 70 / 0.28) transparent;
+  scrollbar-width: thin;
+}
+
+.viewerViewport:focus-visible {
+  outline: 3px solid rgb(238 128 104 / 0.55);
+  outline-offset: -4px;
+}
+
+.pageSurface {
+  position: relative;
+  overflow: hidden;
+  min-width: 1px;
+  min-height: 1px;
+  flex: 0 0 auto;
+  direction: ltr;
+  color-scheme: only light;
+  background: white;
+  box-shadow:
+    0 2px 5px rgb(23 45 42 / 0.12),
+    0 18px 45px rgb(23 45 42 / 0.12);
+  transform-origin: top center;
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  margin: 0;
+  contain: content;
+}
+
+.textLayer {
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  overflow: clip;
+  color-scheme: only light;
+  opacity: 1;
+  line-height: 1;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-align: initial;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+}
+
+.textLayer :is(:global(span), :global(br)) {
+  position: absolute;
+  color: transparent;
+  cursor: text;
+  user-select: text;
+  white-space: pre;
+  transform-origin: 0 0;
+}
+
+.textLayer > :not(:global(.markedContent)),
+.textLayer :global(.markedContent) span:not(:global(.markedContent)) {
+  --font-height: 0;
+  --scale-x: 1;
+  --rotate: 0deg;
+
+  z-index: 1;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  transform:
+    rotate(var(--rotate))
+    scaleX(var(--scale-x))
+    scale(var(--min-font-size-inv));
+}
+
+.textLayer :global(.markedContent) {
+  display: contents;
+}
+
+.textLayer :global(span[role="img"]) {
+  cursor: default;
+  user-select: none;
+}
+
+.textLayer ::selection {
+  color: transparent;
+  background: rgb(23 79 70 / 0.28);
+}
+
+.screenReaderText {
+  position: absolute !important;
+  overflow: hidden !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  margin: -1px !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+}
+
+.loadingState,
+.errorState {
+  position: sticky;
+  z-index: 6;
+  top: 1rem;
+  grid-area: 1 / 1;
+  align-self: start;
+  margin-top: 1rem;
+  box-shadow: 0 12px 34px rgb(23 45 42 / 0.18);
+}
+
+.loadingState {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid rgb(23 79 70 / 0.15);
+  border-radius: 2rem;
+  color: #174f46;
+  background: rgb(255 253 247 / 0.97);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.spinner {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  border: 2px solid rgb(23 79 70 / 0.22);
+  border-top-color: #174f46;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.errorState {
+  width: min(25rem, calc(100% - 2rem));
+  padding: 1rem;
+  border: 1px solid rgb(184 83 69 / 0.24);
+  border-radius: 0.75rem;
+  color: #633d30;
+  text-align: center;
+  background: #fff8f4;
+}
+
+.errorState strong {
+  font-family: Iowan Old Style, Palatino Linotype, Georgia, serif;
+  font-size: 1rem;
+}
+
+.errorState p {
+  margin: 0.35rem 0 0.8rem;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.errorState > div {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.errorState button,
+.errorState a,
+.fallbackNotice button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0.55rem 0.8rem;
+  border-radius: 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.errorState button,
+.fallbackNotice button {
+  border: 1px solid #174f46;
+  color: white;
+  background: #174f46;
+}
+
+.errorState a {
+  border: 1px solid rgb(23 79 70 / 0.22);
+  color: #174f46;
+  background: white;
+}
+
+.nativeFallback {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  padding: 0.8rem;
+}
+
+.fallbackNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgb(157 104 54 / 0.18);
+  border-radius: 0.65rem;
+  color: #684b35;
+  background: #fff6e9;
+}
+
+.fallbackNotice > div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.fallbackNotice strong {
+  font-size: 0.75rem;
+}
+
+.fallbackNotice span {
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+.nativeFrame {
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  border: 0;
+  border-radius: 0.45rem;
+  background: white;
+}
+
+.attribution {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1120px) {
+  .toolbarActions {
+    flex-wrap: wrap;
+  }
+
+  .zoomControls {
+    order: 3;
+  }
+}
+
+@media (max-width: 680px) {
+  .toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .documentTitle {
+    grid-column: auto;
+  }
+
+  .toolbarActions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: 100%;
+  }
+
+  .pageControls {
+    grid-column: 1;
+    justify-self: start;
+  }
+
+  .openPdfLink {
+    grid-column: 2;
+    justify-self: end;
+  }
+
+  .zoomControls {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+
+  .viewerViewport {
+    padding: 0.45rem;
+  }
+
+  .fallbackNotice {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .errorState > div {
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}

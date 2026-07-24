@@ -7,18 +7,37 @@ const chunks: IndexedChunk[] = [
     id: "same-page",
     page: 12,
     text: "Compara las cantidades y explica qué estrategia usarías.",
-    kind: "exercise"
+    kind: "exercise",
+    teacherOnly: false,
+    stage: "orientation",
+    unitId: null
   },
   {
     id: "lexical",
     page: 20,
-    text: "Una cantidad representa cuánto hay y puede compararse con otra."
+    text: "Una cantidad representa cuánto hay y puede compararse con otra.",
+    kind: "content",
+    teacherOnly: false,
+    stage: "practice",
+    unitId: "ficha-1-fracciones"
   },
   {
     id: "teacher-only",
     page: 12,
     text: "La respuesta final es cuarenta y dos.",
-    teacherOnly: true
+    kind: "content",
+    teacherOnly: true,
+    stage: "orientation",
+    unitId: null
+  },
+  {
+    id: "assessment",
+    page: 21,
+    text: "Clave de una evaluación próxima.",
+    kind: "exercise",
+    teacherOnly: false,
+    stage: "assessment",
+    unitId: "ficha-1-fracciones"
   }
 ];
 
@@ -45,6 +64,16 @@ describe("rankChunks", () => {
     });
 
     expect(result.map((item) => item.id)).not.toContain("teacher-only");
+  });
+
+  it("nunca recupera fragmentos marcados como evaluación", () => {
+    const result = rankChunks({
+      chunks,
+      query: "clave evaluación",
+      page: 20
+    });
+
+    expect(result.map((item) => item.id)).not.toContain("assessment");
   });
 
   it("mantiene la evidencia dentro de la página visible y sus vecinas", () => {
