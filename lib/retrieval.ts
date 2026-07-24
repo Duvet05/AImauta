@@ -46,7 +46,10 @@ export function rankChunks(input: {
   const limit = Math.max(1, Math.min(input.limit ?? 3, 5));
 
   return input.chunks
-    .filter((chunk) => !chunk.teacherOnly)
+    .filter(
+      (chunk) =>
+        !chunk.teacherOnly && Math.abs(chunk.page - input.page) <= 2
+    )
     .map((chunk) => {
       const chunkTokens = tokens(chunk.text);
       let lexicalMatches = 0;

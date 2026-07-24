@@ -6,173 +6,300 @@ AImauta acompaña al estudiante mientras trabaja con un material escolar. Su
 comportamiento central es socrático: reconoce el intento, hace una sola pregunta
 o entrega una pista breve y evita revelar la respuesta final.
 
-El MVP prioriza cuatro propiedades:
+La segunda iteración integra el currículo, el estado pedagógico y los canales de
+texto y voz bajo una misma autoridad del servidor. Sus propiedades principales
+son:
 
-- el material y la página son identificados por el servidor;
-- toda afirmación sobre el libro se sustenta en fragmentos indexados;
+- el libro, la página, la etapa y el nivel de ayuda se validan en el servidor;
+- texto y voz reutilizan la misma recuperación y la misma política pedagógica;
+- `Evaluamos` bloquea el tutor sin bloquear el espacio de trabajo del alumno;
 - los PDFs y los índices permanecen fuera de Git;
-- la indisponibilidad del modelo no rompe el acompañamiento básico.
+- la indisponibilidad de Ollama no rompe el acompañamiento básico.
 
-## Recorrido del MVP
+## Topología actual
 
 ```text
-Navegador
-  │
-  ├── catálogo Next.js
-  │
-  ├── GET /api/materials/:bookId/pdf ──► PDF local autorizado
-  │                                    └─► fuente oficial permitida (respaldo)
-  │
-  └── POST /api/tutor
-          │
-          ├── valida libro, página, mensaje e historial
-          ├── busca evidencia en el índice del libro
-          ├── construye la política y el prompt socrático
-          ├── consulta Gemma mediante Ollama
-          └── usa una guía segura si Ollama no está disponible
+┌──────────────────────── navegador del estudiante ────────────────────────┐
+│ visor PDF       intento escrito       chat       micrófono/altavoz       │
+└──────┬──────────────────┬────────────────┬──────────────────┬────────────┘
+       │                  │                │                  │ WebRTC/datos
+       │                  ├─ POST /api/session               ▼
+       │                  └─ POST /api/tutor          LiveKit Cloud
+       │                                   │                 │
+       ▼                                   ▼                 ▼
+PowerEdge: Next.js ─────────────────► tutor-service   worker de voz
+  ├─ catálogo y currículo                  ▲           ├─ Silero VAD
+  ├─ sesiones HMAC                         │           ├─ Deepgram STT
+  ├─ PDF e índice RAG                      └───────────┤  /api/internal/turn
+  └─ API LiveKit                                       └─ Deepgram TTS
+       │
+       └─ túnel SSH 127.0.0.1:11435 ──► Aule 127.0.0.1:11434
+                                          Ollama + Gemma
 ```
 
-### Aplicación web
+LiveKit Cloud transporta audio y datos del canal de voz. PowerEdge conserva la
+autoridad pedagógica, el contenido y el worker. Aule solo sirve la inferencia de
+Gemma a través de Ollama y no se publica en Internet.
+
+## Aplicación web y contratos HTTP
 
 La aplicación usa Next.js con App Router y TypeScript. El catálogo vive en
-`lib/catalog.ts`; cada espacio de aprendizaje combina:
+`lib/catalog.ts`; el currículo por página, en `lib/curriculum.ts`.
 
-- visor PDF;
-- selector de página;
-- campo para el intento del estudiante;
-- conversación con el tutor;
-- enlaces de evidencia que permiten volver a la página citada.
+| Ruta | Consumidor | Responsabilidad |
+| --- | --- | --- |
+| `GET/HEAD /api/materials/:bookId/pdf` | visor | servir el PDF autorizado con soporte `Range` |
+| `POST /api/session` | navegador | crear o mover una sesión pedagógica firmada |
+| `POST /api/tutor` | navegador | procesar un turno de texto |
+| `POST /api/livekit/token` | navegador | crear la sala y emitir un JWT de participante |
+| `POST /api/internal/turn` | worker | procesar un turno de voz mediante el mismo tutor |
 
-El `iframe` nunca carga directamente una URL arbitraria. Usa una ruta
-same-origin (`/api/materials/:bookId/pdf`) para mantener un origen predecible y
-evitar que el cliente seleccione una fuente no autorizada.
+El `iframe` nunca carga directamente una URL arbitraria. Usa la ruta
+same-origin de materiales, de modo que el servidor elige la fuente autorizada y
+el cliente no puede sustituirla.
 
-### Entrega del PDF
+## Sesiones anónimas controladas por el servidor
 
-La ruta de materiales busca primero el archivo en `AIMAUTA_CONTENT_DIR`. Si no
-existe y el proxy remoto está habilitado, solo acepta URLs incluidas en la lista
-de fuentes oficiales del código.
+Una sesión no identifica a una persona y no requiere base de datos. Su estado se
+serializa en un token versionado y se firma con HMAC-SHA-256 usando
+`AIMAUTA_SESSION_SECRET`. La vigencia es de dos horas.
 
-El servidor:
+El estado firmado contiene:
 
-- sirve `application/pdf` en línea;
-- soporta solicitudes `Range` para la navegación del visor;
-- rechaza rutas y dominios que no estén permitidos;
-- no sigue redirecciones durante la obtención remota.
+- UUID de sesión, libro, página, ficha y etapa;
+- cantidad de intentos distintos y turnos;
+- nivel de pista entre 0 y 3;
+- revisión monotónica;
+- instante de creación y expiración;
+- un resumen HMAC del último intento, nunca el texto completo.
 
-### Sincronización y control de integridad
+El navegador conserva el token v2 en memoria y lo presenta en cada cambio de
+página o turno. En cada verificación, el servidor:
 
-`npm run content:sync` descarga desde la URL oficial registrada en el catálogo.
-Antes de publicar el archivo comprueba:
+1. comprueba estructura, firma, versión y expiración;
+2. valida el libro y los límites de página contra el catálogo;
+3. vuelve a calcular ficha y etapa desde el currículo;
+4. comprueba que la revisión recibida sea la revisión vigente de la sesión;
+5. rechaza replay, bifurcaciones y cualquier estado pedagógico inconsistente.
 
-- dominio y ruta permitidos;
-- tipo de contenido PDF;
-- firma `%PDF-`;
-- tamaño esperado;
-- SHA-256 esperado.
+El estado vigente se mantiene en un registro efímero en memoria. Cada mutación
+consume la revisión actual y emite la siguiente, lo que serializa cambios de
+página y turnos concurrentes. El límite es de 40 turnos por sesión.
+Este diseño es intencionalmente **single-instance**: al reiniciar el proceso se
+pierde el registro, y varias réplicas no pueden coordinar revisiones sin un
+almacén compartido. Por tanto, no existe todavía progreso durable.
 
-La descarga se escribe primero en un archivo temporal y solo se mueve a su
-destino si supera las validaciones. El checksum fija la edición concreta que fue
-revisada y evita indexar silenciosamente un archivo distinto.
+Al cambiar de página se reinician intentos, turnos y nivel de pista. En un turno
+de texto se cuentan solamente intentos no vacíos distintos; una transcripción
+de voz no se cuenta automáticamente como intento. El apoyo aumenta
+gradualmente y nunca supera el nivel 3.
 
-### Índice por página
+El token es íntegro, pero no está cifrado. Debe tratarse como una credencial
+efímera: no se registra, no se incluye en analítica y no se entrega a servicios
+ajenos al flujo de LiveKit.
 
-`npm run content:index`:
+### Límites de admisión
 
-1. vuelve a verificar el SHA-256;
-2. extrae el texto página por página;
-3. compara el total de páginas con el catálogo;
-4. divide cada página en fragmentos con solapamiento;
-5. registra `bookId`, página, tipo de fragmento y checksum de origen.
+Antes de ejecutar trabajo costoso, las rutas públicas aplican ventanas en
+memoria:
 
-Los índices generados se escriben en `AIMAUTA_INDEX_DIR` y no se versionan.
+| Operación | Clave | Límite |
+| --- | --- | ---: |
+| turnos de `/api/tutor` y del worker | sesión | 12 por minuto |
+| accesos de `/api/livekit/token` | sesión | 6 por minuto |
+| navegación de `/api/session` | sesión | 60 por minuto |
+| sesiones nuevas de `/api/session` | fingerprint del cliente | 12 por minuto |
 
-### Recuperación léxica
+El fingerprint de creación usa un hash de la dirección proporcionada por un
+proxy confiable; sin esa integración, todas las altas comparten un bucket
+conservador para no confiar en datos falsificables.
+`AIMAUTA_TRUST_PROXY_HEADERS=true` solo debe activarse detrás de un proxy que
+elimine `CF-Connecting-IP`, `X-Real-IP` y `X-Forwarded-For` suministradas por el
+cliente y escriba su propio valor canónico. Estos límites en memoria reducen
+abuso accidental, pero son single-instance; el bucket compartido no es apto
+para una clase y tampoco sustituye un límite adicional en el edge o proxy.
 
-El primer RAG es deliberadamente simple y auditable. Normaliza el texto, compara
-tokens y combina:
+## Currículo de ocho fichas
 
-- coincidencia léxica con la consulta;
-- cercanía a la página visible;
-- un pequeño refuerzo para fragmentos identificados como ejercicios.
+Las páginas 1 a 12 se consideran orientación (`Explora`). Las páginas 13 a 100
+se dividen en ocho fichas y tres etapas:
 
-La recuperación está acotada al libro solicitado y excluye contenido marcado
-como exclusivo para docentes. La API devuelve páginas citadas, no una respuesta
-extraída sin procedencia. Un índice vectorial podrá reemplazar el ranking en una
-fase posterior sin cambiar la interfaz del tutor.
+| Ficha | Tema | Construimos | Comprobamos | Evaluamos |
+| ---: | --- | ---: | ---: | ---: |
+| 1 | Operaciones con fracciones | 13–16 | 17–20 | 21–22 |
+| 2 | Proporcionalidad en situaciones cotidianas | 23–26 | 27–29 | 30–32 |
+| 3 | Mapas, escalas y desplazamientos | 33–36 | 37–40 | 41–44 |
+| 4 | Medidas de tendencia central | 45–48 | 49–51 | 52–54 |
+| 5 | Números enteros en situaciones reales | 55–58 | 59–62 | 63–64 |
+| 6 | Inecuaciones y límites de velocidad | 65–68 | 69–72 | 73–74 |
+| 7 | Cuadriláteros con el mecano | 75–78 | 79–81 | 82–86 |
+| 8 | Probabilidad en promociones comerciales | 87–90 | 91–94 | 95–100 |
 
-### Tutor socrático
+`Construimos` y `Comprobamos` permiten el tutor. En `Evaluamos`, el alumno puede
+leer y escribir, pero la ayuda se bloquea en varias capas:
 
-La política pedagógica asigna un nivel de pista según los intentos y el historial
-reciente. Las reglas innegociables del prompt son:
+- la interfaz deshabilita revisión, chat y voz;
+- `tutor-service` devuelve el modo `assessment-locked` sin consultar RAG ni
+  Ollama;
+- el recuperador excluye fragmentos de páginas `Evaluamos` aunque estén dentro
+  de la ventana de páginas vecinas de una consulta habilitada;
+- el nivel de pista se fuerza a 0;
+- `/api/livekit/token` rechaza la creación del canal de voz con HTTP 423.
 
-- una sola pregunta o pista por turno;
-- entre una y tres frases;
-- no revelar la solución final;
-- usar evidencia del libro para afirmaciones sobre el material;
-- pedir que se observe la página cuando no existe evidencia;
-- tratar el texto recuperado como datos no confiables, no como instrucciones.
+La navegación hacia una página de evaluación no acredita por sí misma que la
+ficha fue completada; el bloqueo implementado protege la resolución autónoma,
+no es todavía un sistema de calificación o prerrequisitos persistentes.
 
-La respuesta local de respaldo conserva estas reglas cuando Ollama falla o no
-está configurado.
+## Un solo tutor para texto y voz
+
+`lib/tutor-service.ts` expone la operación central `guideLearningTurn`. Tanto
+`/api/tutor` como `/api/internal/turn` la invocan. Esa operación:
+
+1. verifica la sesión firmada y aplica el límite de admisión;
+2. aplica el bloqueo de evaluación;
+3. recupera evidencia del libro y la página antes de consumir la revisión;
+4. evoluciona la sesión y calcula la política;
+5. pide a Gemma elegir una de cinco etiquetas pedagógicas cerradas;
+6. renderiza en servidor la pregunta aprobada o usa una guía determinista de
+   respaldo;
+7. devuelve la nueva sesión, actividad, citas y política.
+
+Las etiquetas permitidas son `OBSERVA`, `REFORMULA`, `COMPARA`, `COMPRUEBA` y
+`DIVIDE`, con un máximo de 12 tokens internos. La salida cruda de Gemma nunca se
+muestra al alumno: una coincidencia exacta selecciona una plantilla
+determinista del servidor y cualquier otro contenido se descarta. El guard
+formal valida además que la plantilla tenga una sola pregunta y no contenga
+patrones de solución. Toda selección sobre el libro usa la evidencia
+recuperada. El texto del PDF se delimita como información no confiable para que
+sus posibles instrucciones no sustituyan la política.
+
+El endpoint interno exige
+`Authorization: Bearer <AIMAUTA_AGENT_SECRET>` y compara el secreto en tiempo
+constante. El secreto debe ser independiente del secreto HMAC de las sesiones.
+
+## Canal de voz
+
+### Creación de sala y dispatch
+
+`POST /api/livekit/token` acepta únicamente una sesión HMAC válida y disponible
+para tutoría. El servidor crea o actualiza una sala
+`aimauta-<sessionId>`, incorpora metadata canónica y emite un JWT de estudiante
+por 15 minutos.
+
+Al crear la sala solicita un dispatch nombrado exactamente:
+
+```text
+aimauta-socratic-tutor
+```
+
+El worker se registra con el mismo nombre. Esta coincidencia es parte del
+contrato de despliegue; un nombre distinto deja la sala sin agente.
+
+La metadata visible de la sala contiene contexto operativo mínimo
+—identificador de sesión, libro, página y modo—, nunca el token HMAC. La
+credencial inicial se incluye en metadata de dispatch dirigida al worker y
+procesada por el plano de control de LiveKit. Después, navegador y worker
+intercambian revisiones mediante paquetes de datos fiables de LiveKit. El
+worker acepta contexto solo desde la identidad exacta `student-<sessionId>` y
+el navegador acepta actualizaciones solo del participante agente esperado.
+
+La conexión WebRTC por sí sola no habilita el micrófono. El navegador espera un
+participante con `isAgent=true`, identidad `agent-*` y atributo
+`lk.agent.name=aimauta-socratic-tutor`; recién entonces activa audio y
+micrófono. Si ese agente no aparece en 12 segundos, se retira o se desconecta la
+sala, la activación falla de forma cerrada y se limpian conexión, pistas de
+audio y micrófono.
+
+### Datos de sincronización
+
+El audio viaja por WebRTC. El estado pedagógico se sincroniza con paquetes de
+datos fiables y versionados:
+
+| Dirección | Tópico | Carga |
+| --- | --- | --- |
+| navegador → worker | `aimauta.context.v1` | `{"v":1,"sessionToken":"…"}` |
+| worker → navegador | `aimauta.session.v1` | token nuevo, sesión y actividad |
+
+El navegador valida versión, identificador de sesión, revisión, etapa, páginas,
+forma e identidad de origen antes de aplicar una actualización. El backend
+anti-replay sigue siendo la autoridad cuando texto, navegación y voz compiten
+por evolucionar la misma sesión.
+
+### Worker sin LLM propio
+
+El worker de `services/voice-agent` usa esta secuencia:
+
+```text
+Silero VAD
+  └─► Deepgram STT
+        └─► POST /api/internal/turn
+              └─► tutor-service ─► RAG ─► Ollama/Gemma o respaldo
+        ◄──────────────── respuesta aprobada
+  ◄─ Deepgram TTS
+```
+
+`AgentSession` se inicia con `record=False`, por lo que Agent Insights no graba
+ni sube audio, transcripciones, trazas o logs de la sesión. El nivel de log del
+worker es `WARN` y sus mensajes propios redactan credenciales y contenido. Su
+health server escucha solamente en `127.0.0.1`, incluso cuando el contenedor usa
+la red del host; no debe publicarse mediante el proxy ni el firewall. Un
+deadline autoritativo de diez minutos cierra el job y `delete_room_on_close`
+elimina la sala, desconectando también al navegador y deteniendo el micrófono.
+
+Desactivar Agent Insights no significa que el canal sea local: LiveKit procesa
+el transporte WebRTC y Deepgram procesa audio/transcripciones para STT y TTS.
+Antes de trabajar con menores se requieren consentimiento aplicable, acuerdos
+de tratamiento de datos y decisiones explícitas de retención y eliminación con
+ambos proveedores.
+
+La sesión de LiveKit se configura con `llm=None`. El worker no construye
+prompts, no consulta RAG y no llama a Ollama. Su responsabilidad es transcribir,
+autenticar la llamada interna, publicar la sesión actualizada y sintetizar la
+respuesta. Si el backend pedagógico falla, reproduce un mensaje breve de
+indisponibilidad sin inventar una pista.
+
+## Contenido, integridad y RAG
+
+La ruta de materiales busca primero el PDF en `AIMAUTA_CONTENT_DIR`. Si no
+existe y el proxy remoto está habilitado, solo acepta URLs oficiales incluidas
+en la lista permitida.
+
+`npm run content:sync` comprueba dominio y ruta, tipo PDF, firma `%PDF-`, tamaño
+y SHA-256 antes de publicar el archivo. `npm run content:index` vuelve a
+verificar el checksum, extrae texto por página, comprueba el total de páginas y
+genera fragmentos con procedencia en `AIMAUTA_INDEX_DIR`.
+
+La recuperación léxica combina coincidencia con la consulta, cercanía a la
+página visible y un refuerzo pequeño para ejercicios. Está acotada al libro
+firmado en la sesión y devuelve citas de página. Un índice vectorial puede
+reemplazar el ranking en otra iteración sin cambiar el contrato del tutor.
 
 ## Límites de confianza
 
 ```text
 Internet público
-  └── Navegador del estudiante: entrada no confiable
+  ├─ navegador: entrada no confiable
+  ├─ LiveKit Cloud: transporte de voz y datos
+  └─ Deepgram: STT/TTS con credencial exclusiva del worker
 
 PowerEdge
-  ├── Aplicación Next.js: valida solicitudes
-  ├── Catálogo: lista de fuentes y metadatos revisados
-  ├── Content store: PDFs autorizados
-  └── Índices RAG: derivados reproducibles, no públicos
+  ├─ Next.js: autoridad de sesión, currículo y tutor
+  ├─ worker: adaptador de voz sin LLM
+  ├─ PDFs autorizados
+  └─ índices reproducibles
 
-Tailnet privada
-  └── Aule / Ollama / Gemma: inferencia, nunca expuesta a Internet
+Canal privado PowerEdge–Aule
+  └─ SSH sobre la tailnet: 127.0.0.1:11435 → Ollama 127.0.0.1:11434
 ```
 
-Ni el `bookId`, ni la página, ni el historial enviado por el navegador se usan
-sin límites y validación. El contenido recuperado también se encapsula como
-evidencia no confiable para reducir ataques por instrucciones incrustadas en un
-PDF.
+Ollama nunca escucha en `0.0.0.0` ni se publica mediante Tailscale Funnel. Las
+credenciales de LiveKit y Deepgram pertenecen exclusivamente a AImauta; no se
+reutilizan las de Nebu u otros servicios. El secreto de Deepgram solo existe en
+el worker, y los secretos de API de LiveKit nunca se entregan al navegador.
 
-## Topología futura
-
-Para el piloto de voz:
-
-```text
-Estudiante
-  ├── HTTPS ───────────────► PowerEdge: web, API y RAG
-  └── WebRTC ──────────────► LiveKit Cloud
-                                │
-                                ▼
-PowerEdge: LiveKit agent worker y orquestación
-  │
-  └── Tailscale privado ───► Aule: Ollama + Gemma
-```
-
-- **PowerEdge:** aplicación, almacenamiento de contenido, índices/RAG y worker
-  de LiveKit.
-- **Aule:** Ollama y Gemma, aprovechando la GPU disponible.
-- **LiveKit Cloud:** SFU/TURN durante el piloto; evita publicar puertos de medios
-  en la universidad.
-- **Tailscale:** transporte privado entre PowerEdge y Aule. Ollama no debe
-  escuchar en una interfaz pública ni publicarse mediante Funnel.
-
-El worker de voz debe reutilizar la misma política pedagógica y la misma
-recuperación por libro/página que la API de texto. La voz es otro canal, no otro
-tutor.
-
-## Evolución prevista
-
-1. Mejorar la extracción de estructura y ejercicios manteniendo referencias de
-   página.
-2. Evaluar recuperación híbrida léxica/vectorial con un conjunto de preguntas
-   de control.
-3. Añadir sesiones seudónimas y retención mínima antes de habilitar cuentas.
-4. Integrar LiveKit Cloud y un worker aislado en PowerEdge.
-5. Incorporar observabilidad sin registrar texto sensible del estudiante.
-
-Autenticación, persistencia de conversaciones, analítica individual y voz no
-forman parte del MVP actual.
+La aplicación no persiste conversaciones, progreso ni analítica individual. El
+registro anti-replay conserva únicamente el estado mínimo de la sesión en
+memoria y desaparece al reiniciar. LiveKit y Deepgram sí procesan el audio y las
+transcripciones necesarios para operar la voz; antes de un piloto con menores
+se deben definir consentimiento, DPA, retención y eliminación con esos
+proveedores.

@@ -1,16 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 
 import { BrandMark } from "@/components/brand-mark";
 import { PdfViewer } from "@/components/pdf-viewer";
+import { StageProgress } from "@/components/stage-progress";
+import {
+  VoiceTutor,
+  type VoiceSessionUpdate,
+} from "@/components/voice-tutor";
 import type { Book } from "@/lib/catalog";
+import {
+  getBookUnits,
+  type BookUnit,
+  type PageActivity,
+} from "@/lib/curriculum";
+import type { LearningSessionState } from "@/lib/learning-session";
 
 type Citation =
   | number
   | string
   | {
+      sourceId?: string;
       page?: number;
       label?: string;
       excerpt?: string;
@@ -23,44 +42,266 @@ type ConversationMessage = {
   citations?: Citation[];
 };
 
+type SessionResponse = {
+  token: string;
+  state: LearningSessionState;
+  activity: PageActivity;
+};
+
 type TutorResponse = {
   message: string;
   citations?: Citation[];
-  mode?: string;
+  mode: "gemma" | "guided-fallback" | "assessment-locked";
+  sessionToken: string;
+  session: LearningSessionState;
+  activity: PageActivity;
+  policy: {
+    hintLevel: 0 | 1 | 2 | 3;
+    canRevealSolution: false;
+  };
 };
 
 type LearningWorkspaceProps = {
   book: Book;
 };
 
+const INITIAL_PAGE = 13;
+
+function welcomeMessage(activity?: PageActivity): ConversationMessage {
+  if (activity?.unitNumber) {
+    return {
+      id: crypto.randomUUID(),
+      role: "tutor",
+      content: `Estamos en la ficha ${activity.unitNumber}: ${activity.unitTitle}. Cuéntame qué observas y cuál podría ser tu primer paso.`,
+    };
+  }
+
+  return {
+    id: "welcome",
+    role: "tutor",
+    content:
+      "Estoy aquí para ayudarte a pensar. Cuéntame qué ejercicio estás resolviendo y cuál sería tu primer paso.",
+  };
+}
+
 export function LearningWorkspace({ book }: LearningWorkspaceProps) {
-  const [page, setPage] = useState(1);
+  const firstPage = Math.min(INITIAL_PAGE, book.pages);
+  const units = useMemo(() => getBookUnits(book.id), [book.id]);
+  const [page, setPage] = useState(firstPage);
   const [attempt, setAttempt] = useState("");
   const [question, setQuestion] = useState("");
-  const [isSending, setIsSending] = useState(false);
-  const [statusMessage, setStatusMessage] = useState("");
   const [messages, setMessages] = useState<ConversationMessage[]>([
-    {
-      id: "welcome",
-      role: "tutor",
-      content:
-        "Estoy aquí para ayudarte a pensar. Cuéntame qué ejercicio estás resolviendo y cuál sería tu primer paso.",
-    },
+    welcomeMessage(),
   ]);
-  const conversationEndRef = useRef<HTMLDivElement>(null);
+  const [sessionToken, setSessionToken] = useState("");
+  const [session, setSession] = useState<LearningSessionState | null>(null);
+  const [activity, setActivity] = useState<PageActivity | null>(null);
+  const [isStartingSession, setIsStartingSession] = useState(true);
+  const [isSyncingPage, setIsSyncingPage] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [notice, setNotice] = useState("");
+  const conversationRef = useRef<HTMLDivElement>(null);
+  const sessionTokenRef = useRef("");
+  const canonicalSessionRef = useRef<LearningSessionState | null>(null);
+  const stateRequestEpochRef = useRef(0);
+  const pageSyncSequenceRef = useRef(0);
+  const pendingNavigationEpochRef = useRef<number | null>(null);
+  const tutorRequestSequenceRef = useRef(0);
+  const tutorAbortRef = useRef<AbortController | null>(null);
+  const attemptDraftsRef = useRef<Record<string, string>>({});
 
-  const apiHistory = useMemo(
-    () =>
-      messages.map((message) => ({
-        role: message.role,
-        content: message.content,
-      })),
-    [messages],
+  const currentDraftKey = `${activity?.unitId ?? "orientation"}:${page}`;
+  const tutorAvailable = activity?.tutorAvailable ?? true;
+
+  const applySession = useCallback((result: SessionResponse) => {
+    canonicalSessionRef.current = result.state;
+    sessionTokenRef.current = result.token;
+    setSessionToken(result.token);
+    setSession(result.state);
+    setActivity(result.activity);
+    setPage(result.state.page);
+  }, []);
+
+  const requestSession = useCallback(
+    async (
+      targetPage: number,
+      token?: string,
+      signal?: AbortSignal,
+    ): Promise<SessionResponse> => {
+      const response = await fetch("/api/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookId: book.id,
+          page: targetPage,
+          ...(token ? { sessionToken: token } : {}),
+        }),
+        signal,
+      });
+      const body = (await response.json().catch(() => ({}))) as
+        | Partial<SessionResponse> & { error?: string };
+
+      if (!response.ok || !body.token || !body.state || !body.activity) {
+        throw new Error(body.error || "No se pudo preparar la sesión.");
+      }
+
+      return body as SessionResponse;
+    },
+    [book.id],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const requestEpoch = ++stateRequestEpochRef.current;
+
+    void requestSession(firstPage, undefined, controller.signal)
+      .then((result) => {
+        if (requestEpoch !== stateRequestEpochRef.current) return;
+        applySession(result);
+        setMessages([welcomeMessage(result.activity)]);
+      })
+      .catch((error) => {
+        if (
+          controller.signal.aborted ||
+          requestEpoch !== stateRequestEpochRef.current
+        ) {
+          return;
+        }
+        setNotice(
+          error instanceof Error
+            ? error.message
+            : "No se pudo iniciar la sesión de aprendizaje.",
+        );
+      })
+      .finally(() => {
+        if (
+          !controller.signal.aborted &&
+          requestEpoch === stateRequestEpochRef.current
+        ) {
+          setIsStartingSession(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [applySession, firstPage, requestSession]);
+
+  useEffect(
+    () => () => {
+      stateRequestEpochRef.current += 1;
+      tutorRequestSequenceRef.current += 1;
+      tutorAbortRef.current?.abort();
+      tutorAbortRef.current = null;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    attemptDraftsRef.current[currentDraftKey] = attempt;
+  }, [attempt, currentDraftKey]);
+
+  const scrollConversationToEnd = useCallback(() => {
+    window.setTimeout(() => {
+      const conversation = conversationRef.current;
+      if (conversation) {
+        conversation.scrollTo({
+          top: conversation.scrollHeight,
+          behavior: "smooth",
+        });
+      }
+    }, 50);
+  }, []);
+
+  const syncPage = useCallback(
+    async (requestedPage: number, source: "page" | "unit" | "citation") => {
+      const targetPage = Math.min(Math.max(requestedPage, 1), book.pages);
+      if (!sessionTokenRef.current || targetPage === page) return;
+
+      attemptDraftsRef.current[currentDraftKey] = attempt;
+      const sequence = ++pageSyncSequenceRef.current;
+      const requestEpoch = ++stateRequestEpochRef.current;
+      pendingNavigationEpochRef.current = requestEpoch;
+      tutorRequestSequenceRef.current += 1;
+      tutorAbortRef.current?.abort();
+      tutorAbortRef.current = null;
+      setIsSending(false);
+      setIsSyncingPage(true);
+      setNotice("");
+
+      try {
+        let result: SessionResponse;
+        try {
+          result = await requestSession(targetPage, sessionTokenRef.current);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "";
+          if (!/sesión|token|firma|expiró/iu.test(message)) {
+            throw error;
+          }
+          result = await requestSession(targetPage);
+        }
+
+        if (
+          sequence !== pageSyncSequenceRef.current ||
+          requestEpoch !== stateRequestEpochRef.current
+        ) {
+          return;
+        }
+
+        const previousUnitId = activity?.unitId;
+        applySession(result);
+        const nextDraftKey = `${result.activity.unitId ?? "orientation"}:${result.state.page}`;
+        setAttempt(attemptDraftsRef.current[nextDraftKey] ?? "");
+        setQuestion("");
+
+        if (source === "unit" || previousUnitId !== result.activity.unitId) {
+          setMessages([welcomeMessage(result.activity)]);
+        }
+      } catch (error) {
+        if (
+          sequence !== pageSyncSequenceRef.current ||
+          requestEpoch !== stateRequestEpochRef.current
+        ) {
+          return;
+        }
+        setNotice(
+          error instanceof Error
+            ? error.message
+            : "No se pudo cambiar de página. El material continúa en la página anterior.",
+        );
+      } finally {
+        if (
+          sequence === pageSyncSequenceRef.current &&
+          requestEpoch === stateRequestEpochRef.current
+        ) {
+          setIsSyncingPage(false);
+        }
+        if (pendingNavigationEpochRef.current === requestEpoch) {
+          pendingNavigationEpochRef.current = null;
+        }
+      }
+    },
+    [
+      activity,
+      applySession,
+      attempt,
+      book.pages,
+      currentDraftKey,
+      page,
+      requestSession,
+    ],
   );
 
   async function askTutor(message: string) {
     const cleanMessage = message.trim();
-    if (!cleanMessage || isSending) return;
+    if (
+      !cleanMessage ||
+      isSending ||
+      pendingNavigationEpochRef.current !== null ||
+      tutorAbortRef.current !== null ||
+      !sessionTokenRef.current ||
+      !tutorAvailable
+    ) {
+      return;
+    }
 
     const studentMessage: ConversationMessage = {
       id: crypto.randomUUID(),
@@ -70,63 +311,77 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
 
     setMessages((current) => [...current, studentMessage]);
     setQuestion("");
+    setNotice("");
     setIsSending(true);
-    setStatusMessage("AImauta está preparando una pregunta para ayudarte.");
+    const requestEpoch = ++stateRequestEpochRef.current;
+    const requestSequence = ++tutorRequestSequenceRef.current;
+    const controller = new AbortController();
+    tutorAbortRef.current = controller;
 
     try {
       const response = await fetch("/api/tutor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          bookId: book.id,
-          page,
+          sessionToken: sessionTokenRef.current,
           message: cleanMessage,
           attempt: attempt.trim(),
-          history: apiHistory,
         }),
+        signal: controller.signal,
       });
+      const data = (await response.json().catch(() => ({}))) as
+        | Partial<TutorResponse> & { error?: string };
 
-      if (!response.ok) {
-        throw new Error("No se pudo contactar al tutor");
+      if (
+        !response.ok ||
+        !data.message ||
+        !data.sessionToken ||
+        !data.session ||
+        !data.activity
+      ) {
+        throw new Error(data.error || "No se pudo contactar al tutor.");
       }
 
-      const data = (await response.json()) as TutorResponse;
+      const result = data as TutorResponse;
+      if (
+        controller.signal.aborted ||
+        requestEpoch !== stateRequestEpochRef.current
+      ) {
+        return;
+      }
 
+      applySession({
+        token: result.sessionToken,
+        state: result.session,
+        activity: result.activity,
+      });
       setMessages((current) => [
         ...current,
         {
           id: crypto.randomUUID(),
           role: "tutor",
-          content:
-            data.message ||
-            "Revisa los datos del ejercicio. ¿Cuál de ellos se relaciona con lo que quieres encontrar?",
-          citations: data.citations,
+          content: result.message,
+          citations: result.citations,
         },
       ]);
-      setStatusMessage(
-        data.mode
-          ? "Nueva orientación disponible."
-          : "AImauta respondió con una nueva pista.",
+      scrollConversationToEnd();
+    } catch (error) {
+      if (
+        controller.signal.aborted ||
+        requestEpoch !== stateRequestEpochRef.current
+      ) {
+        return;
+      }
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "No se pudo conectar con AImauta. Tu intento sigue guardado en esta pantalla.",
       );
-    } catch {
-      setMessages((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          role: "tutor",
-          content:
-            "No pude conectarme en este momento. Mientras volvemos a intentarlo: ¿qué sabes ya y qué parte exacta te falta descubrir?",
-        },
-      ]);
-      setStatusMessage("No se pudo conectar con el tutor. Puedes volver a intentarlo.");
     } finally {
-      setIsSending(false);
-      window.setTimeout(() => {
-        conversationEndRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "nearest",
-        });
-      }, 50);
+      if (tutorRequestSequenceRef.current === requestSequence) {
+        tutorAbortRef.current = null;
+        setIsSending(false);
+      }
     }
   }
 
@@ -136,14 +391,58 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
   }
 
   function reviewAttempt() {
+    if (!tutorAvailable) return;
     if (!attempt.trim()) {
-      setStatusMessage("Escribe primero tu intento para poder revisarlo contigo.");
+      setNotice("Escribe primero tu intento para poder revisarlo contigo.");
       return;
     }
 
     void askTutor(
       "Este es mi intento. Ayúdame a revisarlo con una pregunta o una pista, sin darme la respuesta.",
     );
+  }
+
+  function chooseUnit(unitId: string) {
+    if (!unitId) {
+      void syncPage(1, "unit");
+      return;
+    }
+    const selectedUnit = units.find((unit) => unit.id === unitId);
+    if (selectedUnit) {
+      void syncPage(selectedUnit.startPage, "unit");
+    }
+  }
+
+  function applyVoiceSession(update: VoiceSessionUpdate) {
+    const currentSession = canonicalSessionRef.current;
+    if (
+      pendingNavigationEpochRef.current !== null ||
+      !currentSession ||
+      update.state.bookId !== book.id ||
+      update.state.page < 1 ||
+      update.state.page > book.pages ||
+      update.state.sessionId !== currentSession.sessionId ||
+      update.state.createdAt !== currentSession.createdAt ||
+      update.state.expiresAt !== currentSession.expiresAt ||
+      update.state.page !== currentSession.page ||
+      update.state.unitId !== currentSession.unitId ||
+      update.state.stage !== currentSession.stage ||
+      update.token === sessionTokenRef.current ||
+      update.state.revision <= currentSession.revision ||
+      update.state.turnCount <= currentSession.turnCount ||
+      update.state.attemptCount < currentSession.attemptCount ||
+      update.state.hintLevel < currentSession.hintLevel
+    ) {
+      return;
+    }
+
+    stateRequestEpochRef.current += 1;
+    tutorRequestSequenceRef.current += 1;
+    tutorAbortRef.current?.abort();
+    tutorAbortRef.current = null;
+    setIsSending(false);
+    applySession(update);
+    setNotice("");
   }
 
   return (
@@ -159,20 +458,90 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
           <strong>{book.subject}</strong>
         </div>
         <div className="guide-badge">
-          <span className="status-dot" aria-hidden="true" />
-          Modo guía
+          <span
+            className={`status-dot ${isSyncingPage ? "status-dot-busy" : ""}`}
+            aria-hidden="true"
+          />
+          {isSyncingPage ? "Sincronizando…" : activity?.stageLabel ?? "Modo guía"}
         </div>
       </header>
 
-      <div className="workspace-grid">
-        <PdfViewer book={book} page={page} onPageChange={setPage} />
+      <div
+        className="workspace-grid workspace-grid-session"
+        aria-busy={isStartingSession || isSyncingPage}
+      >
+        <div className="document-stack">
+          {sessionToken && session ? (
+            <PdfViewer
+              book={book}
+              page={page}
+              onPageChange={(nextPage) => void syncPage(nextPage, "page")}
+            />
+          ) : (
+            <SessionLoading
+              bookTitle={book.title}
+              error={notice}
+              isLoading={isStartingSession}
+              onRetry={() => window.location.reload()}
+            />
+          )}
+          {isSyncingPage ? (
+            <div className="page-sync-overlay" role="status">
+              <span className="sync-spinner" aria-hidden="true" />
+              Preparando la página y su contexto…
+            </div>
+          ) : null}
+        </div>
 
-        <aside className="coach-panel" aria-label="Espacio de aprendizaje guiado">
-          <section className="attempt-section">
+        <aside className="coach-panel coach-panel-session" aria-label="Sesión guiada">
+          <section className="session-context-section">
+            <div className="unit-selector-row">
+              <label htmlFor="learning-unit">Ficha de trabajo</label>
+              <select
+                id="learning-unit"
+                value={activity?.unitId ?? ""}
+                onChange={(event) => chooseUnit(event.target.value)}
+                disabled={!sessionToken || isSyncingPage}
+              >
+                <option value="">Orientación del libro</option>
+                {units.map((unit: BookUnit) => (
+                  <option value={unit.id} key={unit.id}>
+                    Ficha {unit.number}: {unit.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {activity && session ? (
+              <>
+                <div className="unit-summary">
+                  <span>
+                    {activity.unitNumber
+                      ? `Ficha ${activity.unitNumber}`
+                      : "Orientación"}
+                  </span>
+                  <div>
+                    <strong>{activity.unitTitle}</strong>
+                    {activity.competency ? <p>{activity.competency}</p> : null}
+                  </div>
+                </div>
+                <StageProgress activity={activity} session={session} />
+                <VoiceTutor
+                  sessionId={session.sessionId}
+                  sessionToken={sessionToken}
+                  disabled={!activity.tutorAvailable}
+                  disabledReason="La voz se pausa en Evaluamos para que resuelvas por tu cuenta."
+                  onSessionUpdate={applyVoiceSession}
+                />
+              </>
+            ) : null}
+          </section>
+
+          <section className="attempt-section attempt-section-session">
             <div className="panel-heading">
               <span className="panel-step">1</span>
               <div>
-                <p>Primero piensa tú</p>
+                <p>{tutorAvailable ? "Primero piensa tú" : "Tu momento de resolver"}</p>
                 <h2>Escribe tu intento</h2>
               </div>
             </div>
@@ -184,7 +553,8 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
               placeholder="Explica qué entendiste, qué datos usarías o cuál sería tu primer paso…"
               value={attempt}
               onChange={(event) => setAttempt(event.target.value)}
-              rows={5}
+              maxLength={2_000}
+              rows={4}
             />
             <div className="attempt-footer">
               <span>{attempt.length} caracteres</span>
@@ -192,32 +562,45 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
                 className="review-button"
                 type="button"
                 onClick={reviewAttempt}
-                disabled={isSending}
+                disabled={
+                  isSending ||
+                  isSyncingPage ||
+                  !sessionToken ||
+                  !tutorAvailable
+                }
               >
-                Revisar mi intento
-                <SparkIcon />
+                {tutorAvailable ? "Revisar mi intento" : "Evaluación en curso"}
+                {tutorAvailable ? <SparkIcon /> : <LockButtonIcon />}
               </button>
             </div>
           </section>
 
-          <section className="tutor-section">
+          <section className="tutor-section tutor-section-session">
             <div className="panel-heading tutor-heading">
               <span className="panel-step panel-step-tutor">
                 <BrandMark />
               </span>
               <div>
-                <p>Luego avanzamos juntos</p>
+                <p>{tutorAvailable ? "Luego avanzamos juntos" : "Tutor en pausa"}</p>
                 <h2>Conversa con AImauta</h2>
               </div>
             </div>
 
-            <div className="conversation" aria-live="polite" aria-busy={isSending}>
+            <div
+              className="conversation"
+              role="log"
+              aria-live="polite"
+              aria-relevant="additions text"
+              aria-label="Conversación con AImauta"
+              aria-busy={isSending}
+              ref={conversationRef}
+            >
               {messages.map((message) => (
                 <MessageBubble
                   key={message.id}
                   message={message}
                   onCitationPage={(citationPage) =>
-                    setPage(Math.min(Math.max(citationPage, 1), book.pages))
+                    void syncPage(citationPage, "citation")
                   }
                 />
               ))}
@@ -228,11 +611,10 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
                     <span />
                     <span />
                     <span />
-                    <span className="sr-only">Pensando</span>
+                    <span className="sr-only">AImauta está preparando una pregunta</span>
                   </div>
                 </div>
               ) : null}
-              <div ref={conversationEndRef} />
             </div>
 
             <form className="question-form" onSubmit={submitQuestion}>
@@ -241,21 +623,37 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
               </label>
               <textarea
                 id="student-question"
-                placeholder="Cuéntame dónde te quedaste…"
+                placeholder={
+                  tutorAvailable
+                    ? "Cuéntame dónde te quedaste…"
+                    : "El chat se reanudará después de Evaluamos."
+                }
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
+                maxLength={1_500}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
                     event.currentTarget.form?.requestSubmit();
                   }
                 }}
+                disabled={
+                  isSyncingPage ||
+                  !sessionToken ||
+                  !tutorAvailable
+                }
                 rows={2}
               />
               <button
                 className="send-button"
                 type="submit"
-                disabled={isSending || !question.trim()}
+                disabled={
+                  isSending ||
+                  !question.trim() ||
+                  isSyncingPage ||
+                  !sessionToken ||
+                  !tutorAvailable
+                }
                 aria-label="Enviar mensaje"
               >
                 <SendIcon />
@@ -263,15 +661,54 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
             </form>
             <p className="tutor-promise">
               <ShieldIcon />
-              Te dará pistas y preguntas, no la respuesta final.
+              {tutorAvailable
+                ? "Te dará pistas y preguntas, no la respuesta final."
+                : "En Evaluamos, AImauta no entrega pistas ni respuestas."}
             </p>
-            <p className="sr-only" role="status">
-              {statusMessage}
-            </p>
+            {notice && sessionToken ? (
+              <p className="workspace-notice" role="status">
+                {notice}
+              </p>
+            ) : null}
           </section>
         </aside>
       </div>
     </div>
+  );
+}
+
+function SessionLoading({
+  bookTitle,
+  error,
+  isLoading,
+  onRetry,
+}: {
+  bookTitle: string;
+  error: string;
+  isLoading: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <section className="session-loading" aria-labelledby="session-loading-title">
+      <span className="session-loading-mark" aria-hidden="true">
+        <BrandMark />
+      </span>
+      <h2 id="session-loading-title">
+        {isLoading ? "Preparando tu espacio" : "No pudimos abrir el material"}
+      </h2>
+      <p>
+        {isLoading
+          ? `Estamos ubicando ${bookTitle} en la primera ficha.`
+          : error}
+      </p>
+      {!isLoading ? (
+        <button type="button" onClick={onRetry}>
+          Volver a intentar
+        </button>
+      ) : (
+        <span className="sync-spinner" aria-hidden="true" />
+      )}
+    </section>
   );
 }
 
@@ -341,6 +778,14 @@ function SparkIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 20 20">
       <path d="M10 2.5 11.5 7 16 8.5 11.5 10 10 14.5 8.5 10 4 8.5 8.5 7 10 2.5Z" />
+    </svg>
+  );
+}
+
+function LockButtonIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20">
+      <path d="M6.5 8V6.5a3.5 3.5 0 0 1 7 0V8M5.5 8h9v8h-9V8Z" />
     </svg>
   );
 }

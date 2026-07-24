@@ -1,4 +1,4 @@
-import type { TutorHistoryItem, TurnPolicy } from "@/lib/pedagogy";
+import type { TurnPolicy } from "@/lib/pedagogy";
 
 type OllamaMessage = {
   role: "system" | "user" | "assistant";
@@ -15,7 +15,6 @@ export async function askOllama(input: {
   systemPrompt: string;
   studentMessage: string;
   attempt: string;
-  history: readonly TutorHistoryItem[];
   policy: TurnPolicy;
 }): Promise<string | null> {
   const baseUrl = process.env.OLLAMA_BASE_URL?.replace(/\/+$/, "");
@@ -26,12 +25,6 @@ export async function askOllama(input: {
 
   const messages: OllamaMessage[] = [
     { role: "system", content: input.systemPrompt },
-    ...input.history.slice(-6).map(
-      (item): OllamaMessage => ({
-        role: item.role === "student" ? "user" : "assistant",
-        content: item.content
-      })
-    ),
     {
       role: "user",
       content: input.attempt.trim()
@@ -47,6 +40,10 @@ export async function askOllama(input: {
     body: JSON.stringify({
       model,
       stream: false,
+      // Reasoning-capable Gemma variants otherwise spend the entire short
+      // generation budget in `message.thinking` and return no student-facing
+      // content. The pedagogical prompt already asks for one concise turn.
+      think: false,
       keep_alive: "30m",
       messages,
       options: {

@@ -1,7 +1,10 @@
 import {
+  InternalAuthConfigurationError,
+  isAuthorizedAgentRequest
+} from "@/lib/internal-auth";
+import {
   LearningSessionError,
-  learningSessionErrorStatus,
-  verifyLearningSession
+  learningSessionErrorStatus
 } from "@/lib/learning-session";
 import { RateLimitError } from "@/lib/rate-limit";
 import { guideLearningTurn } from "@/lib/tutor-service";
@@ -9,7 +12,7 @@ import { guideLearningTurn } from "@/lib/tutor-service";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type TutorRequest = {
+type InternalTurnRequest = {
   sessionToken?: unknown;
   message?: unknown;
   attempt?: unknown;
@@ -30,9 +33,20 @@ function json(body: unknown, status = 200, retryAfter?: number): Response {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  let body: TutorRequest;
   try {
-    body = (await request.json()) as TutorRequest;
+    if (!isAuthorizedAgentRequest(request)) {
+      return json({ error: "No autorizado." }, 401);
+    }
+  } catch (error) {
+    if (error instanceof InternalAuthConfigurationError) {
+      return json({ error: "Servicio no configurado." }, 503);
+    }
+    throw error;
+  }
+
+  let body: InternalTurnRequest;
+  try {
+    body = (await request.json()) as InternalTurnRequest;
   } catch {
     return json({ error: "Solicitud JSON inválida." }, 400);
   }
@@ -40,35 +54,20 @@ export async function POST(request: Request): Promise<Response> {
   const sessionToken = cleanText(body.sessionToken, 4_096);
   const message = cleanText(body.message, 1_500);
   const attempt = cleanText(body.attempt, 2_000);
-
-  if (!sessionToken) {
-    return json(
-      { error: "Inicia una sesión de aprendizaje antes de conversar." },
-      401
-    );
-  }
-  if (!message) {
-    return json(
-      { error: "Escribe una pregunta o cuéntame dónde te atascaste." },
-      400
-    );
+  if (!sessionToken || !message) {
+    return json({ error: "Se requieren sessionToken y message." }, 400);
   }
 
   try {
-    verifyLearningSession(sessionToken);
     return json(await guideLearningTurn({ sessionToken, message, attempt }));
   } catch (error) {
     if (error instanceof LearningSessionError) {
       return json({ error: error.message }, learningSessionErrorStatus(error));
     }
     if (error instanceof RateLimitError) {
-      return json(
-        { error: error.message },
-        429,
-        error.retryAfterSeconds
-      );
+      return json({ error: error.message }, 429, error.retryAfterSeconds);
     }
-    console.error("Tutor turn failure", error);
-    return json({ error: "AImauta no pudo procesar este turno." }, 500);
+    console.error("Internal voice turn failure", error);
+    return json({ error: "No se pudo procesar el turno de voz." }, 500);
   }
 }

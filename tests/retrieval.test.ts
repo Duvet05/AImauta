@@ -46,4 +46,14 @@ describe("rankChunks", () => {
 
     expect(result.map((item) => item.id)).not.toContain("teacher-only");
   });
+
+  it("mantiene la evidencia dentro de la página visible y sus vecinas", () => {
+    const result = rankChunks({
+      chunks,
+      query: "cantidad",
+      page: 12
+    });
+
+    expect(result.map((item) => item.id)).not.toContain("lexical");
+  });
 });

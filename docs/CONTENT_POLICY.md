@@ -97,12 +97,25 @@ AImauta está dirigido a menores de edad y aplica minimización de datos:
 
 - no se almacenan nombres, correos, códigos de alumno ni conversaciones en Git;
 - el MVP no requiere identificar al estudiante;
+- el registro anti-replay conserva únicamente identificador, revisión y
+  expiración de sesión en memoria; se pierde al reiniciar, funciona en una sola
+  instancia y no equivale a progreso durable;
 - no se incorporan analíticas individuales hasta definir finalidad, retención,
   acceso, consentimiento y proceso de eliminación;
 - los logs técnicos no deben incluir el texto completo del intento o la
   conversación;
+- el worker usa `record=False` para desactivar la grabación de Agent Insights y
+  logs `WARN` redactados;
 - cualquier conjunto de evaluación debe ser sintético o estar anonimizado y
   autorizado.
+
+Estas medidas no eliminan el tratamiento externo necesario para la voz:
+LiveKit procesa el transporte de audio y paquetes de datos, y Deepgram procesa
+audio y transcripciones para STT/TTS. Antes de habilitar el canal para menores
+se deben documentar consentimiento aplicable, DPA, ubicación y subencargados,
+retención, eliminación y mecanismo para atender derechos. Desactivar Agent
+Insights evita una copia adicional de grabación, pero no convierte el flujo de
+voz en procesamiento exclusivamente local.
 
 Las credenciales de Ollama, LiveKit u otros servicios tampoco se versionan.
 

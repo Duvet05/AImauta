@@ -4,6 +4,9 @@
 /node_modules
 /.pnp
 .pnp.js
+.venv/
+__pycache__/
+*.py[cod]
 
 # testing
 /coverage
@@ -52,3 +55,4 @@ next-env.d.ts
 /coverage/
 /test-results/
 /playwright-report/
+.pytest_cache/
