@@ -27,6 +27,19 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+!.env.example
+
+# private content and generated indexes
+/content/
+/data/indexes/
+/data/manifests/*.generated.json
+*.pdf
+
+# credentials
+*.key
+*.p12
+*.pfx
+*credentials*.json
 
 # vercel
 .vercel
@@ -34,3 +47,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# test output
+/coverage/
+/test-results/
+/playwright-report/
