@@ -98,11 +98,23 @@ export function StageProgress({ activity, session }: StageProgressProps) {
         <div className="assessment-lock" role="note">
           <LockIcon />
           <div>
-            <strong>Ahora demuestras lo aprendido</strong>
-            <p>
-              En Evaluamos, las pistas, el chat y la voz se pausan. Tu espacio de
-              respuesta sigue disponible.
-            </p>
+            {activity.stage === "assessment" ? (
+              <>
+                <strong>Ahora demuestras lo aprendido</strong>
+                <p>
+                  En Evaluamos, la ayuda se pausa. Tu espacio de respuesta sigue
+                  disponible.
+                </p>
+              </>
+            ) : (
+              <>
+                <strong>Primero ubica una ficha de trabajo</strong>
+                <p>
+                  Esta sección explica cómo usar el libro. Las pistas están
+                  disponibles en Construimos y Comprobamos.
+                </p>
+              </>
+            )}
           </div>
         </div>
       ) : null}

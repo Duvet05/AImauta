@@ -48,6 +48,7 @@ agent_secret=$(openssl rand -hex 32)
     "OLLAMA_BASE_URL=http://127.0.0.1:11435" \
     "OLLAMA_MODEL=gemma4:e4b-it-qat" \
     "OLLAMA_TIMEOUT_MS=45000" \
+    "AIMAUTA_VOICE_TUTOR_ENABLED=false" \
     "LIVEKIT_URL=" \
     "LIVEKIT_API_URL=" \
     "LIVEKIT_API_KEY=" \

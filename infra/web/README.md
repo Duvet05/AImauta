@@ -79,8 +79,9 @@ curl --fail http://127.0.0.1:3308/_edge-health
 ```
 
 Este perfil publica texto y PDF. La voz queda deshabilitada de forma explícita
-hasta desplegar LiveKit/worker y añadir al entorno web `LIVEKIT_URL`,
-`LIVEKIT_API_URL`, `LIVEKIT_API_KEY` y `LIVEKIT_API_SECRET`. Al habilitarla, el
-worker debe usar `AIMAUTA_APP_URL=http://127.0.0.1:3309` y exactamente el mismo
-`AIMAUTA_AGENT_SECRET` del archivo web; el worker evita deliberadamente el edge
-público.
+con `AIMAUTA_VOICE_TUTOR_ENABLED=false`. Para habilitarla se debe desplegar
+LiveKit/worker, añadir al entorno web `LIVEKIT_URL`, `LIVEKIT_API_URL`,
+`LIVEKIT_API_KEY` y `LIVEKIT_API_SECRET`, y cambiar la bandera al valor exacto
+`true`. El worker debe usar `AIMAUTA_APP_URL=http://127.0.0.1:3309` y
+exactamente el mismo `AIMAUTA_AGENT_SECRET` del archivo web; el worker evita
+deliberadamente el edge público.

@@ -3,6 +3,7 @@ import {
   VoiceConfigurationError,
   VoiceUnavailableError
 } from "@/lib/livekit-server";
+import { isVoiceTutorEnabled } from "@/lib/feature-flags";
 import {
   LearningSessionError,
   learningSessionErrorStatus
@@ -20,6 +21,10 @@ function json(body: unknown, status = 200): Response {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!isVoiceTutorEnabled()) {
+    return json({ error: "El tutor por voz está deshabilitado." }, 404);
+  }
+
   let sessionToken = "";
   try {
     const body = (await request.json()) as { sessionToken?: unknown };

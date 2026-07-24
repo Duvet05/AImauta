@@ -11,6 +11,7 @@ const bookId = "fichas-matematica-1-secundaria";
 beforeAll(() => {
   process.env.AIMAUTA_SESSION_SECRET =
     "test-only-session-secret-with-at-least-32-characters";
+  process.env.AIMAUTA_VOICE_TUTOR_ENABLED = "true";
   delete process.env.LIVEKIT_URL;
   delete process.env.LIVEKIT_API_URL;
   delete process.env.LIVEKIT_API_KEY;
@@ -19,6 +20,7 @@ beforeAll(() => {
 
 afterAll(() => {
   delete process.env.AIMAUTA_SESSION_SECRET;
+  delete process.env.AIMAUTA_VOICE_TUTOR_ENABLED;
 });
 
 function request(sessionToken: string): Request {
@@ -30,6 +32,18 @@ function request(sessionToken: string): Request {
 }
 
 describe("POST /api/livekit/token", () => {
+  it("no emite acceso cuando el tutor por voz está oculto", async () => {
+    delete process.env.AIMAUTA_VOICE_TUTOR_ENABLED;
+    try {
+      const session = issueLearningSession({ bookId, page: 13 });
+      const response = await POST(request(session.token));
+      expect(response.status).toBe(404);
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+    } finally {
+      process.env.AIMAUTA_VOICE_TUTOR_ENABLED = "true";
+    }
+  });
+
   it("indica claramente cuando LiveKit aún no está configurado", async () => {
     const session = issueLearningSession({ bookId, page: 13 });
     const response = await POST(request(session.token));

@@ -1,0 +1,7 @@
+export function isStrictlyEnabled(value: string | undefined): boolean {
+  return value === "true";
+}
+
+export function isVoiceTutorEnabled(): boolean {
+  return isStrictlyEnabled(process.env.AIMAUTA_VOICE_TUTOR_ENABLED);
+}

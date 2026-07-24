@@ -96,6 +96,11 @@ clase ni un reemplazo del control del edge.
 
 ## Voz con LiveKit
 
+El avatar, el micrófono y la emisión de tokens LiveKit son una función
+opt-in. `AIMAUTA_VOICE_TUTOR_ENABLED=true` los habilita; cualquier otro valor
+los mantiene ocultos y cerrados mientras el PDF, el intento y el tutor RAG de
+texto siguen disponibles.
+
 La API crea una sala por sesión y solicita explícitamente el agente nombrado:
 
 ```text

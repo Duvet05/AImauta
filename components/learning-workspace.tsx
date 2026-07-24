@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
   useCallback,
@@ -13,10 +14,7 @@ import {
 import { BrandMark } from "@/components/brand-mark";
 import { PdfViewer } from "@/components/pdf-viewer";
 import { StageProgress } from "@/components/stage-progress";
-import {
-  VoiceTutor,
-  type VoiceSessionUpdate,
-} from "@/components/voice-tutor";
+import type { VoiceSessionUpdate } from "@/components/voice-tutor";
 import type { Book } from "@/lib/catalog";
 import {
   getBookUnits,
@@ -63,16 +61,22 @@ type TutorResponse = {
 
 type LearningWorkspaceProps = {
   book: Book;
+  voiceTutorEnabled: boolean;
 };
 
 const INITIAL_PAGE = 13;
+const VoiceTutor = dynamic(
+  () =>
+    import("@/components/voice-tutor").then((module) => module.VoiceTutor),
+  { ssr: false },
+);
 
 function welcomeMessage(activity?: PageActivity): ConversationMessage {
   if (activity?.unitNumber) {
     return {
       id: crypto.randomUUID(),
       role: "tutor",
-      content: `Estamos en la ficha ${activity.unitNumber}: ${activity.unitTitle}. Cuéntame qué observas y cuál podría ser tu primer paso.`,
+      content: `Estás en la ficha ${activity.unitNumber}: ${activity.unitTitle}. Lee el ejercicio, escribe qué intentaste y pide una pista. La respuesta citará la página usada.`,
     };
   }
 
@@ -80,11 +84,14 @@ function welcomeMessage(activity?: PageActivity): ConversationMessage {
     id: "welcome",
     role: "tutor",
     content:
-      "Estoy aquí para ayudarte a pensar. Cuéntame qué ejercicio estás resolviendo y cuál sería tu primer paso.",
+      "Lee el ejercicio, escribe qué intentaste y pide una pista. La respuesta citará la página usada.",
   };
 }
 
-export function LearningWorkspace({ book }: LearningWorkspaceProps) {
+export function LearningWorkspace({
+  book,
+  voiceTutorEnabled,
+}: LearningWorkspaceProps) {
   const firstPage = Math.min(INITIAL_PAGE, book.pages);
   const units = useMemo(() => getBookUnits(book.id), [book.id]);
   const [page, setPage] = useState(firstPage);
@@ -500,6 +507,17 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
 
         <aside className="coach-panel coach-panel-session" aria-label="Sesión guiada">
           <section className="session-context-section">
+            <div className="rag-quickstart" role="note">
+              <span aria-hidden="true">RAG</span>
+              <div>
+                <strong>Cómo probar las pistas con fuentes</strong>
+                <p>
+                  Lee el ejercicio de la página, escribe tu intento y pide una
+                  pista. Pulsa su cita para abrir la página usada.
+                </p>
+              </div>
+            </div>
+
             <div className="unit-selector-row">
               <label htmlFor="learning-unit">Ficha de trabajo</label>
               <select
@@ -531,13 +549,15 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
                   </div>
                 </div>
                 <StageProgress activity={activity} session={session} />
-                <VoiceTutor
-                  sessionId={session.sessionId}
-                  sessionToken={sessionToken}
-                  disabled={!activity.tutorAvailable}
-                  disabledReason={tutorDisabledReason}
-                  onSessionUpdate={applyVoiceSession}
-                />
+                {voiceTutorEnabled ? (
+                  <VoiceTutor
+                    sessionId={session.sessionId}
+                    sessionToken={sessionToken}
+                    disabled={!activity.tutorAvailable}
+                    disabledReason={tutorDisabledReason}
+                    onSessionUpdate={applyVoiceSession}
+                  />
+                ) : null}
               </>
             ) : null}
           </section>
@@ -548,12 +568,12 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
               <div>
                 <p>
                   {tutorAvailable
-                    ? "Primero piensa tú"
+                    ? "Paso 1 · Tu razonamiento"
                     : isAssessment
                       ? "Tu momento de resolver"
                       : "Trabajo individual"}
                 </p>
-                <h2>Escribe tu intento</h2>
+                <h2>Escribe qué intentaste</h2>
               </div>
             </div>
             <label className="sr-only" htmlFor="student-attempt">
@@ -581,7 +601,7 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
                 }
               >
                 {tutorAvailable
-                  ? "Revisar mi intento"
+                  ? "Pedir una pista con cita"
                   : isAssessment
                     ? "Evaluación en curso"
                     : "Tutor no disponible"}
@@ -596,8 +616,12 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
                 <BrandMark />
               </span>
               <div>
-                <p>{tutorAvailable ? "Luego avanzamos juntos" : "Tutor en pausa"}</p>
-                <h2>Conversa con AImauta</h2>
+                <p>
+                  {tutorAvailable
+                    ? "Paso 2 · Revisa la fuente"
+                    : "Pistas en pausa"}
+                </p>
+                <h2>Pistas basadas en esta ficha</h2>
               </div>
             </div>
 
@@ -640,7 +664,7 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
                 id="student-question"
                 placeholder={
                   tutorAvailable
-                    ? "Cuéntame dónde te quedaste…"
+                    ? "Escribe tu duda sobre el ejercicio de esta página…"
                     : isAssessment
                       ? "El chat se reanudará después de Evaluamos."
                       : "El chat no está habilitado en esta sección."
@@ -679,7 +703,7 @@ export function LearningWorkspace({ book }: LearningWorkspaceProps) {
             <p className="tutor-promise">
               <ShieldIcon />
               {tutorAvailable
-                ? "Te dará pistas y preguntas, no la respuesta final."
+                ? "La pista usa esta ficha y muestra la página consultada. No revela la respuesta final."
                 : isAssessment
                   ? "En Evaluamos, AImauta no entrega pistas ni respuestas."
                   : "En esta sección, AImauta no consulta RAG ni entrega ayuda."}
@@ -777,18 +801,28 @@ function MessageBubble({
 
 function citationDetails(citation: Citation) {
   if (typeof citation === "number") {
-    return { page: citation, label: `Página ${citation}`, excerpt: undefined };
+    return {
+      page: citation,
+      label: `Fuente: pág. ${citation}`,
+      excerpt: undefined,
+    };
   }
 
   if (typeof citation === "string") {
     const pageMatch = citation.match(/\d+/);
     const parsedPage = pageMatch ? Number.parseInt(pageMatch[0], 10) : undefined;
-    return { page: parsedPage, label: citation, excerpt: undefined };
+    return {
+      page: parsedPage,
+      label: parsedPage ? `Fuente: pág. ${parsedPage}` : citation,
+      excerpt: undefined,
+    };
   }
 
   return {
     page: citation.page,
-    label: citation.label ?? (citation.page ? `Página ${citation.page}` : "Fuente"),
+    label: citation.page
+      ? `Fuente: pág. ${citation.page}`
+      : (citation.label ?? "Fuente"),
     excerpt: citation.excerpt,
   };
 }

@@ -16,37 +16,41 @@ export default async function CatalogPage() {
             <span>AImauta</span>
           </Link>
           <a className="quiet-link" href="#biblioteca">
-            Explorar biblioteca
+            Probar el piloto
           </a>
         </nav>
 
         <div className="hero-content shell">
           <div className="hero-copy">
-            <p className="eyebrow">Tu profesor para aprender pensando</p>
+            <p className="eyebrow">Piloto RAG · Matemática secundaria</p>
             <h1>
-              Lee, intenta y descubre
-              <span> el siguiente paso.</span>
+              Lee una ficha, intenta resolverla
+              <span> y recibe una pista con fuente.</span>
             </h1>
             <p className="hero-lead">
-              Trabaja con tus materiales escolares mientras un tutor te hace las
-              preguntas correctas. Aquí la meta no es recibir una respuesta:
-              es aprender a encontrarla.
+              Este piloto incluye dos cuadernos de Matemática del MINEDU para
+              1.º y 2.º de secundaria. Abre una página de Construimos o
+              Comprobamos, escribe qué intentaste y AImauta te dará una pista
+              basada en el material, con la página citada.
             </p>
             <a className="primary-action" href="#biblioteca">
-              Elegir un material
+              Elegir un cuaderno
               <ArrowIcon />
             </a>
+            <p className="pilot-boundary">
+              En Orientación y Evaluamos no hay pistas ni consulta al material.
+            </p>
           </div>
 
-          <div className="hero-demo" aria-label="Así te acompaña AImauta">
+          <div className="hero-demo" aria-label="Ejemplo de una pista con fuente">
             <div className="demo-orbit demo-orbit-one" aria-hidden="true" />
             <div className="demo-orbit demo-orbit-two" aria-hidden="true" />
             <div className="demo-card">
               <div className="demo-card-top">
                 <span className="avatar avatar-tutor">AI</span>
                 <div>
-                  <strong>Empecemos por tu idea</strong>
-                  <small>Tutor guía</small>
+                  <strong>Pista basada en la ficha</strong>
+                  <small>Fuente: pág. 13</small>
                 </div>
                 <span className="status-dot" title="Disponible" />
               </div>
@@ -64,11 +68,11 @@ export default async function CatalogPage() {
             </div>
             <div className="demo-note demo-note-left" aria-hidden="true">
               <span>✦</span>
-              <strong>A tu ritmo</strong>
+              <strong>Tu intento</strong>
             </div>
             <div className="demo-note demo-note-right" aria-hidden="true">
               <span>✓</span>
-              <strong>Con pistas</strong>
+              <strong>Con fuente</strong>
             </div>
           </div>
         </div>
@@ -78,22 +82,22 @@ export default async function CatalogPage() {
         <article>
           <span className="principle-number">01</span>
           <div>
-            <h2>Material a la vista</h2>
-            <p>Lee el libro y mantén siempre el ejercicio en contexto.</p>
+            <h2>Abre una ficha</h2>
+            <p>Elige Construimos o Comprobamos y lee el ejercicio en el PDF.</p>
           </div>
         </article>
         <article>
           <span className="principle-number">02</span>
           <div>
-            <h2>Tu intento primero</h2>
+            <h2>Escribe tu intento</h2>
             <p>Escribe cómo lo resolverías, aunque todavía tengas dudas.</p>
           </div>
         </article>
         <article>
           <span className="principle-number">03</span>
           <div>
-            <h2>Una pista a la vez</h2>
-            <p>El tutor pregunta y orienta sin resolver el ejercicio por ti.</p>
+            <h2>Pide una pista y abre la cita</h2>
+            <p>AImauta orienta sin resolver y muestra la página que consultó.</p>
           </div>
         </article>
       </section>
@@ -101,8 +105,8 @@ export default async function CatalogPage() {
       <section className="library-section shell" id="biblioteca">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Biblioteca de aprendizaje</p>
-            <h2>¿Qué quieres aprender hoy?</h2>
+            <p className="eyebrow">Piloto disponible</p>
+            <h2>Matemática de 1.º y 2.º de secundaria</h2>
           </div>
           <p>
             {books.length}{" "}
@@ -120,7 +124,7 @@ export default async function CatalogPage() {
           <BrandMark />
           <span>AImauta</span>
         </Link>
-        <p>Aprender también es hacerse buenas preguntas.</p>
+        <p>Cada pista muestra de dónde sale.</p>
       </footer>
     </main>
   );

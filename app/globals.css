@@ -258,6 +258,14 @@ svg {
   transform: translateY(-2px);
 }
 
+.pilot-boundary {
+  max-width: 35rem;
+  margin: 1rem 0 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
 .hero-demo {
   position: relative;
   display: grid;
@@ -1527,6 +1535,41 @@ svg {
   background:
     radial-gradient(circle at 100% 0, rgba(217, 237, 141, 0.2), transparent 32%),
     var(--paper);
+}
+
+.rag-quickstart {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.7rem;
+  align-items: start;
+  margin-bottom: 0.85rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(23, 79, 70, 0.15);
+  border-radius: 0.7rem;
+  background: rgba(219, 236, 227, 0.56);
+}
+
+.rag-quickstart > span {
+  padding: 0.3rem 0.45rem;
+  border-radius: 0.35rem;
+  color: white;
+  background: var(--forest);
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.rag-quickstart strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 0.84rem;
+}
+
+.rag-quickstart p {
+  margin: 0.2rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  line-height: 1.45;
 }
 
 .unit-selector-row {
