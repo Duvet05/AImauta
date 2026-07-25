@@ -27,38 +27,48 @@ El operador de Aule verifica la huella pública y autoriza esa llave con la lín
 cerrada siguiente (sustituyendo únicamente la parte `ssh-ed25519 ...`):
 
 ```text
-from="100.120.80.60",restrict,port-forwarding,permitlisten="127.0.0.1:3308",permitopen="127.0.0.1:9",command="/bin/false" ssh-ed25519 <clave-pública> aimauta-poweredge-to-aule-edge
+from="<IP-Tailscale-actual-de-PowerEdge>",restrict,port-forwarding,permitlisten="127.0.0.1:3308",permitopen="127.0.0.1:9",command="/bin/false" ssh-ed25519 <clave-pública> aimauta-poweredge-to-aule-edge
 ```
 
 Así la credencial no permite shell, otros listeners remotos ni destinos de
-forward locales útiles. La llave privada nunca se copia a Aule ni al
-repositorio.
+forward locales útiles. La IP se obtiene con `tailscale ip -4`, no se copia de
+una guía anterior. La llave privada nunca se copia a Aule ni al repositorio.
 
-En PowerEdge, desde un checkout limpio:
+En PowerEdge, primero se validan y confirman los cambios en
+`/home/hii1sc/aimauta-production`. Después se crea mediante `git archive` el
+release inmutable documentado en
+[`docs/DEPLOYMENT.md`](../../docs/DEPLOYMENT.md). Los contenedores nunca se
+construyen desde un checkout con cambios locales:
 
 ```bash
-chmod +x infra/ingest/init-runtime.sh
-infra/ingest/init-runtime.sh
+release_id="$(git -C /home/hii1sc/aimauta-production rev-parse --short HEAD)"
+release_dir="/home/hii1sc/aimauta-releases/${release_id}"
+test -d "$release_dir"
 
-chmod +x infra/web/init-env.sh
-infra/web/init-env.sh /home/hii1sc/aimauta-runtime/web.env
+if [ ! -e /home/hii1sc/aimauta-runtime/web.env ]; then
+  "$release_dir/infra/web/init-env.sh" \
+    /home/hii1sc/aimauta-runtime/web.env
+fi
 
-AIMAUTA_RELEASE="$(git rev-parse --short HEAD)" \
-  docker compose -f infra/web/compose.yaml build
+AIMAUTA_RELEASE="$release_id" \
+  AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
+  docker compose -f "$release_dir/infra/web/compose.yaml" build --pull
 
-AIMAUTA_RELEASE="$(git rev-parse --short HEAD)" \
-  docker compose -f infra/web/compose.yaml up -d
+AIMAUTA_RELEASE="$release_id" \
+  AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
+  docker compose -f "$release_dir/infra/web/compose.yaml" \
+  up -d --no-build --force-recreate
 
-# En PowerEdge: mantener el reverse SSH hacia Aule
-install -m 600 infra/web/aimauta-aule-ollama-tunnel.service \
-  /home/hii1sc/.config/systemd/user/aimauta-aule-ollama-tunnel.service
-install -m 600 infra/web/aimauta-aule-edge-tunnel.service \
-  /home/hii1sc/.config/systemd/user/aimauta-aule-edge-tunnel.service
-systemctl --user daemon-reload
-systemctl --user enable --now aimauta-aule-ollama-tunnel.service
-systemctl --user enable --now aimauta-aule-edge-tunnel.service
+# Los túneles son configuración administrada por el host y no se reinstalan
+# durante una promoción de la aplicación.
+systemctl --user is-active \
+  aimauta-aule-ollama-tunnel.service \
+  aimauta-aule-edge-tunnel.service
 
 # En Aule (Tailscale >= 1.98.9):
+tailscale version
 tailscale funnel --yes --bg --https=8443 http://127.0.0.1:3308
 ```
 
@@ -66,9 +76,13 @@ El archivo de entorno se crea una sola vez, con permisos `0600`, sin imprimir
 los secretos. Los PDF, índices y manifiestos se montan en modo de solo lectura.
 `restart: unless-stopped` mantiene los contenedores después de reinicios del
 daemon. El usuario de PowerEdge debe tener `Linger=yes` para que el túnel
-systemd continúe sin una sesión SSH. La configuración de Funnel queda
-administrada por el `tailscaled` corregido de Aule; no se debe activar Funnel en
-un daemon afectado por TS-2026-008.
+systemd continúe sin una sesión SSH. En esta máquina las unidades instaladas
+usan `/home/hii1sc/.ssh/aimauta_aule_direct_config` y difieren de las plantillas
+del repositorio; solo se actualizan en una ventana de mantenimiento de red. La
+configuración de Funnel queda administrada por el `tailscaled` corregido de
+Aule; su versión se verifica en ese nodo y no se debe activar Funnel en un
+daemon afectado por
+[TS-2026-008](https://tailscale.com/security-bulletins#ts-2026-008).
 
 Antes de promocionar una imagen deben pasar:
 
@@ -77,8 +91,12 @@ npm run catalog:validate
 npm run typecheck
 npm run lint
 npm test
+npm run audit:production
 sh -n infra/ingest/init-runtime.sh
-docker compose -f infra/web/compose.yaml config --quiet
+AIMAUTA_RELEASE="$release_id" \
+  AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
+  docker compose -f "$release_dir/infra/web/compose.yaml" config --quiet
 curl --fail http://127.0.0.1:3308/_edge-health
 ```
 

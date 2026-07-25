@@ -54,14 +54,14 @@ async function readPrivateManifest(
   bookId: string,
 ): Promise<unknown> {
   const filePath = path.join(
-    solutionDirectory(),
+    /* turbopackIgnore: true */ solutionDirectory(),
     `${bookId}.private.json`,
   );
   let handle: FileHandle | null = null;
 
   try {
     handle = await open(
-      filePath,
+      /* turbopackIgnore: true */ filePath,
       constants.O_RDONLY | constants.O_NOFOLLOW,
     );
     const before = await handle.stat({ bigint: true });

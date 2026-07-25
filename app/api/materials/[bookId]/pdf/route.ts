@@ -39,12 +39,15 @@ async function localPdfResponse(
     return null;
   }
 
-  const filePath = path.join(contentDir, book.storageFile);
+  const filePath = path.join(
+    /* turbopackIgnore: true */ contentDir,
+    book.storageFile
+  );
   let handle: FileHandle;
   let fileSize = book.expectedBytes;
 
   try {
-    handle = await open(filePath, "r");
+    handle = await open(/* turbopackIgnore: true */ filePath, "r");
   } catch (error) {
     if (
       error instanceof Error &&

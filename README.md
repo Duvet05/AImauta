@@ -140,17 +140,34 @@ La importación usa **exclusivamente** la descarga oficial del MINEDU; los metad
 
 ## 🚀 Puesta en marcha
 
-La configuración parte de `.env.example`. En producción son obligatorios dos secretos aleatorios e independientes (≥ 32 caracteres): `AIMAUTA_SESSION_SECRET` y `AIMAUTA_AGENT_SECRET`.
+La configuración parte de `.env.example`. En producción son obligatorios dos
+secretos aleatorios e independientes (≥ 32 caracteres):
+`AIMAUTA_SESSION_SECRET` y `AIMAUTA_AGENT_SECRET`.
+
+La validación se ejecuta en PowerEdge desde
+`/home/hii1sc/aimauta-production`:
 
 ```bash
 npm ci
-npm run catalog:validate     # puerta previa: no compila un catálogo inválido
-npm run content:sync         # sincroniza material oficial
-npm run content:index        # índice v2 ligado a checksum + licencia
+npm run catalog:validate
+npm run content:sync
+npm run content:index
+npm run lint
+npm run typecheck
+npm test
+npm run audit:production
 npm run build
 ```
 
-> La compilación de contenido, indexación y el worker de voz se ejecutan en el servidor de despliegue. El detalle operativo completo está en [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+El `postbuild` limita el standalone al runtime y falla si encuentra archivos de
+entorno, secretos o rutas ajenas. Producción nunca se ejecuta desde el checkout:
+se crea un release limpio en `/home/hii1sc/aimauta-releases/<commit>`, se
+etiquetan las imágenes con ese commit y los datos persistentes permanecen en
+`/home/hii1sc/aimauta-runtime`.
+
+> La compilación, la indexación y el worker de voz se ejecutan en el servidor.
+> El procedimiento completo de release, promoción y rollback está en
+> [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ---
 
