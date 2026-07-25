@@ -118,7 +118,8 @@ Una plataforma para menores exige rigor. AImauta lo trae de fábrica:
   en su base de datos, pero el intento y evidencia limitada se procesan
   temporalmente en el proveedor configurado con `store: false`. Este parámetro
   no sustituye un acuerdo de retención cero para un piloto institucional.
-- **Avatar local y privado.** Personaje 3D sintético (MakeHuman CC0) renderizado con Three.js. No pide cámara, no publica video; la política de permisos HTTP bloquea cámara, captura y geolocalización.
+- **Avatar Tavus opcional, sin cámara del alumno.** Tavus publica por la misma sala LiveKit la voz de Inworld sincronizada con video. Un personaje 3D local (MakeHuman CC0) queda como respaldo inmediato mediante feature flag.
+- **Rollback de un comando.** `./scripts/tavus-avatar.sh off` recrea solo el worker con Tavus deshabilitado; no requiere rebuild de la web.
 - **Límites de tasa** por sesión y por cliente, con respaldo conservador cuando el control de borde no está presente.
 
 ---
@@ -142,7 +143,7 @@ La importación usa **exclusivamente** la descarga oficial del MINEDU; los metad
 | --- | --- |
 | **Frontend** | Next.js (App Router) · React · TypeScript |
 | **Visor** | PDF.js (`pdfjs-dist`) con capa de texto |
-| **Avatar 3D** | Three.js · modelo MakeHuman CC0, local |
+| **Avatar** | Tavus por LiveKit (opcional) · Three.js/MakeHuman CC0 como respaldo local |
 | **Datos** | Prisma · PostgreSQL |
 | **Tutor / IA** | RAG interno FastAPI · router **OpenAI → xAI → Gemini** · migración posterior a Gemma |
 | **Voz** | LiveKit Cloud Inference (Deepgram Nova-3 / Inworld TTS 2 · Silero VAD) |

@@ -3,12 +3,14 @@
 import Image from "next/image";
 import { useState } from "react";
 
+import { TavusAvatarVideo } from "@/components/tavus-avatar-video";
 import { TutorAvatar3D } from "@/components/tutor-avatar-3d";
 import type { TutorAvatarState } from "@/lib/tutor-avatar";
 
 type TutorAvatarProps = {
   state: TutorAvatarState;
   audioTrack: MediaStreamTrack | null;
+  videoTrack?: MediaStreamTrack | null;
 };
 
 const avatarDescriptions: Record<TutorAvatarState, string> = {
@@ -24,29 +26,41 @@ const avatarDescriptions: Record<TutorAvatarState, string> = {
 };
 
 /**
- * Avatar SVG autocontenido. Se renderiza en el navegador y forma parte del
- * código MIT de AImauta: no requiere cámara, modelo remoto ni servicio externo.
+ * Tavus replaces the local visual only while its delegated LiveKit video is
+ * available. The bundled 3D/portrait/SVG chain remains the zero-config fallback.
  */
-export function TutorAvatar({ state, audioTrack }: TutorAvatarProps) {
+export function TutorAvatar({
+  state,
+  audioTrack,
+  videoTrack = null,
+}: TutorAvatarProps) {
   const description = avatarDescriptions[state];
   const [threeDimensionalReady, setThreeDimensionalReady] = useState(false);
   const [brandPortraitReady, setBrandPortraitReady] = useState(false);
+  const [remoteVideoReady, setRemoteVideoReady] = useState(false);
+  const visualReady = remoteVideoReady || threeDimensionalReady;
 
   return (
     <div
       className={`tutor-avatar tutor-avatar-${state}`}
       role="img"
-      aria-label={`Avatar ilustrado de AImauta: ${description}.`}
+      aria-label={`Avatar de AImauta: ${description}.`}
     >
       <span className="tutor-avatar-orbit" aria-hidden="true" />
-      <TutorAvatar3D
-        state={state}
-        audioTrack={audioTrack}
-        onReadyChange={setThreeDimensionalReady}
+      {videoTrack ? null : (
+        <TutorAvatar3D
+          state={state}
+          audioTrack={audioTrack}
+          onReadyChange={setThreeDimensionalReady}
+        />
+      )}
+      <TavusAvatarVideo
+        track={videoTrack}
+        onReadyChange={setRemoteVideoReady}
       />
       <Image
         className={`tutor-avatar-brand-portrait${
-          threeDimensionalReady || !brandPortraitReady
+          visualReady || !brandPortraitReady
             ? " tutor-avatar-portrait-hidden"
             : ""
         }`}
@@ -62,7 +76,7 @@ export function TutorAvatar({ state, audioTrack }: TutorAvatarProps) {
       />
       <svg
         className={`tutor-avatar-portrait${
-          threeDimensionalReady || brandPortraitReady
+          visualReady || brandPortraitReady
             ? " tutor-avatar-portrait-hidden"
             : " tutor-avatar-vector-fallback"
         }`}

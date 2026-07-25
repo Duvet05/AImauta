@@ -752,6 +752,7 @@ livekit-agents==1.6.6 \
     # via
     #   aimauta-voice-agent (pyproject.toml)
     #   livekit-plugins-silero
+    #   livekit-plugins-tavus
 livekit-api==1.2.0 \
     --hash=sha256:307f8e5cfb0358c3ca091814ab768af55896022151bcd7f951954ccefa036a24 \
     --hash=sha256:a89817b3bca9584873786ff07209839308217537a42f95ecb2609aafaa109ddc
@@ -823,6 +824,10 @@ livekit-local-inference==0.2.6 \
 livekit-plugins-silero==1.6.6 \
     --hash=sha256:80b415d1edbef731fedc66e9b0dff2627c2b76e084f2433b25ed94e9843ceeb5 \
     --hash=sha256:f2edd621d6ebf44d007d942203487f735d070c991f569bf9d975c5763108e48f
+    # via aimauta-voice-agent (pyproject.toml)
+livekit-plugins-tavus==1.6.4 \
+    --hash=sha256:7f1b7e5bb4d1580a344b534c591df3595eb882bd40e9ffb070ab98c4e7b61406 \
+    --hash=sha256:858d4a31ed5a1a36fdc218332b94a7f3e8afd3349d9ff75a86c6e543c682c91a
     # via aimauta-voice-agent (pyproject.toml)
 livekit-protocol==1.1.21 \
     --hash=sha256:8bb1ac1aba5d37d0af43e9d56d129a5d16295cbd91518b00fd157e258f20a6ef \

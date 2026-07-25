@@ -30,6 +30,7 @@ def test_uses_livekit_inference_defaults_without_provider_keys() -> None:
     assert configured.tts_model == "inworld/inworld-tts-2"
     assert configured.tts_voice == "Diego"
     assert configured.tts_language == "es"
+    assert configured.tavus_avatar_enabled is False
 
 
 def test_pinned_sdk_accepts_livekit_inference_contract() -> None:
@@ -87,3 +88,21 @@ def test_voice_session_duration_has_safe_bounds() -> None:
         settings(max_session_seconds="59")
     with pytest.raises(ValidationError):
         settings(max_session_seconds="901")
+
+
+def test_tavus_is_fail_closed_and_requires_complete_configuration() -> None:
+    with pytest.raises(ValidationError, match="exactamente"):
+        settings(tavus_avatar_enabled="TRUE")
+
+    with pytest.raises(ValidationError, match="TAVUS_API_KEY"):
+        settings(tavus_avatar_enabled="true")
+
+    configured = settings(
+        tavus_avatar_enabled="true",
+        tavus_api_key="t" * 32,
+        tavus_replica_id="r044d76f4490",
+        tavus_persona_id="pb87e71797da",
+    )
+    assert configured.tavus_avatar_enabled is True
+    assert configured.tavus_api_key.get_secret_value() == "t" * 32
+    assert "t" * 32 not in repr(configured)
