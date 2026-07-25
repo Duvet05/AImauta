@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { BrandMark } from "@/components/brand-mark";
 import { CatalogLibrary } from "@/components/catalog-library";
+import { FooterQuipus } from "@/components/footer-quipus";
 import { getBooks } from "@/lib/catalog";
 
 const learningJourney = [
@@ -90,16 +91,6 @@ export default async function CatalogPage() {
           </div>
 
           <div className="hero-demo" aria-label="Ejemplo de una pista con fuente">
-            <div className="hero-editorial-figure" aria-hidden="true">
-              <Image
-                src="/svg/amauta-thinks.svg"
-                alt=""
-                fill
-                priority
-                sizes="(max-width: 980px) 0px, 300px"
-                unoptimized
-              />
-            </div>
             <div className="demo-orbit demo-orbit-one" aria-hidden="true" />
             <div className="demo-orbit demo-orbit-two" aria-hidden="true" />
             <div className="demo-card">
@@ -335,6 +326,7 @@ export default async function CatalogPage() {
             <Link href="/privacidad">Privacidad y datos</Link>
           </nav>
         </div>
+        <FooterQuipus />
       </footer>
     </main>
   );
