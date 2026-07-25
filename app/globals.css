@@ -2775,7 +2775,7 @@ svg {
 
 .voice-presence {
   display: grid;
-  grid-template-columns: 5.4rem minmax(0, 1fr);
+  grid-template-columns: 7rem minmax(0, 1fr);
   gap: 0.75rem;
   align-items: center;
   min-height: 6rem;
@@ -2804,8 +2804,8 @@ svg {
 .tutor-avatar {
   position: relative;
   display: grid;
-  width: 5.2rem;
-  height: 5.2rem;
+  width: 6.7rem;
+  height: 6.7rem;
   place-items: center;
   isolation: isolate;
 }
@@ -2843,11 +2843,29 @@ svg {
 .tutor-avatar-portrait {
   position: relative;
   z-index: 1;
-  width: 4.65rem;
-  height: 4.65rem;
+  width: 5.8rem;
+  height: 5.8rem;
   overflow: visible;
   opacity: 1;
   transition: opacity 180ms ease;
+}
+
+.tutor-avatar-brand-portrait {
+  position: absolute;
+  z-index: 2;
+  width: 6.35rem;
+  height: 6.35rem;
+  object-fit: contain;
+  object-position: center;
+  filter: drop-shadow(0 5px 8px rgba(23, 45, 42, 0.16));
+  opacity: 1;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.tutor-avatar-vector-fallback {
+  opacity: 0;
 }
 
 .tutor-avatar-portrait-hidden {
@@ -3012,6 +3030,10 @@ svg {
   transform: scale(1);
 }
 
+.tutor-avatar-speaking .tutor-avatar-brand-portrait {
+  animation: tutor-avatar-brand-talk 520ms ease-in-out infinite alternate;
+}
+
 .tutor-avatar-speaking .tutor-avatar-audio-bars i {
   animation: tutor-avatar-wave 540ms ease-in-out infinite alternate;
 }
@@ -3063,6 +3085,16 @@ svg {
 @keyframes tutor-avatar-wave {
   to {
     height: 0.8rem;
+  }
+}
+
+@keyframes tutor-avatar-brand-talk {
+  from {
+    transform: translateY(0) scale(1);
+  }
+
+  to {
+    transform: translateY(-0.12rem) scale(1.025);
   }
 }
 
@@ -3505,18 +3537,23 @@ svg {
   }
 
   .voice-presence {
-    grid-template-columns: 4.8rem minmax(0, 1fr);
+    grid-template-columns: 5.8rem minmax(0, 1fr);
     padding-inline: 0.55rem;
   }
 
   .tutor-avatar {
-    width: 4.55rem;
-    height: 4.55rem;
+    width: 5.5rem;
+    height: 5.5rem;
   }
 
   .tutor-avatar-portrait {
-    width: 4.1rem;
-    height: 4.1rem;
+    width: 4.8rem;
+    height: 4.8rem;
+  }
+
+  .tutor-avatar-brand-portrait {
+    width: 5.2rem;
+    height: 5.2rem;
   }
 
   .page-sync-overlay {

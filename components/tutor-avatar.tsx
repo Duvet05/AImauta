@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 
 import { TutorAvatar3D } from "@/components/tutor-avatar-3d";
@@ -42,9 +43,23 @@ export function TutorAvatar({ state, audioTrack }: TutorAvatarProps) {
         audioTrack={audioTrack}
         onReadyChange={setThreeDimensionalReady}
       />
+      <Image
+        className={`tutor-avatar-brand-portrait${
+          threeDimensionalReady ? " tutor-avatar-portrait-hidden" : ""
+        }`}
+        src="/brand/characters/amauta-hint.webp"
+        alt=""
+        aria-hidden="true"
+        width={223}
+        height={360}
+        unoptimized
+        priority
+      />
       <svg
         className={`tutor-avatar-portrait${
-          threeDimensionalReady ? " tutor-avatar-portrait-hidden" : ""
+          threeDimensionalReady
+            ? " tutor-avatar-portrait-hidden"
+            : " tutor-avatar-vector-fallback"
         }`}
         viewBox="0 0 160 160"
         aria-hidden="true"
