@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { open, type FileHandle } from "node:fs/promises";
+import { open, stat, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 
 import { getBook, type Book } from "@/lib/catalog";
@@ -29,10 +29,27 @@ type CachedManifest = {
   manifest: PublicExerciseManifest;
 };
 
+export type ExerciseManifestFailureReason =
+  | "configuration"
+  | "io"
+  | "integrity";
+
 export class ExerciseManifestUnavailableError extends Error {
-  constructor() {
+  readonly reason: ExerciseManifestFailureReason;
+
+  constructor(reason: ExerciseManifestFailureReason = "integrity") {
     super("El manifiesto público de ejercicios no está disponible.");
     this.name = "ExerciseManifestUnavailableError";
+    this.reason = reason;
+  }
+}
+
+export class ExerciseManifestNotPublishedError extends ExerciseManifestUnavailableError {
+  constructor() {
+    super("integrity");
+    this.name = "ExerciseManifestNotPublishedError";
+    this.message =
+      "El manifiesto público de ejercicios todavía no está publicado.";
   }
 }
 
@@ -83,7 +100,7 @@ function manifestDirectory(): string {
     process.env.AIMAUTA_EXERCISE_MANIFEST_DIR?.trim() ||
     DEFAULT_EXERCISE_MANIFEST_DIR;
   if (!path.isAbsolute(configured)) {
-    throw new ExerciseManifestUnavailableError();
+    throw new ExerciseManifestUnavailableError("configuration");
   }
   return configured;
 }
@@ -165,13 +182,33 @@ async function readAndValidateManifest(
   let handle: FileHandle | null = null;
 
   try {
-    handle = await open(
-      filePath,
-      constants.O_RDONLY | constants.O_NOFOLLOW,
-    );
+    try {
+      handle = await open(
+        filePath,
+        constants.O_RDONLY | constants.O_NOFOLLOW,
+      );
+    } catch (error) {
+      const code =
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        typeof error.code === "string"
+          ? error.code
+          : "";
+      if (code === "ENOENT") {
+        const directory = await stat(manifestDirectory()).catch(
+          () => null,
+        );
+        if (directory?.isDirectory()) {
+          throw new ExerciseManifestNotPublishedError();
+        }
+      }
+      throw new ExerciseManifestUnavailableError("io");
+    }
+
     const before = await openedIdentity(handle);
     if (!before) {
-      throw new ExerciseManifestUnavailableError();
+      throw new ExerciseManifestUnavailableError("integrity");
     }
 
     const cached = cache.get(filePath);
@@ -182,20 +219,26 @@ async function readAndValidateManifest(
     const source = await handle.readFile({ encoding: "utf8" });
     const after = await openedIdentity(handle);
     if (!after || !sameIdentity(before, after)) {
-      throw new ExerciseManifestUnavailableError();
+      throw new ExerciseManifestUnavailableError("integrity");
     }
 
     const parsed = parsePublicExerciseManifest(source);
     if (!parsed.ok || !matchesPublishedBook(parsed.value, book)) {
-      throw new ExerciseManifestUnavailableError();
+      throw new ExerciseManifestUnavailableError("integrity");
     }
 
     const manifest = projectPublicExerciseManifest(parsed.value);
     cache.set(filePath, { identity: after, manifest });
     return projectPublicExerciseManifest(manifest);
-  } catch {
+  } catch (error) {
     cache.delete(filePath);
-    throw new ExerciseManifestUnavailableError();
+    if (error instanceof ExerciseManifestNotPublishedError) {
+      throw error;
+    }
+    if (error instanceof ExerciseManifestUnavailableError) {
+      throw error;
+    }
+    throw new ExerciseManifestUnavailableError("io");
   } finally {
     await handle?.close().catch(() => undefined);
   }
@@ -210,7 +253,7 @@ export async function loadPublicExerciseManifest(
 ): Promise<PublicExerciseManifest> {
   const book = getBook(bookId);
   if (!book) {
-    throw new ExerciseManifestUnavailableError();
+    throw new ExerciseManifestUnavailableError("configuration");
   }
   return readAndValidateManifest(book);
 }
@@ -226,7 +269,7 @@ export async function getPublishedExercisesForPage(
     page < 1 ||
     page > book.pages
   ) {
-    throw new ExerciseManifestUnavailableError();
+    throw new ExerciseManifestUnavailableError("configuration");
   }
 
   const manifest = await readAndValidateManifest(book);

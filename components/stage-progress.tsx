@@ -4,6 +4,7 @@ import type { LearningSessionState } from "@/lib/learning-session";
 type StageProgressProps = {
   activity: PageActivity;
   session: LearningSessionState;
+  supportAvailable: boolean;
 };
 
 const stages = [
@@ -24,7 +25,11 @@ const stages = [
   },
 ] as const;
 
-export function StageProgress({ activity, session }: StageProgressProps) {
+export function StageProgress({
+  activity,
+  session,
+  supportAvailable,
+}: StageProgressProps) {
   const currentIndex = stages.findIndex((stage) => stage.id === activity.stage);
   const stagePages = Math.max(1, activity.endPage - activity.startPage + 1);
   const stagePage = Math.min(
@@ -82,7 +87,11 @@ export function StageProgress({ activity, session }: StageProgressProps) {
       <dl className="learning-metrics">
         <div>
           <dt>Nivel de apoyo</dt>
-          <dd>{activity.tutorAvailable ? `${session.hintLevel} de 3` : "En pausa"}</dd>
+          <dd>
+            {activity.tutorAvailable && supportAvailable
+              ? `${session.hintLevel} de 3`
+              : "En pausa"}
+          </dd>
         </div>
         <div>
           <dt>Intentos registrados</dt>

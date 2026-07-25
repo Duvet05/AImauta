@@ -3,14 +3,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PublicExercise } from "@/lib/exercise-manifest";
 
 const store = vi.hoisted(() => {
-  class UnavailableError extends Error {}
+  class NotPublishedError extends Error {}
+  class UnavailableError extends Error {
+    readonly reason = "integrity";
+  }
   return {
+    NotPublishedError,
     UnavailableError,
     getPublishedExercisesForPage: vi.fn(),
   };
 });
 
 vi.mock("@/lib/exercise-store", () => ({
+  ExerciseManifestNotPublishedError: store.NotPublishedError,
   ExerciseManifestUnavailableError: store.UnavailableError,
   getPublishedExercisesForPage: store.getPublishedExercisesForPage,
 }));
@@ -116,7 +121,52 @@ describe("GET /api/materials/:bookId/exercises", () => {
       schemaVersion: 1,
       bookId,
       page: 13,
+      publicationStatus: "published",
       exercises: [multipageExercise],
+    });
+  });
+
+  it("distingue un material aún no publicado sin convertirlo en error", async () => {
+    store.getPublishedExercisesForPage.mockRejectedValue(
+      new store.NotPublishedError(),
+    );
+
+    const response = await GET(
+      new Request(
+        `http://aimauta.test/api/materials/${bookId}/exercises?page=13`,
+      ),
+      context,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("etag")).toBeNull();
+    await expect(response.json()).resolves.toEqual({
+      schemaVersion: 1,
+      bookId,
+      page: 13,
+      publicationStatus: "not-published",
+      exercises: [],
+    });
+  });
+
+  it("distingue una página vacía dentro de un manifiesto publicado", async () => {
+    store.getPublishedExercisesForPage.mockResolvedValue([]);
+
+    const response = await GET(
+      new Request(
+        `http://aimauta.test/api/materials/${bookId}/exercises?page=15`,
+      ),
+      context,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      schemaVersion: 1,
+      bookId,
+      page: 15,
+      publicationStatus: "published",
+      exercises: [],
     });
   });
 
@@ -144,6 +194,9 @@ describe("GET /api/materials/:bookId/exercises", () => {
   });
 
   it("falla cerrado sin revelar errores internos del manifiesto", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
     store.getPublishedExercisesForPage.mockRejectedValue(
       new store.UnavailableError("ruta-interna/secreta"),
     );
@@ -160,5 +213,13 @@ describe("GET /api/materials/:bookId/exercises", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(body).not.toContain("ruta-interna");
     expect(body).not.toContain("secreta");
+    expect(consoleError).toHaveBeenCalledWith(
+      "Public exercise manifest failure",
+      { bookId, reason: "integrity" },
+    );
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain(
+      "ruta-interna",
+    );
+    consoleError.mockRestore();
   });
 });

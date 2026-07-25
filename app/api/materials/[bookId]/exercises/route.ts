@@ -2,9 +2,14 @@ import { createHash } from "node:crypto";
 
 import { getBook } from "@/lib/catalog";
 import {
+  ExerciseManifestNotPublishedError,
   ExerciseManifestUnavailableError,
   getPublishedExercisesForPage,
 } from "@/lib/exercise-store";
+import {
+  PAGE_EXERCISES_SCHEMA_VERSION,
+  type PageExercisesResponse,
+} from "@/lib/page-exercises-response";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,6 +55,27 @@ function matchesEtag(header: string | null, etag: string): boolean {
   });
 }
 
+function notPublishedResponse(
+  bookId: string,
+  page: number,
+): Response {
+  return Response.json(
+    {
+      schemaVersion: PAGE_EXERCISES_SCHEMA_VERSION,
+      bookId,
+      page,
+      publicationStatus: "not-published",
+      exercises: [],
+    } satisfies PageExercisesResponse,
+    {
+      status: 200,
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    },
+  );
+}
+
 export async function GET(
   request: Request,
   context: RouteContext,
@@ -77,11 +103,12 @@ export async function GET(
         exercise.regions.some((region) => region.page === page),
     );
     const body = JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: PAGE_EXERCISES_SCHEMA_VERSION,
       bookId: book.id,
       page,
+      publicationStatus: "published",
       exercises,
-    });
+    } satisfies PageExercisesResponse);
     const etag = `"${createHash("sha256")
       .update(body)
       .digest("base64url")}"`;
@@ -97,9 +124,17 @@ export async function GET(
     headers.set("Content-Type", "application/json; charset=utf-8");
     return new Response(body, { status: 200, headers });
   } catch (error) {
-    if (!(error instanceof ExerciseManifestUnavailableError)) {
-      console.error("Public exercise manifest failure", { bookId });
+    if (error instanceof ExerciseManifestNotPublishedError) {
+      return notPublishedResponse(book.id, page);
     }
+
+    console.error("Public exercise manifest failure", {
+      bookId,
+      reason:
+        error instanceof ExerciseManifestUnavailableError
+          ? error.reason
+          : "unexpected",
+    });
     return errorResponse(
       "Los ejercicios de este material no están disponibles.",
       503,
