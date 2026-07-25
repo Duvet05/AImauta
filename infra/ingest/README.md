@@ -20,7 +20,7 @@ El contrato de directorios es:
 ├── indexes/                              0750  índices RAG publicados
 ├── manifests/
 │   └── exercises/                        0750  <bookId>.public.json
-├── exercise-solutions/                   0750  <bookId>.private.json
+├── exercise-solutions/                   0750  .private.json + .release.json
 └── releases/                             0750  releases inmutables/rollback
 ```
 
@@ -126,7 +126,8 @@ npm run exercises:ingest -- \
 
 Para mantener las páginas en infraestructura propia, el mismo contrato puede
 usar Gemma 4 en el Ollama privado de Aule a través del túnel loopback de
-PowerEdge. Este modo no lee ni requiere el archivo de clave:
+PowerEdge. Este es el proveedor predeterminado cuando no se define
+`--provider`; no lee ni requiere el archivo de clave:
 
 ```bash
 AIMAUTA_OLLAMA_INGEST_URL=http://127.0.0.1:11435 \
@@ -159,7 +160,8 @@ tres páginas. Produce únicamente:
 - `<bookId>.private.draft.json`;
 - `<bookId>.ingestion-report.json`.
 
-El reporte usa `schemaVersion: 2` y conserva una entrada única por página con
+El reporte usa `schemaVersion: 3`, registra proveedor, alcance del endpoint y
+versión del contrato, y conserva una entrada única por página con
 su estado (`no_exercise`, `exercise_found` o `uncertain`) y cantidad de
 candidatos. La ingesta rechaza contradicciones entre estado y candidatos. Una
 página incierta, estados discrepantes entre ventanas, huecos o duplicados son
@@ -252,11 +254,13 @@ descendientes.
 
 ## Publicación y rollback
 
-La aprobación produce dos artefactos distintos:
+La aprobación produce un bundle autoritativo y dos mirrors operativos:
 
 - `manifests/exercises/<bookId>.public.json`: regiones y texto visible;
 - `exercise-solutions/<bookId>.private.json`: respuestas y pistas sólo para el
-  servidor.
+  servidor;
+- `exercise-solutions/<bookId>.release.json`: ambas mitades validadas y
+  revisionadas en un único archivo privado.
 
 Antes de tomar el lock se validan ambos manifiestos juntos contra catálogo y
 currículo. También se abre el PDF runtime sin seguir enlaces, se comprueban
@@ -266,11 +270,12 @@ versión de extractor, libro, checksum fuente, páginas, taxonomía, currículo,
 licencia, fragmentos y reporte de calidad. Los hashes verificados quedan en
 `release.json`.
 
-Después se escriben los manifiestos con nombre temporal, `fsync` y modo
-`0640`. La solución privada se renombra primero y el manifiesto público se
-renombra al final; ese último `rename` es el punto de activación atómico. Un
-PDF, índice o manifiesto ausente, parcial, inválido o incongruente produce
-indisponibilidad, nunca una clasificación inferida.
+Después se escribe el bundle con nombre temporal, `fsync` y modo `0640`. Un
+único `rename` activa a la vez la mitad pública y la solución privada. Los
+lectores prefieren siempre ese bundle y sólo usan los dos archivos históricos
+cuando todavía no existe uno; por ello, un crash mientras se refrescan los
+mirrors no crea una ventana de revisiones mezcladas. Un bundle existente pero
+inválido falla cerrado y nunca cae al formato anterior.
 
 La promoción real acepta únicamente `job_id` y `bookId`; no acepta rutas
 arbitrarias:
@@ -286,10 +291,11 @@ predeterminada. Sus directorios deben existir, pertenecer al operador, no ser
 enlaces y conservar modo `0750`; PDF e índices deben pertenecer al operador y
 usar `0640`. El comando no crea raíces ni mounts. Adquiere un lock exclusivo,
 guarda el par nuevo y el anterior bajo
-`releases/<release_id>`, escribe y sincroniza temporales `0640`, activa primero
-el privado y finalmente el público. Si la activación pública falla, restaura
-el privado anterior —o lo elimina en la primera publicación— antes de liberar
-el lock.
+`releases/<release_id>`, escribe y sincroniza temporales `0640` y activa el
+bundle completo con un solo rename. Si una comprobación posterior falla,
+restaura primero los mirrors y finalmente el bundle anterior. Un lock con más
+de cinco minutos sólo se recupera si conserva dueño y modo seguros y el PID
+registrado ya no existe.
 
 Este comando sólo promueve manifiestos de ejercicios. Para cambios que también
 incluyan PDF, índice o catálogo se prepara un release integral por separado y

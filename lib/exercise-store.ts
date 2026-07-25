@@ -10,6 +10,7 @@ import {
   type PublicExercise,
   type PublicExerciseManifest,
 } from "@/lib/exercise-manifest";
+import { loadExerciseReleaseBundle } from "@/lib/exercise-release-bundle";
 
 const DEFAULT_EXERCISE_MANIFEST_DIR =
   "/srv/aimauta/manifests/exercises";
@@ -181,6 +182,18 @@ async function openedIdentity(
 async function readAndValidateManifest(
   book: Book,
 ): Promise<PublicExerciseManifest> {
+  try {
+    const bundle = await loadExerciseReleaseBundle(book.id);
+    if (bundle) {
+      if (!matchesPublishedBook(bundle.publicManifest, book)) {
+        throw new ExerciseManifestUnavailableError("integrity");
+      }
+      return projectPublicExerciseManifest(bundle.publicManifest);
+    }
+  } catch {
+    throw new ExerciseManifestUnavailableError("integrity");
+  }
+
   const filePath = manifestPath(book.id);
   let handle: FileHandle | null = null;
 
@@ -250,8 +263,9 @@ async function readAndValidateManifest(
 }
 
 /**
- * Reads only `<bookId>.public.json`. Private solution files deliberately live
- * in another directory/mount and are never opened by this module.
+ * Prefers the atomic release bundle and projects only its public half. During
+ * migration, a missing bundle falls back to `<bookId>.public.json`; an
+ * existing but invalid bundle never falls back.
  */
 export async function loadPublicExerciseManifest(
   bookId: string,

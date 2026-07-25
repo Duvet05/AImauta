@@ -29,6 +29,7 @@ import {
   type PrivateExerciseSolutionsManifest,
   type PublicExerciseManifest,
 } from "@/lib/exercise-manifest";
+import { EXERCISE_INGEST_CONTRACT_VERSION } from "@/lib/gemma-ingest";
 import {
   BOOK_INDEX_VERSION,
   INDEX_EXTRACTOR_VERSION,
@@ -130,9 +131,12 @@ function privateManifest(
 
 function ingestionReport(): Record<string, unknown> {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     bookId: catalogEntry.id,
     sourceSha256: catalogEntry.expectedSha256,
+    provider: "ollama",
+    endpointScope: "loopback",
+    contractVersion: EXERCISE_INGEST_CONTRACT_VERSION,
     model: "gemma-release-test",
     generatedAt: "2026-07-25T00:00:00.000Z",
     exerciseCount: 1,
@@ -313,9 +317,9 @@ async function writeRuntimeArtifacts(
     "indexes",
     `${book.id}.json`,
   );
-  await writeFile(pdfPath, pdf, { mode: 0o444 });
+  await writeFile(pdfPath, pdf, { mode: 0o640 });
   await writeFile(indexPath, JSON.stringify(index), { mode: 0o640 });
-  await chmod(pdfPath, 0o444);
+  await chmod(pdfPath, 0o640);
   await chmod(indexPath, 0o640);
 }
 
@@ -534,7 +538,7 @@ describe.skipIf(operatorUid <= 0)(
 );
 
 describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
-  it("publica privado primero y conserva snapshots nuevo y anterior", async () => {
+  it("activa público y privado en un solo bundle y conserva snapshots", async () => {
     const layout = await testLayout();
     await writeReviewedPair(layout.jobDirectory, 1);
 
@@ -563,7 +567,7 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
     expect(first.previousReleaseSnapshot).toBe(false);
 
     await writeReviewedPair(layout.jobDirectory, 2);
-    let observedPrivateBeforePublic = false;
+    let observedAtomicBundle = false;
     const publicDestination = path.join(
       layout.runtimeRoot,
       "manifests",
@@ -575,6 +579,11 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
       "exercise-solutions",
       `${catalogEntry.id}.private.json`,
     );
+    const bundleDestination = path.join(
+      layout.runtimeRoot,
+      "exercise-solutions",
+      `${catalogEntry.id}.release.json`,
+    );
     const second = await promoteExerciseRelease({
       jobId: "job-test",
       bookId: catalogEntry.id,
@@ -585,16 +594,29 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
       now: () => new Date("2026-07-25T00:20:00.000Z"),
       hooks: {
         verifyRuntimeArtifacts: verifiedFixtureRuntime,
-        afterPrivateActivation: async () => {
-          const activePrivate = JSON.parse(
-            await readFile(privateDestination, "utf8"),
+        afterBundleActivation: async () => {
+          const activeBundle = JSON.parse(
+            await readFile(bundleDestination, "utf8"),
           );
-          const activePublic = JSON.parse(
-            await readFile(publicDestination, "utf8"),
-          );
-          expect(activePrivate.solutions[0].revision).toBe(2);
-          expect(activePublic.exercises[0].revision).toBe(1);
-          observedPrivateBeforePublic = true;
+          expect(
+            activeBundle.privateManifest.solutions[0].revision,
+          ).toBe(2);
+          expect(
+            activeBundle.publicManifest.exercises[0].revision,
+          ).toBe(2);
+          // Compatibility mirrors have not moved yet, but no reader can mix
+          // them with the authoritative bundle.
+          expect(
+            JSON.parse(
+              await readFile(privateDestination, "utf8"),
+            ).solutions[0].revision,
+          ).toBe(1);
+          expect(
+            JSON.parse(
+              await readFile(publicDestination, "utf8"),
+            ).exercises[0].revision,
+          ).toBe(1);
+          observedAtomicBundle = true;
         },
       },
     });
@@ -604,7 +626,7 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
       publishedExercises: 1,
       previousReleaseSnapshot: true,
     });
-    expect(observedPrivateBeforePublic).toBe(true);
+    expect(observedAtomicBundle).toBe(true);
     expect(
       JSON.parse(await readFile(publicDestination, "utf8")).exercises[0]
         .revision,
@@ -615,6 +637,7 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
     ).toBe(2);
     expect((await lstat(publicDestination)).mode & 0o777).toBe(0o640);
     expect((await lstat(privateDestination)).mode & 0o777).toBe(0o640);
+    expect((await lstat(bundleDestination)).mode & 0o777).toBe(0o640);
 
     const snapshotRoot = path.join(
       layout.runtimeRoot,
@@ -627,6 +650,15 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
           snapshotRoot,
           "new",
           `${catalogEntry.id}.public.json`,
+        ),
+      ),
+    ).resolves.toBeInstanceOf(Buffer);
+    await expect(
+      readFile(
+        path.join(
+          snapshotRoot,
+          "new",
+          `${catalogEntry.id}.release.json`,
         ),
       ),
     ).resolves.toBeInstanceOf(Buffer);
@@ -700,7 +732,45 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("restaura el privado anterior si falla la activación pública", async () => {
+  it("recupera un lock antiguo sólo cuando su proceso ya no existe", async () => {
+    const layout = await testLayout("job-stale-lock");
+    await writeReviewedPair(layout.jobDirectory, 1);
+    const lockPath = path.join(
+      layout.runtimeRoot,
+      ".exercise-release.lock",
+    );
+    await writeFile(
+      lockPath,
+      `${JSON.stringify({
+        pid: 2_147_483_647,
+        uid: operatorUid,
+        createdAt: "2020-01-01T00:00:00.000Z",
+      })}\n`,
+      { mode: 0o600 },
+    );
+    await chmod(lockPath, 0o600);
+
+    await expect(
+      promoteExerciseRelease({
+        jobId: "job-stale-lock",
+        bookId: catalogEntry.id,
+        ingestRoot: layout.ingestRoot,
+        runtimeRoot: layout.runtimeRoot,
+        releaseId: "release-after-stale-lock",
+        currentUid: operatorUid,
+        hooks: {
+          verifyRuntimeArtifacts: verifiedFixtureRuntime,
+        },
+      }),
+    ).resolves.toMatchObject({
+      releaseId: "release-after-stale-lock",
+    });
+    await expect(lstat(lockPath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("restaura el bundle anterior si falla después de activarlo", async () => {
     const layout = await testLayout();
     await writeReviewedPair(layout.jobDirectory, 1);
     await promoteExerciseRelease({
@@ -726,8 +796,14 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
       "exercise-solutions",
       `${catalogEntry.id}.private.json`,
     );
+    const bundleDestination = path.join(
+      layout.runtimeRoot,
+      "exercise-solutions",
+      `${catalogEntry.id}.release.json`,
+    );
     const previousPublic = await readFile(publicDestination);
     const previousPrivate = await readFile(privateDestination);
+    const previousBundle = await readFile(bundleDestination);
 
     await writeReviewedPair(layout.jobDirectory, 2);
     await expect(
@@ -740,8 +816,8 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
         currentUid: operatorUid,
         hooks: {
           verifyRuntimeArtifacts: verifiedFixtureRuntime,
-          afterPrivateActivation: () => {
-            throw new Error("fallo simulado antes del público");
+          afterBundleActivation: () => {
+            throw new Error("fallo simulado tras activar el bundle");
           },
         },
       }),
@@ -752,6 +828,9 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
     );
     await expect(readFile(privateDestination)).resolves.toEqual(
       previousPrivate,
+    );
+    await expect(readFile(bundleDestination)).resolves.toEqual(
+      previousBundle,
     );
     await expect(
       lstat(path.join(layout.runtimeRoot, ".exercise-release.lock")),

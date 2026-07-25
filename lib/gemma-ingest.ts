@@ -18,6 +18,9 @@ const MAX_SOLUTION_IMAGES = 6;
 const DETECTION_FUNCTION = "submit_exercise_detection";
 const SOLUTION_FUNCTION = "submit_exercise_solution";
 
+export const EXERCISE_INGEST_CONTRACT_VERSION =
+  "aimauta-exercise-contract-v1" as const;
+
 const base64Pattern =
   /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u;
 const safeIdentifierPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/u;

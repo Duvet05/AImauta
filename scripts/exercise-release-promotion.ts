@@ -28,6 +28,11 @@ import {
   type PublicExerciseManifest,
 } from "@/lib/exercise-manifest";
 import {
+  encodeExerciseReleaseBundle,
+  parseExerciseReleaseBundle,
+} from "@/lib/exercise-release-bundle";
+import { EXERCISE_INGEST_CONTRACT_VERSION } from "@/lib/gemma-ingest";
+import {
   BOOK_INDEX_VERSION,
   INDEX_EXTRACTOR_VERSION,
 } from "@/lib/retrieval";
@@ -46,6 +51,8 @@ const MAX_INDEX_BYTES = 64 * 1024 * 1024;
 const MAX_CHUNKS_PER_PAGE = 50;
 const MAX_CHUNK_TEXT_LENGTH = 50_000;
 const MAX_CHUNK_ID_LENGTH = 240;
+const MAX_LOCK_BYTES = 4_096;
+const STALE_LOCK_AGE_MS = 5 * 60_000;
 const safeIdPattern = /^[a-z0-9]+(?:[a-z0-9._-]*[a-z0-9])?$/u;
 const allowedIndexKinds = new Set([
   "content",
@@ -88,6 +95,8 @@ export type ExerciseReleasePromotionInput = {
   currentUid?: number;
   now?: () => Date;
   hooks?: {
+    afterBundleActivation?: () => void | Promise<void>;
+    /** @deprecated Use afterBundleActivation in transaction tests. */
     afterPrivateActivation?: () => void | Promise<void>;
     /**
      * Transaction tests replace only this expensive read. The CLI never
@@ -385,7 +394,7 @@ export async function verifyRuntimeBookArtifacts(
     readStableOwnedFile(pdfPath, {
       expectedUid: input.expectedUid,
       maximumBytes: input.book.expectedBytes,
-      expectedMode: 0o444,
+      expectedMode: 0o640,
     }),
     readStableOwnedFile(indexPath, {
       expectedUid: input.expectedUid,
@@ -459,7 +468,7 @@ export function validateExerciseIngestionReport(
   if (!isRecord(value)) {
     validationFailure(["coverage.invalid-report $"]);
   }
-  if (value.schemaVersion !== 2) {
+  if (value.schemaVersion !== 3) {
     details.push("coverage.invalid-schema-version $.schemaVersion");
   }
   if (value.bookId !== publicManifest.bookId) {
@@ -467,6 +476,19 @@ export function validateExerciseIngestionReport(
   }
   if (value.sourceSha256 !== publicManifest.sourceSha256) {
     details.push("coverage.source-mismatch $.sourceSha256");
+  }
+  if (value.provider !== "ollama" && value.provider !== "google") {
+    details.push("coverage.invalid-provider $.provider");
+  }
+  if (
+    (value.provider === "ollama" && value.endpointScope !== "loopback") ||
+    (value.provider === "google" &&
+      value.endpointScope !== "google-api")
+  ) {
+    details.push("coverage.invalid-endpoint-scope $.endpointScope");
+  }
+  if (value.contractVersion !== EXERCISE_INGEST_CONTRACT_VERSION) {
+    details.push("coverage.contract-version $.contractVersion");
   }
   if (value.model !== publicManifest.model) {
     details.push("coverage.model-mismatch $.model");
@@ -742,6 +764,7 @@ async function restoreDestination(input: {
 async function optionalPublishedFile(
   filePath: string,
   expectedUid: number,
+  maximumBytes = MAX_MANIFEST_BYTES,
 ): Promise<Buffer | null> {
   const metadata = await lstat(filePath).catch((error: unknown) => {
     if (
@@ -758,7 +781,7 @@ async function optionalPublishedFile(
   }
   return readStableOwnedFile(filePath, {
     expectedUid,
-    maximumBytes: MAX_MANIFEST_BYTES,
+    maximumBytes,
     expectedMode: 0o640,
   });
 }
@@ -833,36 +856,111 @@ async function acquirePromotionLock(
     runtimeRoot,
     path.join(runtimeRoot, ".exercise-release.lock"),
   );
-  let handle: FileHandle | null = null;
-  try {
-    handle = await open(
-      lockPath,
-      constants.O_WRONLY |
-        constants.O_CREAT |
-        constants.O_EXCL |
-        constants.O_NOFOLLOW,
-      0o600,
-    );
-    await handle.chmod(0o600);
-    await handle.writeFile(
-      `${JSON.stringify({
-        pid: process.pid,
-        uid: expectedUid,
-        createdAt: new Date().toISOString(),
-      })}\n`,
-    );
-    await handle.sync();
-    await syncDirectory(runtimeRoot);
-  } catch {
-    if (handle) {
-      await handle.close().catch(() => undefined);
-      await removeIfPresent(lockPath).catch(() => undefined);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let handle: FileHandle | null = null;
+    try {
+      handle = await open(
+        lockPath,
+        constants.O_WRONLY |
+          constants.O_CREAT |
+          constants.O_EXCL |
+          constants.O_NOFOLLOW,
+        0o600,
+      );
+      await handle.chmod(0o600);
+      await handle.writeFile(
+        `${JSON.stringify({
+          pid: process.pid,
+          uid: expectedUid,
+          createdAt: new Date().toISOString(),
+        })}\n`,
+      );
+      await handle.sync();
+      await syncDirectory(runtimeRoot);
+      return { handle, path: lockPath };
+    } catch (error) {
+      if (handle) {
+        await handle.close().catch(() => undefined);
+        await removeIfPresent(lockPath).catch(() => undefined);
+      }
+      const code =
+        error instanceof Error &&
+        "code" in error &&
+        typeof error.code === "string"
+          ? error.code
+          : "";
+      if (
+        attempt === 0 &&
+        code === "EEXIST" &&
+        (await removeStalePromotionLock(
+          lockPath,
+          runtimeRoot,
+          expectedUid,
+        ))
+      ) {
+        continue;
+      }
+      break;
     }
-    throw new ExerciseReleasePromotionError(
-      "Ya existe una promoción en curso o un lock pendiente de revisión.",
-    );
   }
-  return { handle, path: lockPath };
+  throw new ExerciseReleasePromotionError(
+    "Ya existe una promoción en curso o un lock pendiente de revisión.",
+  );
+}
+
+async function removeStalePromotionLock(
+  lockPath: string,
+  runtimeRoot: string,
+  expectedUid: number,
+): Promise<boolean> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(
+      (
+        await readStableOwnedFile(lockPath, {
+          expectedUid,
+          maximumBytes: MAX_LOCK_BYTES,
+          expectedMode: 0o600,
+        })
+      ).toString("utf8"),
+    ) as unknown;
+  } catch {
+    return false;
+  }
+  if (
+    !isRecord(parsed) ||
+    !Number.isSafeInteger(parsed.pid) ||
+    Number(parsed.pid) < 1 ||
+    parsed.uid !== expectedUid ||
+    typeof parsed.createdAt !== "string"
+  ) {
+    return false;
+  }
+  const createdAt = Date.parse(parsed.createdAt);
+  if (
+    !Number.isFinite(createdAt) ||
+    Date.now() - createdAt < STALE_LOCK_AGE_MS
+  ) {
+    return false;
+  }
+
+  try {
+    process.kill(Number(parsed.pid), 0);
+    return false;
+  } catch (error) {
+    if (
+      !(
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ESRCH"
+      )
+    ) {
+      return false;
+    }
+  }
+  await unlink(lockPath);
+  await syncDirectory(runtimeRoot);
+  return true;
 }
 
 async function releasePromotionLock(lock: {
@@ -1007,6 +1105,7 @@ export async function promoteExerciseRelease(
 
   const publicName = `${input.bookId}.public.json`;
   const privateName = `${input.bookId}.private.json`;
+  const bundleName = `${input.bookId}.release.json`;
   const coverageName = `${input.bookId}.ingestion-report.json`;
   const publicDestination = directChildPath(
     publicDirectory,
@@ -1016,6 +1115,16 @@ export async function promoteExerciseRelease(
     privateDirectory,
     path.join(privateDirectory, privateName),
   );
+  const bundleDestination = directChildPath(
+    privateDirectory,
+    path.join(privateDirectory, bundleName),
+  );
+  const bundleBytes = encodeExerciseReleaseBundle({
+    releaseId,
+    bookId: input.bookId,
+    publicManifest: validated.publicManifest,
+    privateManifest: validated.privateManifest,
+  });
 
   if (
     input.hooks?.verifyRuntimeArtifacts &&
@@ -1034,28 +1143,58 @@ export async function promoteExerciseRelease(
     expectedUid,
   });
   const lock = await acquirePromotionLock(runtimeRoot, expectedUid);
+  let bundleTemporary: string | null = null;
   let privateTemporary: string | null = null;
   let publicTemporary: string | null = null;
+  let bundleActivated = false;
   let privateActivated = false;
   let publicActivated = false;
 
   try {
-    const [previousPublic, previousPrivate] = await Promise.all([
+    const [legacyPublic, legacyPrivate, previousBundleBytes] =
+      await Promise.all([
       optionalPublishedFile(publicDestination, expectedUid),
       optionalPublishedFile(privateDestination, expectedUid),
+      optionalPublishedFile(
+        bundleDestination,
+        expectedUid,
+        MAX_MANIFEST_BYTES * 2,
+      ),
     ]);
-    if (Boolean(previousPublic) !== Boolean(previousPrivate)) {
+    if (
+      !previousBundleBytes &&
+      Boolean(legacyPublic) !== Boolean(legacyPrivate)
+    ) {
       throw new ExerciseReleasePromotionError(
         "El release activo está incompleto; se requiere reparación manual.",
       );
     }
-    if (previousPublic && previousPrivate) {
+    let previousPublic = legacyPublic;
+    let previousPrivate = legacyPrivate;
+    if (previousBundleBytes) {
+      let previousBundle;
+      try {
+        previousBundle = parseExerciseReleaseBundle(previousBundleBytes);
+      } catch {
+        throw new ExerciseReleasePromotionError(
+          "El release atómico activo es inválido; se requiere reparación manual.",
+        );
+      }
+      if (previousBundle.bookId !== input.bookId) {
+        throw new ExerciseReleasePromotionError(
+          "El release atómico activo pertenece a otro libro.",
+        );
+      }
+      previousPublic = canonicalBytes(previousBundle.publicManifest);
+      previousPrivate = canonicalBytes(previousBundle.privateManifest);
+    } else if (previousPublic && previousPrivate) {
       validateReviewedExerciseRelease(
         previousPublic.toString("utf8"),
         previousPrivate.toString("utf8"),
         input.bookId,
       );
     }
+    const hadPrevious = Boolean(previousPublic && previousPrivate);
 
     const snapshot = await createReleaseDirectory(
       releasesDirectory,
@@ -1074,6 +1213,11 @@ export async function promoteExerciseRelease(
     );
     await writeSnapshotFile(
       snapshot.next,
+      bundleName,
+      bundleBytes,
+    );
+    await writeSnapshotFile(
+      snapshot.next,
       coverageName,
       validatedCoverage.bytes,
     );
@@ -1088,6 +1232,13 @@ export async function promoteExerciseRelease(
         privateName,
         previousPrivate,
       );
+      if (previousBundleBytes) {
+        await writeSnapshotFile(
+          snapshot.previous,
+          bundleName,
+          previousBundleBytes,
+        );
+      }
     }
     await syncDirectory(snapshot.next);
     await syncDirectory(snapshot.previous);
@@ -1100,7 +1251,7 @@ export async function promoteExerciseRelease(
         jobId: input.jobId,
         createdAt: (input.now ?? (() => new Date()))().toISOString(),
         status: "prepared",
-        hadPrevious: Boolean(previousPublic),
+        hadPrevious,
         runtimeArtifacts,
         coverageReport: coverageReportMetadata,
       },
@@ -1108,6 +1259,12 @@ export async function promoteExerciseRelease(
     );
     await syncDirectory(releasesDirectory);
 
+    bundleTemporary = await stageReplacement(
+      privateDirectory,
+      bundleName,
+      bundleBytes,
+      releaseId,
+    );
     privateTemporary = await stageReplacement(
       privateDirectory,
       privateName,
@@ -1121,12 +1278,22 @@ export async function promoteExerciseRelease(
       releaseId,
     );
 
+    // This is the only runtime activation point. Both public exercise data and
+    // private reviewed guidance become visible through one atomic rename.
+    await rename(bundleTemporary, bundleDestination);
+    bundleTemporary = null;
+    bundleActivated = true;
+    await syncDirectory(privateDirectory);
+
+    await input.hooks?.afterBundleActivation?.();
+    await input.hooks?.afterPrivateActivation?.();
+
+    // Compatibility mirrors are updated only after the authoritative bundle.
+    // A crash here cannot expose mixed revisions because readers prefer it.
     await rename(privateTemporary, privateDestination);
     privateTemporary = null;
     privateActivated = true;
     await syncDirectory(privateDirectory);
-
-    await input.hooks?.afterPrivateActivation?.();
 
     await rename(publicTemporary, publicDestination);
     publicTemporary = null;
@@ -1142,7 +1309,7 @@ export async function promoteExerciseRelease(
         jobId: input.jobId,
         createdAt: (input.now ?? (() => new Date()))().toISOString(),
         status: "published",
-        hadPrevious: Boolean(previousPublic),
+        hadPrevious,
         runtimeArtifacts,
         coverageReport: coverageReportMetadata,
       },
@@ -1155,10 +1322,11 @@ export async function promoteExerciseRelease(
       publishedExercises: validated.publicManifest.exercises.filter(
         (exercise) => exercise.status === "published",
       ).length,
-      previousReleaseSnapshot: Boolean(previousPublic),
+      previousReleaseSnapshot: hadPrevious,
     };
   } catch (error) {
     await Promise.allSettled([
+      removeIfPresent(bundleTemporary),
       removeIfPresent(privateTemporary),
       removeIfPresent(publicTemporary),
     ]);
@@ -1200,6 +1368,28 @@ export async function promoteExerciseRelease(
           directory: privateDirectory,
           finalPath: privateDestination,
           previous: previousPrivate,
+          releaseId,
+        });
+      } catch (rollbackError) {
+        rollbackFailures.push(rollbackError);
+      }
+    }
+    if (bundleActivated) {
+      try {
+        const previousBundle = await optionalPublishedFile(
+          path.join(
+            releasesDirectory,
+            releaseId,
+            "previous",
+            bundleName,
+          ),
+          expectedUid,
+          MAX_MANIFEST_BYTES * 2,
+        );
+        await restoreDestination({
+          directory: privateDirectory,
+          finalPath: bundleDestination,
+          previous: previousBundle,
           releaseId,
         });
       } catch (rollbackError) {

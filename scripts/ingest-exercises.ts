@@ -14,6 +14,7 @@ import {
   type SolveExerciseCallback,
 } from "@/lib/exercise-ingestion";
 import {
+  EXERCISE_INGEST_CONTRACT_VERSION,
   detectExerciseWindowWithGemma,
   solveExerciseWithGemma,
 } from "@/lib/gemma-ingest";
@@ -353,12 +354,13 @@ async function main(): Promise<void> {
     publicManifest: result.publicManifest,
     privateManifest: result.privateManifest,
     report: {
-      schemaVersion: 2,
+      schemaVersion: 3,
       bookId: options.bookId,
       sourceSha256: result.publicManifest.sourceSha256,
       provider: options.provider,
       endpointScope:
         options.provider === "ollama" ? "loopback" : "google-api",
+      contractVersion: EXERCISE_INGEST_CONTRACT_VERSION,
       model: options.model,
       generatedAt: result.publicManifest.generatedAt,
       exerciseCount: result.publicManifest.exercises.length,

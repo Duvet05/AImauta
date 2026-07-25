@@ -8,6 +8,7 @@ import {
   type LearningStage
 } from "@/lib/curriculum";
 import type { PublicExercise } from "@/lib/exercise-manifest";
+import { loadExerciseReleaseBundle } from "@/lib/exercise-release-bundle";
 
 export const BOOK_INDEX_VERSION = 2 as const;
 export const INDEX_EXTRACTOR_VERSION =
@@ -216,10 +217,9 @@ export function rankChunks(input: {
 }
 
 /**
- * Retrieves validated index chunks for the exact, revisioned exercise selected
- * by the student. The current index has page-level chunks, so a public exercise
- * anchor is required in addition to the page and curriculum binding. Ambiguous
- * or unanchored chunks fail closed instead of becoming tutor context.
+ * Retrieves the human-reviewed transcription bound to the exact exercise
+ * revision and regions in the atomic release. Generic page chunks remain
+ * useful for browsing, but are never relabelled as exercise evidence.
  */
 export async function retrieveExerciseEvidence(input: {
   bookId: string;
@@ -232,13 +232,9 @@ export async function retrieveExerciseEvidence(input: {
   const pages = [
     ...new Set(exercise.regions.map((region) => region.page))
   ].sort((left, right) => left - right);
-  const anchor = [exercise.title.trim(), exercise.prompt.trim()]
-    .filter(Boolean)
-    .join("\n");
   if (
     exercise.status !== "published" ||
     !exercise.id ||
-    exerciseAnchorTokens(anchor).size < 3 ||
     pages.length === 0 ||
     !pages.includes(input.page) ||
     (exercise.stage !== "learn" && exercise.stage !== "practice")
@@ -259,28 +255,61 @@ export async function retrieveExerciseEvidence(input: {
     return [];
   }
 
-  const evidence = await retrieveEvidence({
-    bookId: input.bookId,
-    question: [anchor, input.question.trim()].filter(Boolean).join("\n"),
-    attempt: input.attempt,
-    page: input.page,
-    allowedPages: pages,
-    requiredAnchor: anchor
-  });
+  let bundle;
+  try {
+    bundle = await loadExerciseReleaseBundle(input.bookId);
+  } catch {
+    return [];
+  }
+  if (!bundle || bundle.bookId !== input.bookId) {
+    return [];
+  }
+  const releasedExercise = bundle.publicManifest.exercises.find(
+    (candidate) =>
+      candidate.id === exercise.id &&
+      candidate.status === "published" &&
+      candidate.revision === exercise.revision
+  );
+  const releasedEvidence = bundle.evidence.find(
+    (candidate) =>
+      candidate.exerciseId === exercise.id &&
+      candidate.revision === exercise.revision &&
+      candidate.sourceSha256 === bundle.publicManifest.sourceSha256
+  );
+  if (
+    !releasedExercise ||
+    !releasedEvidence ||
+    releasedExercise.unitId !== exercise.unitId ||
+    releasedExercise.stage !== exercise.stage ||
+    releasedExercise.prompt !== exercise.prompt ||
+    releasedEvidence.text !== exercise.prompt ||
+    releasedEvidence.unitId !== exercise.unitId ||
+    releasedEvidence.stage !== exercise.stage ||
+    releasedEvidence.regions.length !== exercise.regions.length ||
+    releasedEvidence.regions.some((region, index) => {
+      const selected = exercise.regions[index];
+      return (
+        !selected ||
+        region.id !== selected.id ||
+        region.page !== selected.page
+      );
+    })
+  ) {
+    return [];
+  }
 
-  return evidence
-    .filter(
-      (item) =>
-        !item.teacherOnly &&
-        item.stage === exercise.stage &&
-        item.unitId === exercise.unitId &&
-        pages.includes(item.page)
-    )
-    .map((item, index) => ({
-      ...item,
-      exerciseId: exercise.id,
-      sourceId: `S${index + 1}`
-    }));
+  return releasedEvidence.regions.map((region, index) => ({
+    id: `${releasedEvidence.id}:${region.id}`,
+    exerciseId: exercise.id,
+    page: region.page,
+    text: releasedEvidence.text,
+    kind: "exercise",
+    teacherOnly: false,
+    stage: releasedEvidence.stage,
+    unitId: releasedEvidence.unitId,
+    score: 100 - index,
+    sourceId: `S${index + 1}`
+  }));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

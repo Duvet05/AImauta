@@ -107,7 +107,7 @@ async function syncBook(
       if (book.expectedSha256 && digest !== book.expectedSha256) {
         throw new Error(`${book.id}: el checksum no coincide con el catálogo`);
       }
-      await fs.chmod(destination, 0o444);
+      await fs.chmod(destination, 0o640);
       return {
         bookId: book.id,
         file: destination,
@@ -190,7 +190,7 @@ async function syncBook(
       throw new Error(`${book.id}: el checksum no coincide con el catálogo`);
     }
     await fs.rename(temporary, destination);
-    await fs.chmod(destination, 0o444);
+    await fs.chmod(destination, 0o640);
     return {
       bookId: book.id,
       file: destination,
