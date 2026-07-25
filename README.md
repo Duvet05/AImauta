@@ -132,7 +132,7 @@ La importación usa **exclusivamente** la descarga oficial del MINEDU; los metad
 | **Avatar 3D** | Three.js · modelo MakeHuman CC0, local |
 | **Datos** | Prisma · PostgreSQL |
 | **Tutor / IA** | Ollama + **Gemma** · RAG por página |
-| **Voz** | LiveKit Cloud Inference (Deepgram Nova-3 / Aura-2 · Silero VAD) |
+| **Voz** | LiveKit Cloud Inference (Deepgram Nova-3 / Inworld TTS 2 · Silero VAD) |
 | **Pruebas** | Vitest |
 | **Licencia** | MIT |
 

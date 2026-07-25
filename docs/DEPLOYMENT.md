@@ -349,9 +349,9 @@ AIMAUTA_AGENT_SECRET=el-mismo-valor-configurado-en-nextjs
 REQUEST_TIMEOUT_SECONDS=50
 STT_MODEL=deepgram/nova-3
 STT_LANGUAGE=es-419
-TTS_MODEL=deepgram/aura-2
-TTS_VOICE=selena
-TTS_LANGUAGE=es-419
+TTS_MODEL=inworld/inworld-tts-2
+TTS_VOICE=Diego
+TTS_LANGUAGE=es
 MAX_SESSION_SECONDS=600
 ```
 
