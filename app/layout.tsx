@@ -10,6 +10,16 @@ export const metadata: Metadata = {
   },
   description:
     "Un espacio de aprendizaje guiado para explorar materiales escolares y construir tus propias respuestas.",
+  icons: {
+    icon: [
+      {
+        url: "/brand/amauta-icon.svg",
+        type: "image/svg+xml",
+      },
+    ],
+    shortcut: "/brand/amauta-icon.svg",
+    apple: "/brand/amauta-apple-touch.png",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

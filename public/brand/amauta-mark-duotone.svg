@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 360" role="img" aria-labelledby="amauta-mark-title amauta-mark-desc">
+  <title id="amauta-mark-title">Símbolo de Amauta</title>
+  <desc id="amauta-mark-desc">Rostro asimétrico de un amauta con chullo, inspirado en un grabado peruano.</desc>
+  <defs>
+    <path id="chevron" d="M0 0h11l10 8-10 8H0L10 8 0 0Z"/>
+  </defs>
+
+  <!-- Silueta: chullo, orejeras y base del rostro. -->
+  <path fill="#172d2a" d="M35 343V120C35 48 82 14 163 14c78 0 119 43 119 117v74c18 5 29 22 29 47 0 39-27 68-70 76-21 18-51 27-88 27-38 0-72-11-95-31l-23 19Z"/>
+
+  <!-- Rostro y orejera derecha, deliberadamente asimétricos. -->
+  <path fill="#ee8068" d="M82 133c44-17 112-20 178-5l7 93c5 58-26 96-85 105-55 8-101-23-101-84l1-109Z"/>
+  <path fill="#ee8068" d="M267 220c19 0 30 15 30 36 0 24-14 43-37 51 7-16 11-34 10-55l-3-32Z"/>
+
+  <!-- Banda del chullo y motivos tejidos. -->
+  <path fill="#ee8068" d="M70 116c50-17 132-18 199-4l-2 22c-62-14-140-12-190 5l-7-23Z"/>
+  <g fill="#ee8068">
+    <use href="#chevron" x="67" y="42"/>
+    <use href="#chevron" x="103" y="34"/>
+    <use href="#chevron" x="139" y="31"/>
+    <use href="#chevron" x="175" y="34"/>
+    <use href="#chevron" x="211" y="43"/>
+    <use href="#chevron" x="55" y="67"/>
+    <use href="#chevron" x="88" y="60"/>
+    <use href="#chevron" x="121" y="57"/>
+    <use href="#chevron" x="154" y="57"/>
+    <use href="#chevron" x="187" y="60"/>
+    <use href="#chevron" x="220" y="68"/>
+    <use href="#chevron" x="50" y="91"/>
+    <use href="#chevron" x="84" y="85"/>
+    <use href="#chevron" x="118" y="82"/>
+    <use href="#chevron" x="152" y="82"/>
+    <use href="#chevron" x="186" y="85"/>
+    <use href="#chevron" x="220" y="92"/>
+  </g>
+
+  <!-- Caída lateral del chullo. -->
+  <path fill="#ee8068" d="M48 136h8v76h-8zM63 132h5v92h-5zM49 232l13-12 13 12-13 12-13-12Zm-3 83 17-16 17 16 16-15 10 10-26 25-17-16-17 16-11-11 11-9Z"/>
+  <path fill="#172d2a" d="M42 257h39v9H42zM42 274h39v8H42z"/>
+
+  <!-- Orejeras circulares. -->
+  <path fill="#172d2a" fill-rule="evenodd" d="M49 224c26 0 46 22 46 50s-20 50-46 50V224Zm13 18v64c12-6 19-17 19-32 0-14-7-26-19-32Z"/>
+  <path fill="#ee8068" d="m66 247 9 7-6 7 7 8-7 8 7 8-10 14-5-7 6-8-7-8 7-8-7-8 6-13Zm208 3c12 0 19 9 19 22 0 12-7 23-19 29l4-12-7-8 7-8-7-8 3-15Z"/>
+
+  <!-- Ojos, cejas y reflejos de tinta. -->
+  <path fill="#172d2a" d="M96 166c21-12 45-9 64 8-16 18-45 17-64-8Zm82 5c18-15 42-18 64-7-14 20-44 23-64 7Z"/>
+  <path fill="#ee8068" d="M116 164c8 1 15 5 21 11-8 2-15 1-22-3l1-8Zm82 4c7-5 15-7 24-6-5 7-12 11-21 12l-3-6Z"/>
+  <path fill="none" stroke="#172d2a" stroke-linecap="round" stroke-width="9" d="M92 151c20-11 44-12 65-2m24 1c20-12 43-13 65-4"/>
+
+  <!-- Nariz, boca y pequeña marca del mentón. -->
+  <path fill="none" stroke="#172d2a" stroke-linecap="round" stroke-linejoin="round" stroke-width="12" d="M209 148c8 35 11 72 10 104 0 12-7 17-19 17h-24"/>
+  <path fill="none" stroke="#172d2a" stroke-linecap="round" stroke-width="12" d="M139 291c24 5 48 4 72-2"/>
+  <path fill="none" stroke="#172d2a" stroke-linecap="round" stroke-width="9" d="M180 309l17-10"/>
+</svg>

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 360" role="img" aria-labelledby="amauta-mono-title amauta-mono-desc">
+  <title id="amauta-mono-title">Símbolo monocromo de Amauta</title>
+  <desc id="amauta-mono-desc">Rostro asimétrico de un amauta con chullo, dibujado en una sola tinta adaptable.</desc>
+  <defs>
+    <path id="mono-chevron" d="M0 0h11l10 8-10 8H0L10 8 0 0Z"/>
+  </defs>
+
+  <path fill="currentColor" d="M35 343V120C35 48 82 14 163 14c78 0 119 43 119 117v77h-17l-5-80c-66-15-134-12-178 5l-1 109c0 61 46 92 101 84 33-5 58-19 72-41l13 9c-7 12-16 23-27 32-21 19-50 29-87 29-38 0-72-11-95-31l-23 19Z"/>
+  <path fill="currentColor" d="M70 116c50-17 132-18 199-4l-2 22c-62-14-140-12-190 5l-7-23Z"/>
+  <g fill="currentColor">
+    <use href="#mono-chevron" x="67" y="42"/>
+    <use href="#mono-chevron" x="103" y="34"/>
+    <use href="#mono-chevron" x="139" y="31"/>
+    <use href="#mono-chevron" x="175" y="34"/>
+    <use href="#mono-chevron" x="211" y="43"/>
+    <use href="#mono-chevron" x="55" y="69"/>
+    <use href="#mono-chevron" x="91" y="61"/>
+    <use href="#mono-chevron" x="127" y="58"/>
+    <use href="#mono-chevron" x="163" y="60"/>
+    <use href="#mono-chevron" x="199" y="68"/>
+    <use href="#mono-chevron" x="64" y="91"/>
+    <use href="#mono-chevron" x="100" y="85"/>
+    <use href="#mono-chevron" x="136" y="83"/>
+    <use href="#mono-chevron" x="172" y="85"/>
+    <use href="#mono-chevron" x="208" y="92"/>
+  </g>
+
+  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke-width="9" d="M92 151c20-11 44-12 65-2m24 1c20-12 43-13 65-4"/>
+    <path stroke-width="10" d="M96 166c21-12 45-9 64 8-16 18-45 17-64-8Zm82 5c18-15 42-18 64-7-14 20-44 23-64 7Z"/>
+    <path stroke-width="12" d="M209 148c8 35 11 72 10 104 0 12-7 17-19 17h-24M139 291c24 5 48 4 72-2"/>
+    <path stroke-width="9" d="M180 309l17-10M48 136v76m15-80v92m-15 91 15-14 17 16 17-16"/>
+    <path stroke-width="8" d="M274 220c18 0 28 15 28 35 0 24-14 42-38 51"/>
+  </g>
+</svg>

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 import { BrandMark } from "@/components/brand-mark";
@@ -43,6 +44,15 @@ export default async function CatalogPage() {
           </div>
 
           <div className="hero-demo" aria-label="Ejemplo de una pista con fuente">
+            <div className="hero-editorial-figure" aria-hidden="true">
+              <Image
+                src="/brand/amauta-editorial.webp"
+                alt=""
+                fill
+                priority
+                sizes="(max-width: 980px) 0px, 300px"
+              />
+            </div>
             <div className="demo-orbit demo-orbit-one" aria-hidden="true" />
             <div className="demo-orbit demo-orbit-two" aria-hidden="true" />
             <div className="demo-card">
@@ -65,6 +75,14 @@ export default async function CatalogPage() {
                 <i />
                 <span>3</span>
               </div>
+            </div>
+            <div className="hero-amauta-guide" aria-hidden="true">
+              <Image
+                src="/brand/characters/amauta-points.webp"
+                alt=""
+                fill
+                sizes="(max-width: 980px) 0px, 220px"
+              />
             </div>
             <div className="demo-note demo-note-left" aria-hidden="true">
               <span>✦</span>

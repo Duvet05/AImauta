@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 48" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+  <defs>
+    <pattern id="amauta-divider-pattern" width="96" height="48" patternUnits="userSpaceOnUse">
+      <path fill="none" stroke="#172d2a" stroke-opacity=".22" stroke-width="2" d="M0 24h96"/>
+      <path fill="#ee8068" d="M4 15h8l10 9-10 9H4l10-9-10-9Zm32 0h8l10 9-10 9h-8l10-9-10-9Zm32 0h8l10 9-10 9h-8l10-9-10-9Z"/>
+      <path fill="#172d2a" d="M26 20h4v8h-4zM58 20h4v8h-4zM90 20h4v8h-4z"/>
+    </pattern>
+  </defs>
+  <path fill="url(#amauta-divider-pattern)" d="M0 0h1200v48H0z"/>
+</svg>

@@ -28,7 +28,9 @@ html {
 body {
   margin: 0;
   color: var(--ink);
-  background: var(--paper);
+  background:
+    linear-gradient(rgba(255, 253, 247, 0.96), rgba(255, 253, 247, 0.96)),
+    url("/brand/paper-texture.webp") center top / 640px auto repeat;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
@@ -98,11 +100,8 @@ svg {
   position: absolute;
   inset: 0;
   content: "";
-  opacity: 0.09;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.6) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.6) 1px, transparent 1px);
-  background-size: 48px 48px;
+  opacity: 0.075;
+  background: url("/brand/amauta-pattern.svg") center / 160px auto repeat;
   mask-image: linear-gradient(to right, transparent, black 50%, black);
 }
 
@@ -128,21 +127,21 @@ svg {
 
 .brand-mark {
   display: grid;
-  width: 2.15rem;
-  height: 2.15rem;
+  overflow: hidden;
+  width: 2.35rem;
+  height: 2.35rem;
+  padding: 0.2rem;
   place-items: center;
-  border-radius: 50%;
-  color: var(--forest-dark);
-  background: var(--lime);
+  border: 1px solid rgba(23, 45, 42, 0.12);
+  border-radius: 42% 42% 48% 48%;
+  background: #f5ead4;
+  box-shadow: 0 5px 14px rgba(11, 37, 32, 0.13);
 }
 
-.brand-mark svg {
-  width: 1.55rem;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.8;
+.brand-mark-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .brand-small {
@@ -152,10 +151,7 @@ svg {
 .brand-small .brand-mark {
   width: 1.9rem;
   height: 1.9rem;
-}
-
-.brand-small .brand-mark svg {
-  width: 1.35rem;
+  padding: 0.16rem;
 }
 
 .quiet-link {
@@ -269,8 +265,57 @@ svg {
 .hero-demo {
   position: relative;
   display: grid;
-  min-height: 390px;
+  min-height: 440px;
   place-items: center;
+  isolation: isolate;
+}
+
+.hero-editorial-figure {
+  position: absolute;
+  z-index: -1;
+  top: -1.5rem;
+  left: -2.25rem;
+  overflow: hidden;
+  width: 275px;
+  height: 345px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 48% 48% 1.5rem 1.5rem;
+  box-shadow: 0 28px 64px rgba(4, 29, 25, 0.2);
+  opacity: 0.32;
+  transform: rotate(2.5deg);
+}
+
+.hero-editorial-figure::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(
+    145deg,
+    rgba(23, 79, 70, 0.06),
+    rgba(16, 60, 54, 0.55)
+  );
+}
+
+.hero-editorial-figure img {
+  object-fit: cover;
+  object-position: 50% 42%;
+}
+
+.hero-amauta-guide {
+  position: absolute;
+  z-index: 1;
+  right: -3.75rem;
+  bottom: -3rem;
+  width: 215px;
+  height: 285px;
+  pointer-events: none;
+  filter: drop-shadow(0 18px 24px rgba(4, 29, 25, 0.24));
+  transform: scaleX(-1);
+}
+
+.hero-amauta-guide img {
+  object-fit: contain;
+  object-position: right bottom;
 }
 
 .demo-orbit {
@@ -300,7 +345,7 @@ svg {
   color: var(--ink);
   background: var(--paper);
   box-shadow: 0 35px 70px rgba(4, 29, 25, 0.34);
-  transform: rotate(-2deg);
+  transform: translateX(-2.25rem) rotate(-2deg);
 }
 
 .demo-card-top {
@@ -417,13 +462,13 @@ svg {
 
 .demo-note-left {
   bottom: 3.2rem;
-  left: 0.4rem;
+  left: -0.8rem;
   transform: rotate(4deg);
 }
 
 .demo-note-right {
   top: 3.7rem;
-  right: -0.2rem;
+  right: 0.9rem;
   transform: rotate(3deg);
 }
 
@@ -469,7 +514,18 @@ svg {
 }
 
 .library-section {
+  position: relative;
   padding-block: 7rem 6rem;
+}
+
+.library-section::before {
+  display: block;
+  width: min(22rem, 68vw);
+  height: 0.85rem;
+  margin: 0 auto 3.4rem;
+  content: "";
+  opacity: 0.72;
+  background: url("/brand/amauta-divider.svg") center / auto 100% repeat-x;
 }
 
 .section-heading {
@@ -1420,6 +1476,10 @@ svg {
 
   .library-section {
     padding-block: 5rem 4rem;
+  }
+
+  .library-section::before {
+    margin-bottom: 2.5rem;
   }
 
   .section-heading {
@@ -2542,8 +2602,8 @@ svg {
   height: 3.25rem;
 }
 
-.session-loading-mark .brand-mark svg {
-  width: 2.2rem;
+.session-loading-mark .brand-mark-image {
+  width: 100%;
 }
 
 .session-loading h2 {
