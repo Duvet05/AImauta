@@ -78,9 +78,5 @@ export const config = {
     "/api/courses/:path*",
     "/api/grades/:path*",
     "/api/levels/:path*",
-    // Assignment management is teacher-only: it lists who completed what and
-    // can revoke work in progress. The student-facing counterpart lives under
-    // /api/tareas/:token and stays public on purpose.
-    "/api/assignments/:path*",
   ],
 };
