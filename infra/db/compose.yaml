@@ -1,0 +1,33 @@
+name: aimauta-db
+
+# Local development Postgres for the Prisma-backed school directory
+# (level -> grade -> course -> student/teacher). Not the production topology:
+# no replication, no backup policy, no TLS. Bound to loopback only.
+services:
+  postgres:
+    image: postgres:16.14-alpine@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?copy infra/db/db.env.example to infra/db/db.env first}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?copy infra/db/db.env.example to infra/db/db.env first}
+      POSTGRES_DB: ${POSTGRES_DB:?copy infra/db/db.env.example to infra/db/db.env first}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - aimauta-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  aimauta-db-data:
+    name: aimauta-db-data

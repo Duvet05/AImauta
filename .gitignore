@@ -62,6 +62,7 @@ model-api-key*
 /infra/livekit/runtime/
 /infra/livekit/*.env
 !/infra/livekit/*.env.example
+/infra/db/db.env
 
 # vercel
 .vercel
