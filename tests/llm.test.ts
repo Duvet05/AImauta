@@ -53,6 +53,7 @@ const tutorInput = {
     canRevealSolution: false,
     maxOutputTokens: 12,
     stage: "learn" as const,
+    mode: "socratic" as const,
   },
 };
 

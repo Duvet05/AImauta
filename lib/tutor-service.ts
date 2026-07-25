@@ -12,8 +12,10 @@ import {
   buildTutorSystemPrompt,
   fallbackGuide,
   getTurnPolicy,
+  isSafeGuideMessage,
   isSafeTutorMessage,
   parseGuidanceDecision,
+  parseGuideMessage,
   renderGuidanceMove,
   type TurnPolicy
 } from "@/lib/pedagogy";
@@ -81,18 +83,25 @@ async function createGuidedMessage(input: {
       policy: input.policy
     });
     const rawMove = inference?.content ?? null;
-    const decision = rawMove ? parseGuidanceDecision(rawMove) : null;
-    if (decision) {
-      tutorMessage = renderGuidanceMove({
-        move: decision.move,
-        attempted: input.attempt.trim().length >= 3,
-        question: decision.question
-      });
-    }
-    if (tutorMessage && isSafeTutorMessage(tutorMessage)) {
-      mode = inference?.provider ?? "guided-fallback";
+    if (input.policy.mode === "socratic") {
+      const decision = rawMove ? parseGuidanceDecision(rawMove) : null;
+      if (decision) {
+        tutorMessage = renderGuidanceMove({
+          move: decision.move,
+          attempted: input.attempt.trim().length >= 3,
+          question: decision.question
+        });
+      }
+      if (!tutorMessage || !isSafeTutorMessage(tutorMessage)) {
+        tutorMessage = null;
+      }
     } else {
-      tutorMessage = null;
+      const guidance = rawMove ? parseGuideMessage(rawMove) : null;
+      tutorMessage =
+        guidance && isSafeGuideMessage(guidance) ? guidance : null;
+    }
+    if (tutorMessage) {
+      mode = inference?.provider ?? "guided-fallback";
     }
   } catch {
     // Provider, quota and budget failures use the deterministic guide.
