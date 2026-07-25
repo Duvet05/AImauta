@@ -178,7 +178,8 @@ describe("tutor vinculado a ejercicio revisado", () => {
       },
     ]);
     dependencies.askTutorModel.mockResolvedValueOnce({
-      content: "OBSERVA",
+      content:
+        '{"guidance":"Mira la página 13: ahí comparas las cantidades del enunciado. ¿Qué notas primero?"}',
       provider: "openai",
     });
     const issued = issueLearningSession({ bookId, page: 13 });
@@ -289,7 +290,8 @@ describe("tutor vinculado a ejercicio revisado", () => {
 
   it("registra el proveedor que eligió el movimiento pedagógico", async () => {
     dependencies.askTutorModel.mockResolvedValueOnce({
-      content: "COMPRUEBA",
+      content:
+        '{"guidance":"Revisa si tu procedimiento compara numeradores y denominadores como pide el ejercicio."}',
       provider: "openai",
     });
 
@@ -308,7 +310,7 @@ describe("tutor vinculado a ejercicio revisado", () => {
     expect(result).toMatchObject({
       mode: "openai",
       message: expect.stringContaining(
-        "¿Qué parte de tu procedimiento puedes comprobar",
+        "Revisa si tu procedimiento compara numeradores y denominadores",
       ),
     });
   });

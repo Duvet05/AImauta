@@ -9,6 +9,7 @@ import {
 } from "@/lib/llm-budget";
 import {
   parseGuidanceMove,
+  parseGuideMessage,
   type TurnPolicy,
 } from "@/lib/pedagogy";
 
@@ -48,7 +49,7 @@ const MAX_STUDENT_MESSAGE_CHARACTERS = 800;
 const MAX_ATTEMPT_CHARACTERS = 1_200;
 const HARD_MAX_CONCURRENCY = 2;
 const HARD_MAX_ATTEMPTS_PER_MINUTE = 20;
-const HARD_MAX_OUTPUT_TOKENS = 72;
+const HARD_MAX_OUTPUT_TOKENS = 320;
 const MAX_PROVIDER_RESPONSE_BYTES = 64 * 1024;
 const APPROVED_GEMINI_MODEL = "gemini-3.6-flash";
 
@@ -233,8 +234,9 @@ function requestTimeoutMs(): number {
 }
 
 function maximumOutputTokens(policy: TurnPolicy): number {
-  // OpenAI Responses rejects values below 16. The strict label parser still
-  // limits the accepted semantic output to a single pedagogical move.
+  // OpenAI Responses rejects values below 16. The mode-specific parser still
+  // limits the accepted semantic output to a single pedagogical move
+  // (socratic) or a short bounded guidance message (guide).
   return Math.max(
     16,
     Math.min(policy.maxOutputTokens, HARD_MAX_OUTPUT_TOKENS),
@@ -585,7 +587,11 @@ export async function askTutorModel(
       }
       try {
         const result = await askProvider(config, input);
-        if (parseGuidanceMove(result.content)) {
+        const valid =
+          input.policy.mode === "socratic"
+            ? parseGuidanceMove(result.content) !== null
+            : parseGuideMessage(result.content) !== null;
+        if (valid) {
           return result;
         }
         failedProviders.push(provider);
