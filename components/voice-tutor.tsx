@@ -619,6 +619,22 @@ export function VoiceTutor({
               Reproducir audio del tutor
             </button>
           ) : null}
+          <aside
+            className="human-teacher-callout"
+            aria-label="Próximamente: hablar con un profesor real"
+          >
+            <span className="human-teacher-callout-icon" aria-hidden="true">
+              <HumanTeacherIcon />
+            </span>
+            <div>
+              <small>Próximamente · Apoyo humano</small>
+              <strong>¿Sigues con dudas?</strong>
+              <p>Pide una conversación en tiempo real con un profesor.</p>
+            </div>
+            <button type="button" disabled>
+              Hablar con un profesor real
+            </button>
+          </aside>
         </>
       ) : null}
 
@@ -754,6 +770,14 @@ function LockMiniIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 20 20">
       <path d="M6.5 8V6.5a3.5 3.5 0 0 1 7 0V8M5.5 8h9v8h-9V8Z" />
+    </svg>
+  );
+}
+
+function HumanTeacherIcon() {
+  return (
+    <svg viewBox="0 0 24 24">
+      <path d="M8 11a4 4 0 1 1 8 0v2a4 4 0 0 1-8 0v-2ZM5 12v1a7 7 0 0 0 14 0v-1M12 20v2M9 22h6" />
     </svg>
   );
 }

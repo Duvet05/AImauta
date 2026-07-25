@@ -1004,7 +1004,15 @@ svg {
 /* Compromisos */
 
 .commitment-section {
+  position: relative;
   padding-block: 6rem 1rem;
+  border-radius: 1.5rem;
+  background:
+    linear-gradient(
+      rgba(255, 253, 247, 0.92),
+      rgba(255, 253, 247, 0.92)
+    ),
+    url("/svg/pattern.svg") center / min(900px, 100vw) auto no-repeat;
 }
 
 .commitment-grid {
@@ -1019,7 +1027,7 @@ svg {
 
 .commitment-grid article {
   padding: 2.1rem 2rem;
-  background: var(--paper);
+  background: rgba(255, 253, 247, 0.94);
 }
 
 .commitment-grid h3 {
@@ -3388,6 +3396,78 @@ svg {
   background: #fff0e8;
 }
 
+.human-teacher-callout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.6rem 0.7rem;
+  align-items: center;
+  margin-top: 0.7rem;
+  padding: 0.7rem;
+  border: 1px dashed rgba(23, 79, 70, 0.28);
+  border-radius: 0.72rem;
+  text-align: left;
+  background:
+    linear-gradient(rgba(255, 253, 247, 0.9), rgba(255, 253, 247, 0.9)),
+    url("/brand/amauta-pattern.svg") center / 8rem auto repeat;
+}
+
+.human-teacher-callout-icon {
+  display: inline-grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  place-items: center;
+  border-radius: 50%;
+  color: white;
+  background: var(--forest);
+}
+
+.human-teacher-callout-icon svg {
+  width: 1.2rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.human-teacher-callout small,
+.human-teacher-callout strong {
+  display: block;
+}
+
+.human-teacher-callout small {
+  color: var(--coral);
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.human-teacher-callout strong {
+  margin-top: 0.08rem;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+}
+
+.human-teacher-callout p {
+  margin: 0.08rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.63rem;
+  line-height: 1.4;
+}
+
+.human-teacher-callout button {
+  grid-column: 1 / -1;
+  min-height: 38px;
+  border: 1px solid rgba(23, 79, 70, 0.17);
+  border-radius: 0.55rem;
+  color: #687872;
+  background: rgba(255, 255, 255, 0.8);
+  font-size: 0.66rem;
+  font-weight: 800;
+  cursor: not-allowed;
+}
+
 .remote-audio {
   display: none;
 }
@@ -3841,7 +3921,12 @@ svg {
 
 .panel-page {
   min-height: 100vh;
-  background: var(--paper);
+  background:
+    linear-gradient(
+      rgba(255, 253, 247, 0.94),
+      rgba(255, 253, 247, 0.94)
+    ),
+    url("/svg/pattern.svg") center top / min(1000px, 100vw) auto repeat-y;
 }
 
 .panel-topbar {
@@ -3894,12 +3979,18 @@ svg {
   line-height: 1.65;
 }
 
+.panel-roadmap-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: -1rem 0 2.6rem;
+}
+
 .material-coming-soon {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 1rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.7rem 1rem;
   align-items: center;
-  margin: -1rem 0 2.6rem;
   padding: 1.15rem 1.25rem;
   border: 1px dashed rgba(23, 79, 70, 0.32);
   border-radius: 0.9rem;
@@ -3944,6 +4035,8 @@ svg {
 }
 
 .material-coming-soon-badge {
+  grid-column: 2;
+  justify-self: start;
   padding: 0.38rem 0.65rem;
   border: 1px solid rgba(23, 79, 70, 0.17);
   border-radius: 999px;
@@ -3952,6 +4045,129 @@ svg {
   font-size: 0.65rem;
   font-weight: 800;
   white-space: nowrap;
+}
+
+.teacher-live-preview {
+  padding: 1.15rem 1.25rem;
+  border: 1px solid rgba(23, 79, 70, 0.2);
+  border-radius: 0.9rem;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.9)),
+    url("/brand/amauta-pattern.svg") center / 8rem auto repeat;
+}
+
+.teacher-live-preview-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.7rem;
+  align-items: center;
+}
+
+.teacher-live-preview-icon {
+  display: inline-grid;
+  width: 2.7rem;
+  height: 2.7rem;
+  place-items: center;
+  border-radius: 50%;
+  color: white;
+  background: var(--forest);
+}
+
+.teacher-live-preview-icon svg {
+  width: 1.4rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.teacher-live-preview-heading div > span {
+  color: var(--forest);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.teacher-live-preview h2 {
+  margin: 0.08rem 0 0;
+  font-family: var(--font-display);
+  font-size: 1.08rem;
+  font-weight: 600;
+}
+
+.teacher-live-preview-badge {
+  padding: 0.28rem 0.5rem;
+  border-radius: 999px;
+  color: white;
+  background: var(--coral);
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.teacher-live-preview > p {
+  margin: 0.65rem 0;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.teacher-live-request {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.55rem;
+  align-items: center;
+  padding: 0.65rem;
+  border: 1px solid rgba(23, 79, 70, 0.11);
+  border-radius: 0.65rem;
+  background: rgba(255, 253, 247, 0.9);
+}
+
+.teacher-live-request-status {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  background: #58a86a;
+  box-shadow: 0 0 0 4px rgba(88, 168, 106, 0.13);
+}
+
+.teacher-live-request small,
+.teacher-live-request strong,
+.teacher-live-request div > span {
+  display: block;
+}
+
+.teacher-live-request small {
+  color: var(--coral);
+  font-size: 0.55rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.teacher-live-request strong {
+  margin-top: 0.06rem;
+  font-size: 0.73rem;
+}
+
+.teacher-live-request div > span {
+  margin-top: 0.08rem;
+  color: var(--ink-soft);
+  font-size: 0.62rem;
+}
+
+.teacher-live-request button {
+  min-height: 36px;
+  padding-inline: 0.65rem;
+  border: 1px solid rgba(23, 79, 70, 0.16);
+  border-radius: 0.5rem;
+  color: #74817d;
+  background: #f4f4ef;
+  font-size: 0.62rem;
+  font-weight: 800;
+  cursor: not-allowed;
 }
 
 .panel-section {
@@ -4050,14 +4266,29 @@ svg {
   font-size: 0.82rem;
 }
 
+@media (max-width: 800px) {
+  .panel-roadmap-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 560px) {
-  .material-coming-soon {
+  .teacher-live-preview-heading {
     grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .material-coming-soon-badge {
+  .teacher-live-preview-badge {
     grid-column: 2;
     justify-self: start;
+  }
+
+  .teacher-live-request {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .teacher-live-request button {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 }
 

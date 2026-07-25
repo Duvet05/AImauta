@@ -51,23 +51,58 @@ export default async function DocentePage() {
           </p>
         </header>
 
-        <aside
-          className="material-coming-soon"
-          aria-label="Próximamente: agrega tu material"
-        >
-          <span className="material-coming-soon-icon" aria-hidden="true">
-            +
-          </span>
-          <div>
-            <span className="material-coming-soon-eyebrow">Próximamente</span>
-            <h2>¡Agrega tu material!</h2>
+        <div className="panel-roadmap-grid">
+          <aside
+            className="material-coming-soon"
+            aria-label="Próximamente: agrega tu material"
+          >
+            <span className="material-coming-soon-icon" aria-hidden="true">
+              +
+            </span>
+            <div>
+              <span className="material-coming-soon-eyebrow">Próximamente</span>
+              <h2>¡Agrega tu material!</h2>
+              <p>
+                Muy pronto podrás incorporar tus propias fichas y recursos a
+                AImauta.
+              </p>
+            </div>
+            <span className="material-coming-soon-badge">
+              Disponible pronto
+            </span>
+          </aside>
+
+          <section
+            className="teacher-live-preview"
+            aria-labelledby="teacher-live-preview-title"
+          >
+            <div className="teacher-live-preview-heading">
+              <span className="teacher-live-preview-icon" aria-hidden="true">
+                <LiveTeacherIcon />
+              </span>
+              <div>
+                <span>Próximamente · Atención en vivo</span>
+                <h2 id="teacher-live-preview-title">Consultas en tiempo real</h2>
+              </div>
+              <span className="teacher-live-preview-badge">Mockup</span>
+            </div>
             <p>
-              Muy pronto podrás incorporar tus propias fichas y recursos a
-              AImauta.
+              Recibe una solicitud cuando un estudiante necesite conversar con
+              un profesor real.
             </p>
-          </div>
-          <span className="material-coming-soon-badge">Disponible pronto</span>
-        </aside>
+            <div className="teacher-live-request">
+              <span className="teacher-live-request-status" aria-hidden="true" />
+              <div>
+                <small>Solicitud de ejemplo</small>
+                <strong>Un estudiante necesita apoyo</strong>
+                <span>Matemática · Ficha 1</span>
+              </div>
+              <button type="button" disabled>
+                Atender llamada
+              </button>
+            </div>
+          </section>
+        </div>
 
         {withCourses.length === 0 ? (
           <div className="panel-empty">
@@ -117,5 +152,13 @@ export default async function DocentePage() {
         )}
       </div>
     </main>
+  );
+}
+
+function LiveTeacherIcon() {
+  return (
+    <svg viewBox="0 0 24 24">
+      <path d="M8 11a4 4 0 1 1 8 0v2a4 4 0 0 1-8 0v-2ZM5 12v1a7 7 0 0 0 14 0v-1M12 20v2M9 22h6" />
+    </svg>
   );
 }
