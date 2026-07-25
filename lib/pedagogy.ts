@@ -15,6 +15,9 @@ export type GuidanceMove =
   | "COMPRUEBA"
   | "DIVIDE";
 
+const MAX_TUTOR_EVIDENCE_ITEMS = 3;
+const MAX_TUTOR_EVIDENCE_CHARACTERS = 1_200;
+
 export function getTurnPolicy(input: {
   hintLevel: 0 | 1 | 2 | 3;
   stage: LearningStage;
@@ -44,9 +47,12 @@ export function buildTutorSystemPrompt(input: {
     input.evidence.length === 0
       ? "(sin evidencia indexada)"
       : input.evidence
+          .slice(0, MAX_TUTOR_EVIDENCE_ITEMS)
           .map(
             (item) =>
-              `[${item.sourceId}] Página ${item.page}\n${item.text.trim()}`
+              `[${item.sourceId}] Página ${item.page}\n${item.text
+                .trim()
+                .slice(0, MAX_TUTOR_EVIDENCE_CHARACTERS)}`
           )
           .join("\n\n");
 

@@ -1,14 +1,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const dependencies = vi.hoisted(() => ({
-  askOllama: vi.fn(),
+  askTutorModel: vi.fn(),
   getPublishedExercise: vi.fn(),
   getReviewedExerciseSolution: vi.fn(),
   retrieveExerciseEvidence: vi.fn(),
 }));
 
-vi.mock("@/lib/ollama", () => ({
-  askOllama: dependencies.askOllama,
+vi.mock("@/lib/llm", () => ({
+  askTutorModel: dependencies.askTutorModel,
 }));
 vi.mock("@/lib/exercise-store", () => ({
   getPublishedExercise: dependencies.getPublishedExercise,
@@ -96,7 +96,7 @@ afterAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  dependencies.askOllama.mockResolvedValue(null);
+  dependencies.askTutorModel.mockResolvedValue(null);
   dependencies.getPublishedExercise.mockResolvedValue(exercise);
   dependencies.getReviewedExerciseSolution.mockResolvedValue(
     reviewedSolution,
@@ -176,6 +176,31 @@ describe("tutor vinculado a ejercicio revisado", () => {
       bookId,
       exerciseId: exercise.id,
       revision: exercise.revision,
+    });
+  });
+
+  it("registra el proveedor que eligió el movimiento pedagógico", async () => {
+    dependencies.askTutorModel.mockResolvedValueOnce({
+      content: "COMPRUEBA",
+      provider: "openai",
+    });
+    const issued = issueLearningSession({
+      bookId,
+      page: 13,
+      exercise: binding,
+    });
+
+    const result = await guideLearningTurn({
+      sessionToken: issued.token,
+      message: "¿Está bien mi estrategia?",
+      attempt: "Compararía numeradores y denominadores.",
+    });
+
+    expect(result).toMatchObject({
+      mode: "openai",
+      message: expect.stringContaining(
+        "¿Qué parte de tu procedimiento puedes comprobar",
+      ),
     });
   });
 

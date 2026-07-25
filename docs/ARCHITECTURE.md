@@ -16,7 +16,7 @@ servidor. Sus propiedades principales son:
 - `Evaluamos` bloquea el tutor sin bloquear el espacio de trabajo del alumno;
 - el avatar se renderiza localmente, sin cámara ni proveedor de video;
 - los PDFs y los índices permanecen fuera de Git;
-- la indisponibilidad de Ollama no rompe el acompañamiento básico.
+- la indisponibilidad de los proveedores LLM no rompe el acompañamiento básico.
 
 ## Topología actual
 
@@ -35,14 +35,14 @@ PowerEdge: Next.js ─────────────────► tutor-
   ├─ PDF e índice RAG                      └───────────┤  /api/internal/turn
   ├─ API LiveKit                                       └─ Inference TTS
   └─ tareas QR ───────────────► PostgreSQL
-       │
-       └─ túnel SSH 127.0.0.1:11435 ──► Aule 127.0.0.1:11434
-                                          Ollama + Gemma
+       ├─ HTTPS ───────────────────────► OpenAI → xAI
+       └─ túnel SSH opcional ─────────► Ollama + Gemma
 ```
 
 LiveKit Cloud y su TURN transportan audio y datos del canal de voz. PowerEdge
-conserva la autoridad pedagógica, el contenido y el worker. Aule solo sirve la
-inferencia de Gemma a través de Ollama y no se publica en Internet.
+conserva la autoridad pedagógica, el contenido y el worker. El router LLM usa
+OpenAI como proveedor principal y xAI como fallback temporal. La migración
+posterior a Gemma Cloud conservará el mismo contrato pedagógico.
 
 ## Aplicación web y contratos HTTP
 
@@ -253,7 +253,7 @@ leer y escribir, pero la ayuda se bloquea en varias capas:
 
 - la interfaz deshabilita revisión, chat y voz;
 - `tutor-service` devuelve el modo `assessment-locked` sin consultar RAG ni
-  Ollama;
+  ningún proveedor LLM;
 - el recuperador excluye fragmentos de páginas `Evaluamos` aunque estén dentro
   de la ventana de páginas vecinas de una consulta habilitada;
 - el nivel de pista se fuerza a 0;
@@ -272,14 +272,15 @@ no es todavía un sistema de calificación o prerrequisitos persistentes.
 2. aplica el bloqueo de evaluación;
 3. recupera evidencia del libro y la página antes de consumir la revisión;
 4. evoluciona la sesión y calcula la política;
-5. pide a Gemma elegir una de cinco etiquetas pedagógicas cerradas;
+5. pide al proveedor LLM activo elegir una de cinco etiquetas pedagógicas
+   cerradas;
 6. renderiza en servidor la pregunta aprobada o usa una guía determinista de
    respaldo;
 7. devuelve la nueva sesión, actividad, citas y política.
 
 Las etiquetas permitidas son `OBSERVA`, `REFORMULA`, `COMPARA`, `COMPRUEBA` y
-`DIVIDE`, con un máximo de 12 tokens internos. La salida cruda de Gemma nunca se
-muestra al alumno: una coincidencia exacta selecciona una plantilla
+`DIVIDE`, con un máximo de 12 tokens internos. La salida cruda del proveedor
+nunca se muestra al alumno: una coincidencia exacta selecciona una plantilla
 determinista del servidor y cualquier otro contenido se descarta. El guard
 formal valida además que la plantilla tenga una sola pregunta y no contenga
 patrones de solución. Toda selección sobre el libro usa la evidencia
@@ -363,9 +364,9 @@ El worker de `services/voice-agent` usa esta secuencia:
 Silero VAD
   └─► LiveKit Inference / Deepgram STT
         └─► POST /api/internal/turn
-              └─► tutor-service ─► RAG ─► Ollama/Gemma o respaldo
+              └─► tutor-service ─► RAG ─► OpenAI → xAI o respaldo
         ◄──────────────── respuesta aprobada
-  ◄─ LiveKit Inference / Deepgram TTS
+  ◄─ LiveKit Inference / Inworld TTS
 ```
 
 `AgentSession` se inicia con `record=False`, por lo que Agent Insights no graba
@@ -384,7 +385,8 @@ aplicable, acuerdos de tratamiento y decisiones explícitas de retención y
 eliminación.
 
 La sesión de LiveKit se configura con `llm=None`. El worker no construye
-prompts, no consulta RAG y no llama a Ollama. Su responsabilidad es transcribir,
+prompts, no consulta RAG y no llama a proveedores LLM. Su responsabilidad es
+transcribir,
 autenticar la llamada interna, publicar la sesión actualizada y sintetizar la
 respuesta. Si el backend pedagógico falla, reproduce un mensaje breve de
 indisponibilidad sin inventar una pista.
@@ -441,9 +443,10 @@ PowerEdge
   ├─ Next.js: autoridad de sesión, currículo y tutor
   ├─ worker: adaptador de voz sin LLM
   ├─ PDFs autorizados
-  └─ índices reproducibles
+  ├─ índices reproducibles
+  └─ salida HTTPS: OpenAI principal y xAI fallback
 
-Canal privado PowerEdge–Aule
+Canal privado opcional PowerEdge–Aule
   └─ SSH sobre la tailnet: 127.0.0.1:11435 → Ollama 127.0.0.1:11434
 ```
 
