@@ -533,6 +533,65 @@ describe("coordinador privado de ingesta", () => {
     expect(solve).toHaveBeenCalledTimes(2);
   });
 
+  it("registra y bloquea ids estables duplicados sin resolver dos veces", async () => {
+    const fixture = rendererFixture();
+    const first = emptyDetection([1, 2, 3]);
+    first.pagesReviewed[1] = { page: 2, status: "exercise_found" };
+    first.exercises = [
+      {
+        candidateId: "fraction-candidate",
+        printedLabel: "4",
+        kind: "problem",
+        promptText: "Calcula tres cuartos de la cantidad mostrada.",
+        continuation: "none",
+        confidence: 0.95,
+        regions: [
+          {
+            page: 2,
+            box2d: [100, 100, 500, 900],
+            role: "statement"
+          }
+        ]
+      },
+      {
+        candidateId: "geometry-candidate",
+        printedLabel: "4",
+        kind: "problem",
+        promptText: "Determina el perímetro del polígono.",
+        continuation: "none",
+        confidence: 0.95,
+        regions: [
+          {
+            page: 2,
+            box2d: [100, 100, 500, 900],
+            role: "statement"
+          }
+        ]
+      }
+    ];
+    const solve = vi.fn().mockResolvedValue(solution());
+
+    const result = await ingestExercisesFromPdf({
+      catalogEntry,
+      pdfPath: "/private/book-one.pdf",
+      model: "gemma-4-26b-a4b-it",
+      detect: vi
+        .fn()
+        .mockResolvedValueOnce(first)
+        .mockResolvedValueOnce(emptyDetection([3, 4, 5])),
+      solve,
+      pageActivity: (_bookId, page) => activity(page),
+      openRenderer: vi.fn().mockResolvedValue(fixture.renderer)
+    });
+
+    expect(result.publicManifest.exercises).toHaveLength(1);
+    expect(result.issues).toContainEqual({
+      code: "candidate-stable-id-conflict",
+      candidateId: expect.any(String)
+    });
+    expect(solve).toHaveBeenCalledTimes(1);
+  });
+
   it("impide una fusión transitiva entre candidatos incompatibles", async () => {
     const fixture = rendererFixture();
     const first = emptyDetection([1, 2, 3]);

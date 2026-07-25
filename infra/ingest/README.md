@@ -168,6 +168,12 @@ página incierta, estados discrepantes entre ventanas, huecos o duplicados son
 bloqueantes: el par revisado no podrá promoverse hasta repetir o corregir la
 ingesta y producir un reporte sin `coverage.blockers`.
 
+Cada incidencia de candidato (`issues[]`) también nace sin resolver y bloquea
+la promoción. La revisión debe conservarla y añadir `resolution`
+(`accepted-after-review` o `rejected-after-review`), `resolutionNote` y
+`reviewedAt`; borrarla no es necesario ni recomendable. Un conflicto de ID
+estable nunca se descarta silenciosamente.
+
 En modo `google`, el endpoint predeterminado es el host oficial
 `generativelanguage.googleapis.com`, sin redirecciones. Un endpoint distinto
 se rechaza salvo que el operador configure simultáneamente

@@ -55,6 +55,7 @@ export type ExerciseIngestionIssue = {
     | "candidate-forbidden-page"
     | "candidate-crosses-curriculum"
     | "candidate-too-many-pages"
+    | "candidate-stable-id-conflict"
     | "candidate-low-confidence"
     | "solution-low-confidence";
   candidateId: string;
@@ -911,6 +912,10 @@ export async function ingestExercisesFromPdf(
     const exerciseIds = new Set<string>();
     for (const item of classified) {
       if (exerciseIds.has(item.exercise.id)) {
+        issues.push({
+          code: "candidate-stable-id-conflict",
+          candidateId: item.group.candidateIds[0]
+        });
         continue;
       }
       exerciseIds.add(item.exercise.id);
