@@ -480,7 +480,7 @@ Secretos obligatorios en producción (≥32 chars, independientes):
 se requieren `DATABASE_URL` y las credenciales OpenAI/xAI en un archivo
 runtime separado. Con voz activa se añaden las variables `LIVEKIT_*`. Ollama
 permanece opcional en `Aule` para la migración posterior y se alcanza por un
-**túnel SSH reverso loopback** (`127.0.0.1:11435` → `127.0.0.1:11434`); nunca
+**túnel SSH local loopback** (`127.0.0.1:11435` → `127.0.0.1:11434`); nunca
 escucha en `0.0.0.0` ni por Funnel. Detalle operativo en
 [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
