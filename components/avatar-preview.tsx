@@ -5,7 +5,7 @@ import { TutorAvatar } from "@/components/tutor-avatar";
 export function AvatarPreview() {
   return (
     <section
-      className="voice-tutor avatar-preview"
+      className="voice-tutor voice-tutor-featured avatar-preview"
       aria-labelledby="avatar-preview-title"
     >
       <div className="voice-heading">
@@ -14,7 +14,7 @@ export function AvatarPreview() {
         </div>
         <div>
           <p>Vista previa experimental</p>
-          <h2 id="avatar-preview-title">Avatar de AImauta</h2>
+          <h2 id="avatar-preview-title">Tu profesor virtual</h2>
         </div>
         <span className="avatar-preview-badge">Silencioso</span>
       </div>

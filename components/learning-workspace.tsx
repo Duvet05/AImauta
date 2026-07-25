@@ -510,6 +510,20 @@ export function LearningWorkspace({
   const interactiveSupportAvailable =
     pageTutorAvailable &&
     viewerMode === "pdfjs";
+  const pageTutorReady =
+    pageTutorAvailable &&
+    viewerMode === "pdfjs" &&
+    !isAssessment;
+  const compactTutorTitle =
+    modeCopy.focusTone === "active" && activeExercise
+      ? `${activeExercise.label}: ${activeExercise.title}`
+      : pageTutorReady
+        ? "Tutor por página listo"
+        : modeCopy.focusTitle;
+  const compactTutorBody =
+    pageTutorReady && !activeExercise
+      ? "Solo usa la página visible y cita la fuente."
+      : modeCopy.focusBody;
 
   const applySession = useCallback((result: SessionResponse) => {
     canonicalSessionRef.current = result.state;
@@ -1316,27 +1330,29 @@ export function LearningWorkspace({
 
         <aside className="coach-panel coach-panel-session" aria-label="Sesión guiada">
           <section className="session-context-section">
-            <div className="guide-quickstart" role="note">
-              <span aria-hidden="true">GUÍA</span>
-              <div>
-                <strong>{modeCopy.quickstartTitle}</strong>
-                <p>{modeCopy.quickstartBody}</p>
-              </div>
-            </div>
+            {activity && session ? (
+              voiceTutorEnabled ? (
+                <VoiceTutor
+                  sessionId={session.sessionId}
+                  sessionToken={sessionToken}
+                  disabled={!tutorAvailable}
+                  disabledReason={modeCopy.tutorDisabledReason}
+                  onSessionUpdate={applyVoiceSession}
+                />
+              ) : avatarPreviewEnabled ? (
+                <AvatarPreview />
+              ) : null
+            ) : null}
 
             <div
-              className={`exercise-focus exercise-focus-${modeCopy.focusTone}`}
+              className={`page-tutor-status page-tutor-status-${modeCopy.focusTone}`}
               role="status"
             >
               <span aria-hidden="true">{modeCopy.focusIcon}</span>
-              <div>
-                <strong>
-                  {modeCopy.focusTone === "active" && activeExercise
-                    ? `${activeExercise.label}: ${activeExercise.title}`
-                    : modeCopy.focusTitle}
-                </strong>
-                <p>{modeCopy.focusBody}</p>
-              </div>
+              <p>
+                <strong>{compactTutorTitle}</strong>
+                <small>{compactTutorBody}</small>
+              </p>
             </div>
 
             <div className="unit-selector-row">
@@ -1374,17 +1390,6 @@ export function LearningWorkspace({
                   session={session}
                   supportAvailable={interactiveSupportAvailable}
                 />
-                {voiceTutorEnabled ? (
-                  <VoiceTutor
-                    sessionId={session.sessionId}
-                    sessionToken={sessionToken}
-                    disabled={!tutorAvailable}
-                    disabledReason={modeCopy.tutorDisabledReason}
-                    onSessionUpdate={applyVoiceSession}
-                  />
-                ) : avatarPreviewEnabled ? (
-                  <AvatarPreview />
-                ) : null}
               </>
             ) : null}
           </section>
