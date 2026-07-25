@@ -150,7 +150,12 @@ El CI es completo (catalog:validate, typecheck, lint, vitest, build, pytest del 
   xAI `grok-4.3` y Gemini `gemini-3.6-flash` en una cadena explícita; Ollama
   queda fuera del runtime de tutoría hasta una migración posterior.
 - **Ejercicios:** separación pública/privada estricta, `O_NOFOLLOW`, integridad fail-closed y **revisión humana obligatoria**. El bundle privado activa público, solución y evidencia regional con un solo `rename`, lock recuperable y rollback.
-- **Config/flags/ops:** flags fail-closed con el servidor como autoridad sobre `?avatar=1` (`lib/feature-flags.ts`, `app/api/livekit/token/route.ts:24`); sin defaults inseguros; contenedores read-only/no-root/no-new-privileges; imágenes pinneadas por digest; ingesta sin superficie HTTP; manejo de errores que no filtra internals (`lib/http.ts:20-46`).
+- **Config/flags/ops:** flags fail-closed con el servidor como autoridad
+  (`lib/feature-flags.ts`, `app/api/livekit/token/route.ts:24`); solo el valor
+  exacto `true` muestra el avatar o habilita voz, sin defaults inseguros;
+  contenedores read-only/no-root/no-new-privileges; imágenes pinneadas por
+  digest; ingesta sin superficie HTTP; manejo de errores que no filtra
+  internals (`lib/http.ts:20-46`).
 
 ---
 

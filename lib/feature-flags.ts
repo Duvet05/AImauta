@@ -9,9 +9,3 @@ export function isVoiceTutorEnabled(): boolean {
 export function isAvatarEnabled(): boolean {
   return isStrictlyEnabled(process.env.AIMAUTA_AVATAR_ENABLED);
 }
-
-export function isAvatarPreviewRequested(
-  value: string | string[] | undefined,
-): boolean {
-  return value === "1";
-}
