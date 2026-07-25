@@ -1,5 +1,8 @@
+import { createHash } from "node:crypto";
+
 import { getBook } from "@/lib/catalog";
 import { getBookCurriculum, getPageActivity } from "@/lib/curriculum";
+import type { PageExercise } from "@/lib/page-exercises-response";
 import type { Evidence } from "@/lib/retrieval";
 
 const CONTRACT_VERSION = "1";
@@ -10,6 +13,7 @@ const DEFAULT_TIMEOUT_MS = 1_200;
 const HARD_TIMEOUT_MS = 2_000;
 const sourceIdPattern = /^[a-zA-Z0-9:._-]{1,240}$/;
 const allowedKinds = new Set(["content", "exercise", "instruction"]);
+const MAX_PAGE_EXERCISE_CANDIDATES = 3;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -258,4 +262,108 @@ export async function retrieveRagServiceEvidence(input: {
     });
   }
   return evidence;
+}
+
+function compactTitle(text: string): string {
+  const compact = text.replace(/\s+/gu, " ").trim();
+  if (compact.length <= 88) {
+    return compact;
+  }
+  return `${compact.slice(0, 85).trimEnd()}…`;
+}
+
+function candidateIdentity(evidence: Evidence): {
+  id: string;
+  revision: number;
+} {
+  const idHash = createHash("sha256")
+    .update(evidence.id)
+    .digest("hex")
+    .slice(0, 12);
+  const revisionHash = createHash("sha256")
+    .update(evidence.id)
+    .update("\0")
+    .update(evidence.text)
+    .digest("hex")
+    .slice(0, 8);
+  return {
+    id: `actividad-rag-${evidence.page}-${idHash}`,
+    revision: (Number.parseInt(revisionHash, 16) % 2_147_483_646) + 1,
+  };
+}
+
+/**
+ * Projects exercise-shaped RAG chunks into browser activity markers.
+ *
+ * These are intentionally not canonical PublicExercise records. Their
+ * `detected`/`rag-index` identity keeps session, solution and assignment
+ * boundaries from mistaking an indexed fragment for a reviewed exercise.
+ */
+export async function retrieveRagPageExercises(input: {
+  bookId: string;
+  page: number;
+}): Promise<PageExercise[]> {
+  const activity = getPageActivity(input.bookId, input.page);
+  if (
+    !activity.tutorAvailable ||
+    activity.unitId === null ||
+    (activity.stage !== "learn" && activity.stage !== "practice")
+  ) {
+    return [];
+  }
+  const unitId = activity.unitId;
+  const stage = activity.stage;
+
+  const evidence = await retrieveRagServiceEvidence({
+    bookId: input.bookId,
+    page: input.page,
+    allowedPages: [input.page],
+    // An empty query lets the service's page and exercise-kind boosts rank
+    // exercise chunks first instead of biasing toward arbitrary wording.
+    question: "",
+    attempt: "",
+  });
+  if (!evidence) {
+    return [];
+  }
+
+  return evidence
+    .filter(
+      (item) =>
+        item.kind === "exercise" &&
+        item.page === input.page &&
+        item.unitId === unitId &&
+        item.stage === stage &&
+        !item.teacherOnly,
+    )
+    .slice(0, MAX_PAGE_EXERCISE_CANDIDATES)
+    .map((item, index) => {
+      const identity = candidateIdentity(item);
+      return {
+        ...identity,
+        status: "detected",
+        origin: "rag-index",
+        unitId,
+        stage,
+        label: `Actividad ${index + 1}`,
+        title: compactTitle(item.text),
+        prompt: item.text,
+        regions: [
+          {
+            id: `${identity.id}-marcador`,
+            page: input.page,
+            role: "prompt",
+            order: 1,
+            // RAG v1 has page-level provenance but no reviewed geometry. This
+            // is a clearly styled callout rail, not a claimed text highlight.
+            rect: {
+              x: 0.75,
+              y: 0.03 + index * 0.085,
+              width: 0.22,
+              height: 0.065,
+            },
+          },
+        ],
+      };
+    });
 }

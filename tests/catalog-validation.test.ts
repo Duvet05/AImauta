@@ -319,7 +319,7 @@ describe("catálogo curricular v3", () => {
     }
   );
 
-  it("acepta 50 MiB exactos y rechaza un byte adicional", () => {
+  it("acepta el máximo exacto y rechaza un byte adicional", () => {
     const entry = getCatalogEntries()[0];
     const atLimit = parseCatalogManifest(
       manifestWith({

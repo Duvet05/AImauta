@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PublicExercise } from "@/lib/exercise-manifest";
+import type { PageExercise } from "@/lib/page-exercises-response";
 
 const store = vi.hoisted(() => {
   class NotPublishedError extends Error {}
@@ -13,11 +14,17 @@ const store = vi.hoisted(() => {
     getPublishedExercisesForPage: vi.fn(),
   };
 });
+const rag = vi.hoisted(() => ({
+  retrieveRagPageExercises: vi.fn(),
+}));
 
 vi.mock("@/lib/exercise-store", () => ({
   ExerciseManifestNotPublishedError: store.NotPublishedError,
   ExerciseManifestUnavailableError: store.UnavailableError,
   getPublishedExercisesForPage: store.getPublishedExercisesForPage,
+}));
+vi.mock("@/lib/rag-service", () => ({
+  retrieveRagPageExercises: rag.retrieveRagPageExercises,
 }));
 
 import { GET } from "@/app/api/materials/[bookId]/exercises/route";
@@ -63,12 +70,35 @@ const reviewExercise: PublicExercise = {
   })),
 };
 
+const ragExercise: PageExercise = {
+  id: "actividad-rag-13-aabbccddeeff",
+  status: "detected",
+  origin: "rag-index",
+  unitId: "ficha-1-fracciones",
+  stage: "learn",
+  revision: 7,
+  label: "Actividad 1",
+  title: "Compara las fracciones de la página.",
+  prompt: "Compara las fracciones de la página.",
+  regions: [
+    {
+      id: "actividad-rag-13-aabbccddeeff-marcador",
+      page: 13,
+      role: "prompt",
+      order: 1,
+      rect: { x: 0.75, y: 0.03, width: 0.22, height: 0.065 },
+    },
+  ],
+};
+
 beforeEach(() => {
   store.getPublishedExercisesForPage.mockReset();
   store.getPublishedExercisesForPage.mockResolvedValue([
     multipageExercise,
     reviewExercise,
   ]);
+  rag.retrieveRagPageExercises.mockReset();
+  rag.retrieveRagPageExercises.mockResolvedValue([]);
 });
 
 describe("GET /api/materials/:bookId/exercises", () => {
@@ -118,11 +148,17 @@ describe("GET /api/materials/:bookId/exercises", () => {
     expect(response.headers.get("cache-control")).toContain("no-store");
     expect(response.headers.get("etag")).toMatch(/^"[A-Za-z0-9_-]+"$/);
     await expect(response.json()).resolves.toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       bookId,
       page: 13,
       publicationStatus: "published",
-      exercises: [multipageExercise],
+      exercises: [
+        {
+          ...multipageExercise,
+          status: "published",
+          origin: "reviewed",
+        },
+      ],
     });
   });
 
@@ -142,11 +178,39 @@ describe("GET /api/materials/:bookId/exercises", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("etag")).toBeNull();
     await expect(response.json()).resolves.toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       bookId,
       page: 13,
       publicationStatus: "not-published",
       exercises: [],
+    });
+  });
+
+  it("expone actividades RAG cuando todavía no existe un manifiesto revisado", async () => {
+    store.getPublishedExercisesForPage.mockRejectedValue(
+      new store.NotPublishedError(),
+    );
+    rag.retrieveRagPageExercises.mockResolvedValue([ragExercise]);
+
+    const response = await GET(
+      new Request(
+        `http://aimauta.test/api/materials/${bookId}/exercises?page=13`,
+      ),
+      context,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("etag")).toMatch(/^"[A-Za-z0-9_-]+"$/);
+    expect(rag.retrieveRagPageExercises).toHaveBeenCalledWith({
+      bookId,
+      page: 13,
+    });
+    await expect(response.json()).resolves.toEqual({
+      schemaVersion: 2,
+      bookId,
+      page: 13,
+      publicationStatus: "rag-indexed",
+      exercises: [ragExercise],
     });
   });
 
@@ -162,7 +226,7 @@ describe("GET /api/materials/:bookId/exercises", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       bookId,
       page: 15,
       publicationStatus: "published",

@@ -19,10 +19,11 @@ import { StageProgress } from "@/components/stage-progress";
 import type { VoiceSessionUpdate } from "@/components/voice-tutor";
 import type { Book } from "@/lib/catalog";
 import type { BookUnit, PageActivity } from "@/lib/curriculum";
-import type { PublicExercise } from "@/lib/exercise-manifest";
 import type { LearningSessionState } from "@/lib/learning-session";
 import {
   parsePageExercisesResponse,
+  type PageExercise,
+  type PageExerciseOrigin,
   type PageExercisesResponse,
 } from "@/lib/page-exercises-response";
 
@@ -137,12 +138,14 @@ function exerciseModeCopy({
   pageGuideAvailable,
   viewerMode,
   hasActiveExercise,
+  activeExerciseOrigin,
 }: {
   availability: ExerciseAvailability;
   isAssessment: boolean;
   pageGuideAvailable: boolean;
   viewerMode: ViewerMode;
   hasActiveExercise: boolean;
+  activeExerciseOrigin: PageExerciseOrigin | null;
 }): ExerciseModeCopy {
   if (isAssessment) {
     return {
@@ -358,6 +361,29 @@ function exerciseModeCopy({
     };
   }
 
+  if (hasActiveExercise && activeExerciseOrigin === "rag-index") {
+    return {
+      quickstartTitle: "Actividad detectada: tutor listo",
+      quickstartBody:
+        "Escribe tu intento y pide una pista. AImauta usará el fragmento indexado y la página visible.",
+      focusTitle: "Actividad detectada en la página",
+      focusBody:
+        "Este marcador viene del índice RAG de Marcelo; guía la conversación, pero no afirma una ubicación exacta ni una solución revisada.",
+      focusTone: "active",
+      focusIcon: "✓",
+      attemptEyebrow: "Paso 1 · Tu razonamiento",
+      attemptTitle: "Escribe qué intentaste",
+      attemptPlaceholder:
+        "Explica qué entendiste, qué datos usarías o cuál sería tu primer paso…",
+      reviewButtonLabel: "Pedir una pista con fuente",
+      chatPlaceholder: "Escribe tu duda sobre esta actividad…",
+      tutorPromise:
+        "AImauta usa evidencia indexada de esta página y mantiene bloqueada la respuesta final.",
+      tutorDisabledReason: "",
+      banner: null,
+    };
+  }
+
   if (hasActiveExercise) {
     return {
       quickstartTitle: "Listo para pedir una pista",
@@ -455,7 +481,7 @@ export function LearningWorkspace({
   const [isSending, setIsSending] = useState(false);
   const [notice, setNotice] = useState("");
   const [sessionError, setSessionError] = useState("");
-  const [exercises, setExercises] = useState<PublicExercise[]>([]);
+  const [exercises, setExercises] = useState<PageExercise[]>([]);
   const [selectedExercise, setSelectedExercise] =
     useState<ExerciseSelection | null>(null);
   const [exerciseAvailability, setExerciseAvailability] =
@@ -476,7 +502,7 @@ export function LearningWorkspace({
   const attemptDraftsRef = useRef<Record<string, string>>({});
   const previousSelectionRef = useRef<ExerciseSelection | null>(null);
   const assignmentResumeTokenRef = useRef("");
-  const exercisesRef = useRef<PublicExercise[]>([]);
+  const exercisesRef = useRef<PageExercise[]>([]);
 
   const currentDraftKey = `${activity?.unitId ?? "orientation"}:${selectedExercise?.exerciseId ?? "none"}:${selectedExercise?.exerciseRevision ?? 0}`;
   const activeExercise =
@@ -506,6 +532,7 @@ export function LearningWorkspace({
     pageGuideAvailable: pageTutorAvailable,
     viewerMode,
     hasActiveExercise: activeExercise !== null,
+    activeExerciseOrigin: activeExercise?.origin ?? null,
   });
   const interactiveSupportAvailable =
     pageTutorAvailable &&
@@ -531,6 +558,7 @@ export function LearningWorkspace({
         setSelectedExercise({
           exerciseId: exercise.id,
           exerciseRevision: exercise.revision,
+          origin: exercise.origin,
           regionId: region.id,
           page: result.state.page,
         });
@@ -545,6 +573,8 @@ export function LearningWorkspace({
       signal?: AbortSignal,
       selection?: ExerciseSelection | null,
     ): Promise<SessionResponse> => {
+      const reviewedSelection =
+        selection?.origin === "reviewed" ? selection : null;
       const requestStandardSession = async (
         currentToken?: string,
       ): Promise<SessionResponse> => {
@@ -554,9 +584,10 @@ export function LearningWorkspace({
           body: JSON.stringify({
             bookId: book.id,
             page: targetPage,
-            exerciseId: selection?.exerciseId ?? null,
-            exerciseRevision: selection?.exerciseRevision ?? null,
-            exerciseRegionId: selection?.regionId ?? null,
+            exerciseId: reviewedSelection?.exerciseId ?? null,
+            exerciseRevision:
+              reviewedSelection?.exerciseRevision ?? null,
+            exerciseRegionId: reviewedSelection?.regionId ?? null,
             ...(currentToken ? { sessionToken: currentToken } : {}),
           }),
           signal,
@@ -632,6 +663,7 @@ export function LearningWorkspace({
           const selectionMatches =
             selection === undefined ||
             selection === null ||
+            selection.origin === "rag-index" ||
             (assignedSession.state.exerciseId === selection.exerciseId &&
               assignedSession.state.exerciseRevision ===
                 selection.exerciseRevision);
@@ -702,7 +734,11 @@ export function LearningWorkspace({
           return;
         }
 
-        const pageExercises = [...result.exercises];
+        const pageExercises = assignmentLaunch
+          ? result.exercises.filter(
+              (exercise) => exercise.origin === "reviewed",
+            )
+          : [...result.exercises];
         exercisesRef.current = pageExercises;
         setExercises(pageExercises);
         setSelectedExercise((current) => {
@@ -719,11 +755,12 @@ export function LearningWorkspace({
             (candidate) => candidate.page === page,
           );
           return exercise && region
-            ? {
-                exerciseId: exercise.id,
-                exerciseRevision: exercise.revision,
-                regionId: region.id,
-                page,
+              ? {
+                  exerciseId: exercise.id,
+                  exerciseRevision: exercise.revision,
+                  origin: exercise.origin,
+                  regionId: region.id,
+                  page,
               }
             : null;
         });
@@ -740,7 +777,7 @@ export function LearningWorkspace({
       });
 
     return () => controller.abort();
-  }, [book.id, exerciseRequestRevision, page]);
+  }, [assignmentLaunch, book.id, exerciseRequestRevision, page]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -832,6 +869,7 @@ export function LearningWorkspace({
           ? {
               exerciseId: activeExercise.id,
               exerciseRevision: activeExercise.revision,
+              origin: activeExercise.origin,
               regionId: retainedRegion.id,
               page: targetPage,
             }
@@ -961,6 +999,7 @@ export function LearningWorkspace({
     if (
       selectedExercise?.exerciseId === selection.exerciseId &&
       selectedExercise.exerciseRevision === selection.exerciseRevision &&
+      selectedExercise.origin === selection.origin &&
       selectedExercise.regionId === selection.regionId
     ) {
       return;
@@ -1007,7 +1046,10 @@ export function LearningWorkspace({
         {
           id: crypto.randomUUID(),
           role: "tutor",
-          content: `Seleccionaste ${exercise.label}: ${exercise.title}. Cuéntame qué entendiste o escribe tu primer intento; avanzaré con pistas sobre este ejercicio.`,
+          content:
+            exercise.origin === "rag-index"
+              ? `Seleccionaste ${exercise.label}: ${exercise.title}. Cuéntame qué entendiste o escribe tu primer intento; usaré evidencia indexada de esta página sin revelar una respuesta final.`
+              : `Seleccionaste ${exercise.label}: ${exercise.title}. Cuéntame qué entendiste o escribe tu primer intento; avanzaré con pistas sobre este ejercicio.`,
         },
       ]);
     } catch (error) {

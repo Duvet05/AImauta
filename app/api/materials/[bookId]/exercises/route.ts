@@ -10,6 +10,7 @@ import {
   PAGE_EXERCISES_SCHEMA_VERSION,
   type PageExercisesResponse,
 } from "@/lib/page-exercises-response";
+import { retrieveRagPageExercises } from "@/lib/rag-service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,6 +77,27 @@ function notPublishedResponse(
   );
 }
 
+function availableResponse(
+  request: Request,
+  response: PageExercisesResponse,
+): Response {
+  const body = JSON.stringify(response);
+  const etag = `"${createHash("sha256")
+    .update(body)
+    .digest("base64url")}"`;
+  const headers = new Headers({
+    "Cache-Control": SUCCESS_CACHE_CONTROL,
+    ETag: etag,
+  });
+
+  if (matchesEtag(request.headers.get("if-none-match"), etag)) {
+    return new Response(null, { status: 304, headers });
+  }
+
+  headers.set("Content-Type", "application/json; charset=utf-8");
+  return new Response(body, { status: 200, headers });
+}
+
 export async function GET(
   request: Request,
   context: RouteContext,
@@ -102,29 +124,37 @@ export async function GET(
         exercise.status === "published" &&
         exercise.regions.some((region) => region.page === page),
     );
-    const body = JSON.stringify({
+    return availableResponse(request, {
       schemaVersion: PAGE_EXERCISES_SCHEMA_VERSION,
       bookId: book.id,
       page,
       publicationStatus: "published",
-      exercises,
-    } satisfies PageExercisesResponse);
-    const etag = `"${createHash("sha256")
-      .update(body)
-      .digest("base64url")}"`;
-    const headers = new Headers({
-      "Cache-Control": SUCCESS_CACHE_CONTROL,
-      ETag: etag,
+      exercises: exercises.map((exercise) => ({
+        ...exercise,
+        status: "published",
+        origin: "reviewed",
+      })),
     });
-
-    if (matchesEtag(request.headers.get("if-none-match"), etag)) {
-      return new Response(null, { status: 304, headers });
-    }
-
-    headers.set("Content-Type", "application/json; charset=utf-8");
-    return new Response(body, { status: 200, headers });
   } catch (error) {
     if (error instanceof ExerciseManifestNotPublishedError) {
+      try {
+        const exercises = await retrieveRagPageExercises({
+          bookId: book.id,
+          page,
+        });
+        if (exercises.length > 0) {
+          return availableResponse(request, {
+            schemaVersion: PAGE_EXERCISES_SCHEMA_VERSION,
+            bookId: book.id,
+            page,
+            publicationStatus: "rag-indexed",
+            exercises,
+          });
+        }
+      } catch {
+        // A page marker is optional; page tutoring retains its own validated
+        // local fallback if the isolated RAG service is unavailable.
+      }
       return notPublishedResponse(book.id, page);
     }
 

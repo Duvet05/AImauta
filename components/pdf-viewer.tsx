@@ -18,13 +18,13 @@ import {
 } from "@/components/exercise-overlay-layer";
 import styles from "@/components/pdf-viewer.module.css";
 import type { Book } from "@/lib/catalog";
-import type { PublicExercise } from "@/lib/exercise-manifest";
+import type { PageExercise } from "@/lib/page-exercises-response";
 
 type PdfViewerProps = {
   book: Book;
   page: number;
   onPageChange: (page: number) => void;
-  exercises?: readonly PublicExercise[];
+  exercises?: readonly PageExercise[];
   selected?: ExerciseSelection | null;
   overlayState?: ExerciseOverlayState;
   onExerciseSelect?: (selection: ExerciseSelection) => void;

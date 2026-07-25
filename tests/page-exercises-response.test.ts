@@ -7,6 +7,7 @@ const page = 13;
 const exercise = {
   id: "problema-uno",
   status: "published",
+  origin: "reviewed",
   unitId: "ficha-1-fracciones",
   stage: "learn",
   revision: 1,
@@ -23,13 +24,26 @@ const exercise = {
     },
   ],
 };
+const ragExercise = {
+  ...exercise,
+  id: "actividad-rag-13-aabbccddeeff",
+  status: "detected",
+  origin: "rag-index",
+  label: "Actividad 1",
+  regions: [
+    {
+      ...exercise.regions[0],
+      id: "actividad-rag-13-aabbccddeeff-marcador",
+    },
+  ],
+};
 
 describe("contrato de ejercicios por página", () => {
   it("acepta publicado con ejercicios y publicado vacío como estados distintos válidos", () => {
     expect(
       parsePageExercisesResponse(
         {
-          schemaVersion: 1,
+          schemaVersion: 2,
           bookId,
           page,
           publicationStatus: "published",
@@ -42,7 +56,7 @@ describe("contrato de ejercicios por página", () => {
     expect(
       parsePageExercisesResponse(
         {
-          schemaVersion: 1,
+          schemaVersion: 2,
           bookId,
           page,
           publicationStatus: "published",
@@ -51,7 +65,7 @@ describe("contrato de ejercicios por página", () => {
         { bookId, page },
       ),
     ).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       bookId,
       page,
       publicationStatus: "published",
@@ -59,11 +73,51 @@ describe("contrato de ejercicios por página", () => {
     });
   });
 
+  it("acepta candidatos RAG únicamente con su estado y origen explícitos", () => {
+    expect(
+      parsePageExercisesResponse(
+        {
+          schemaVersion: 2,
+          bookId,
+          page,
+          publicationStatus: "rag-indexed",
+          exercises: [ragExercise],
+        },
+        { bookId, page },
+      ),
+    ).toMatchObject({ publicationStatus: "rag-indexed" });
+
+    expect(
+      parsePageExercisesResponse(
+        {
+          schemaVersion: 2,
+          bookId,
+          page,
+          publicationStatus: "rag-indexed",
+          exercises: [],
+        },
+        { bookId, page },
+      ),
+    ).toBeNull();
+    expect(
+      parsePageExercisesResponse(
+        {
+          schemaVersion: 2,
+          bookId,
+          page,
+          publicationStatus: "published",
+          exercises: [ragExercise],
+        },
+        { bookId, page },
+      ),
+    ).toBeNull();
+  });
+
   it("acepta no publicado únicamente cuando no contiene ejercicios", () => {
     expect(
       parsePageExercisesResponse(
         {
-          schemaVersion: 1,
+          schemaVersion: 2,
           bookId,
           page,
           publicationStatus: "not-published",
@@ -76,7 +130,7 @@ describe("contrato de ejercicios por página", () => {
     expect(
       parsePageExercisesResponse(
         {
-          schemaVersion: 1,
+          schemaVersion: 2,
           bookId,
           page,
           publicationStatus: "not-published",
@@ -89,7 +143,7 @@ describe("contrato de ejercicios por página", () => {
 
   it("rechaza respuestas para otro libro o página y geometría insegura", () => {
     const valid = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       bookId,
       page,
       publicationStatus: "published",
@@ -131,7 +185,7 @@ describe("contrato de ejercicios por página", () => {
 
   it("rechaza campos privados o duplicados", () => {
     const valid = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       bookId,
       page,
       publicationStatus: "published",

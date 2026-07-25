@@ -61,7 +61,10 @@ export class PdfPageRendererError extends Error {
     const messages: Record<PdfPageRendererErrorCode, string> = {
       INVALID_INPUT: "La configuración del renderizador no es válida.",
       FILE_NOT_FOUND: "No se encontró el PDF local.",
-      FILE_TOO_LARGE: "El PDF supera el límite de 50 MiB.",
+      FILE_TOO_LARGE:
+        `El PDF supera el límite de ${
+          MAX_INGEST_PDF_BYTES / (1024 * 1024)
+        } MiB.`,
       INVALID_PDF: "El archivo local no es un PDF válido.",
       CHECKSUM_MISMATCH: "El PDF no coincide con el checksum del catálogo.",
       PAGE_COUNT_MISMATCH:

@@ -3,16 +3,31 @@ import type {
   PublicExercise,
 } from "@/lib/exercise-manifest";
 
-export const PAGE_EXERCISES_SCHEMA_VERSION = 1 as const;
+export const PAGE_EXERCISES_SCHEMA_VERSION = 2 as const;
 
-export type ExercisePublicationStatus = "published" | "not-published";
+export type PageExerciseOrigin = "reviewed" | "rag-index";
+
+/**
+ * Browser-only projection. RAG candidates deliberately remain distinct from
+ * reviewed exercises: they can focus page tutoring, but they are never bound
+ * to a reviewed solution or assignment.
+ */
+export type PageExercise = Omit<PublicExercise, "status"> & {
+  status: "published" | "detected";
+  origin: PageExerciseOrigin;
+};
+
+export type ExercisePublicationStatus =
+  | "published"
+  | "rag-indexed"
+  | "not-published";
 
 export type PageExercisesResponse = {
   schemaVersion: typeof PAGE_EXERCISES_SCHEMA_VERSION;
   bookId: string;
   page: number;
   publicationStatus: ExercisePublicationStatus;
-  exercises: readonly PublicExercise[];
+  exercises: readonly PageExercise[];
 };
 
 const responseKeys = new Set([
@@ -32,6 +47,7 @@ const exerciseKeys = new Set([
   "title",
   "prompt",
   "regions",
+  "origin",
 ]);
 const regionKeys = new Set(["id", "page", "role", "order", "rect"]);
 const rectKeys = new Set(["x", "y", "width", "height"]);
@@ -90,15 +106,18 @@ function isRegion(value: unknown): value is ExerciseRegion {
   );
 }
 
-function isPublicExercise(
+function isPageExercise(
   value: unknown,
   requestedPage: number,
-): value is PublicExercise {
+): value is PageExercise {
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, exerciseKeys) ||
     !safeIdPattern.test(String(value.id ?? "")) ||
-    value.status !== "published" ||
+    !(
+      (value.status === "published" && value.origin === "reviewed") ||
+      (value.status === "detected" && value.origin === "rag-index")
+    ) ||
     !safeIdPattern.test(String(value.unitId ?? "")) ||
     (value.stage !== "learn" && value.stage !== "practice") ||
     !isPositiveInteger(value.revision) ||
@@ -134,6 +153,7 @@ export function parsePageExercisesResponse(
     value.bookId !== expected.bookId ||
     value.page !== expected.page ||
     (value.publicationStatus !== "published" &&
+      value.publicationStatus !== "rag-indexed" &&
       value.publicationStatus !== "not-published") ||
     !Array.isArray(value.exercises)
   ) {
@@ -148,21 +168,35 @@ export function parsePageExercisesResponse(
   }
 
   if (
-    value.publicationStatus === "published" &&
+    value.publicationStatus !== "not-published" &&
     !value.exercises.every((exercise) =>
-      isPublicExercise(exercise, expected.page),
+      isPageExercise(exercise, expected.page),
     )
   ) {
     return null;
   }
 
-  const exerciseKeys = new Set(
+  if (
+    (value.publicationStatus === "published" &&
+      value.exercises.some(
+        (exercise) => (exercise as PageExercise).origin !== "reviewed",
+      )) ||
+    (value.publicationStatus === "rag-indexed" &&
+      (value.exercises.length === 0 ||
+        value.exercises.some(
+          (exercise) => (exercise as PageExercise).origin !== "rag-index",
+        )))
+  ) {
+    return null;
+  }
+
+  const exerciseIdentities = new Set(
     value.exercises.map((exercise) => {
-      const candidate = exercise as PublicExercise;
+      const candidate = exercise as PageExercise;
       return `${candidate.id}:${candidate.revision}`;
     }),
   );
-  if (exerciseKeys.size !== value.exercises.length) {
+  if (exerciseIdentities.size !== value.exercises.length) {
     return null;
   }
 

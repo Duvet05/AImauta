@@ -16,6 +16,7 @@ import {
   openPdfPageRenderer,
   renderPdfPages
 } from "@/lib/pdf-page-renderer";
+import { MAX_INGEST_PDF_BYTES } from "@/lib/catalog";
 
 const temporaryDirectories: string[] = [];
 
@@ -156,13 +157,13 @@ describe("renderizador PDF server-side", () => {
     ).rejects.toMatchObject({ code: "PAGE_COUNT_MISMATCH" });
   });
 
-  it("rechaza archivos mayores a 50 MiB antes de leerlos", async () => {
+  it("rechaza archivos mayores al máximo antes de leerlos", async () => {
     const fixture = await pdfFixture(1);
     const oversizedPath = path.join(fixture.directory, "oversized.pdf");
     const handle = await open(oversizedPath, "w");
     try {
       await handle.write(Buffer.from("%PDF-"));
-      await handle.truncate(50 * 1024 * 1024 + 1);
+      await handle.truncate(MAX_INGEST_PDF_BYTES + 1);
     } finally {
       await handle.close();
     }

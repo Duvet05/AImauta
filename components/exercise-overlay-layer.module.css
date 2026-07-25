@@ -26,6 +26,22 @@
     0 0 0 5px rgb(217 54 54 / 0.2);
 }
 
+.ragRegion {
+  border-color: #226f91;
+  border-style: dashed;
+  background: rgb(34 111 145 / 0.06);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.8),
+    0 2px 8px rgb(18 71 94 / 0.18);
+}
+
+.ragRegion.selectedRegion {
+  background: rgb(34 111 145 / 0.14);
+  box-shadow:
+    0 0 0 2px rgb(255 255 255 / 0.9),
+    0 0 0 5px rgb(34 111 145 / 0.22);
+}
+
 .trigger {
   position: absolute;
   top: -2px;
@@ -53,8 +69,17 @@
   touch-action: manipulation;
 }
 
+.ragRegion .trigger {
+  border-color: #18536d;
+  background: #226f91;
+}
+
 .trigger:hover:not(:disabled) {
   background: #a71f1f;
+}
+
+.ragRegion .trigger:hover:not(:disabled) {
+  background: #18536d;
 }
 
 .trigger:focus-visible {
@@ -70,6 +95,11 @@
   background: #fff;
 }
 
+.ragRegion .trigger[aria-pressed="true"] {
+  color: #123f53;
+  background: #fff;
+}
+
 .trigger:disabled {
   cursor: default;
   opacity: 0.86;
@@ -77,7 +107,8 @@
 
 @media (forced-colors: active) {
   .region,
-  .selectedRegion {
+  .selectedRegion,
+  .ragRegion {
     border-color: Highlight;
     background: transparent;
     box-shadow: none;

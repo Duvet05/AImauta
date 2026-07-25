@@ -1,15 +1,17 @@
 "use client";
 
+import type { ExerciseRegion } from "@/lib/exercise-manifest";
 import type {
-  ExerciseRegion,
-  PublicExercise,
-} from "@/lib/exercise-manifest";
+  PageExercise,
+  PageExerciseOrigin,
+} from "@/lib/page-exercises-response";
 
 import styles from "@/components/exercise-overlay-layer.module.css";
 
 export type ExerciseSelection = {
   exerciseId: string;
   exerciseRevision: number;
+  origin: PageExerciseOrigin;
   regionId: string;
   page: number;
 };
@@ -17,7 +19,7 @@ export type ExerciseSelection = {
 export type ExerciseOverlayState = "loading" | "ready" | "error";
 
 type ExerciseOverlayLayerProps = {
-  exercises?: readonly PublicExercise[];
+  exercises?: readonly PageExercise[];
   page: number;
   selected?: ExerciseSelection | null;
   overlayState?: ExerciseOverlayState;
@@ -25,7 +27,7 @@ type ExerciseOverlayLayerProps = {
 };
 
 type PageExerciseRegion = {
-  exercise: PublicExercise;
+  exercise: PageExercise;
   region: ExerciseRegion;
 };
 
@@ -50,12 +52,16 @@ function percent(value: number): string {
 }
 
 function regionLabel(
-  exercise: PublicExercise,
+  exercise: PageExercise,
   region: ExerciseRegion,
 ): string {
   const title = exercise.title?.trim();
   const name = title ? `${exercise.label}: ${title}` : exercise.label;
-  return `Seleccionar ${name}, página ${region.page}`;
+  const source =
+    exercise.origin === "rag-index"
+      ? "actividad detectada en"
+      : "ejercicio revisado de";
+  return `Seleccionar ${name}, ${source} la página ${region.page}`;
 }
 
 export function ExerciseOverlayLayer({
@@ -70,7 +76,10 @@ export function ExerciseOverlayLayer({
   }
 
   const pageRegions: PageExerciseRegion[] = exercises
-    .filter((exercise) => exercise.status === "published")
+    .filter(
+      (exercise) =>
+        exercise.status === "published" || exercise.status === "detected",
+    )
     .flatMap((exercise) =>
       exercise.regions
         .filter((region) => region.page === page && isRenderableRegion(region))
@@ -91,6 +100,7 @@ export function ExerciseOverlayLayer({
         const selection: ExerciseSelection = {
           exerciseId: exercise.id,
           exerciseRevision: exercise.revision,
+          origin: exercise.origin,
           regionId: region.id,
           page: region.page,
         };
@@ -105,6 +115,8 @@ export function ExerciseOverlayLayer({
         return (
           <div
             className={`${styles.region} ${
+              exercise.origin === "rag-index" ? styles.ragRegion : ""
+            } ${
               selectedExercise ? styles.selectedRegion : ""
             }`}
             key={`${exercise.id}:${region.id}`}
@@ -115,6 +127,7 @@ export function ExerciseOverlayLayer({
               height: percent(region.rect.height),
             }}
             data-region-role={region.role}
+            data-exercise-origin={exercise.origin}
           >
             <button
               className={styles.trigger}
