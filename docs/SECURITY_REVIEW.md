@@ -86,10 +86,11 @@ Con el CRUD abierto (CRIT-1), la PII de menores es exfiltrable y enumerable.
 
 ## Hallazgos medios
 
-### MED-1 — Egress de contenido a Google Cloud no documentado
-La ingesta de ejercicios envía **imágenes de páginas del PDF** a la API cloud de Google (`generativelanguage.googleapis.com`, modelo `gemma-4-26b-a4b-it`) con una API key. Es un proceso offline con opt-in, pero constituye una **segunda dependencia de IA externa** no descrita en `ARCHITECTURE.md`, que afirma que Gemma corre solo local en Aule.
-- **Evidencia:** `lib/gemma-ingest.ts:4-7,910-916`; `scripts/ingest-exercises.ts` (flujo `detect`/`solve`).
-- **Remediación:** documentar la frontera de confianza, la retención y el consentimiento; separarlo claramente del Gemma local del tutor.
+### MED-1 — Egress de contenido a Google Cloud — remediado
+La ingesta usa ahora Gemma 4/Ollama loopback de forma predeterminada. Google
+permanece como modo offline explícito, exige proveedor y clave, y su frontera de
+confianza está documentada en `ARCHITECTURE.md`, `DEPLOYMENT.md` e
+`infra/ingest/README.md`.
 
 ### MED-2 — Estado single-instance (anti-replay y rate-limit en memoria)
 El registro anti-replay de sesiones y los límites de admisión viven en memoria del proceso: se pierden al reiniciar y no coordinan entre réplicas. Escalar horizontalmente **rompe el enforcement en silencio**.
@@ -130,15 +131,17 @@ El CI es completo (catalog:validate, typecheck, lint, vitest, build, pytest del 
 ## Divergencias documentación ↔ código
 
 - **DOC-1 —** `ARCHITECTURE.md` omite: la capa Prisma/PostgreSQL y su PII; todo el subsistema de ejercicios y su ruta `GET /api/materials/:bookId/exercises`; el egress a Google (MED-1); la re-verificación de integridad SHA-256 por request de la ruta PDF (`lib/file-integrity.ts`).
-- **DOC-2 —** La "RAG léxica por página con ventana de ±2" que describe el doc (`ARCHITECTURE.md`, sección Contenido/RAG) **no está cableada al tutor**: `retrieveEvidence`/`rankChunks` (`lib/retrieval.ts`) solo se referencian en `tests/`. El turno real usa `retrieveExerciseEvidence` (evidencia derivada del ejercicio). Decidir: cablearla o retirarla del doc.
+- **DOC-2 — remediado:** el tutor usa exclusivamente evidencia revisada ligada
+  a checksum, revisión y regiones dentro del bundle atómico; la recuperación
+  genérica por página ya no se presenta como fuente exacta del ejercicio.
 - **Dos fuentes de verdad —** el catálogo vive en `/config` y se copia crudo a `ConfigSnapshot` en BD; la app sigue leyendo los archivos → posible drift. `Evaluation.unitId` es string suelto, no FK (decisión deliberada, documentar).
 
 ---
 
 ## Fortalezas confirmadas (preservar)
 
-- **Tutor:** guard de salida cerrado — Gemma elige **1 de 5 etiquetas**; cualquier desviación se descarta y cae a plantilla determinista (`lib/pedagogy.ts:90-124`, `lib/tutor-service.ts:195-211`). HMAC-SHA-256 con `timingSafeEqual` y anti-replay monotónico (`lib/learning-session.ts:148,305-310,238-249`). Auth interna fail-closed con comparación en tiempo constante (`lib/internal-auth.ts:11-30`). Timeout + respaldo determinista real ante caída de Ollama (`lib/ollama.ts:36,55-57`; `lib/tutor-service.ts:188-211`). Exclusión de `Evaluamos`/`teacherOnly`.
-- **Ejercicios:** separación pública/privada estricta (soluciones en mount aparte, `O_NOFOLLOW`), integridad **re-verificada por request** y fail-closed (`lib/file-integrity.ts:130`), release en dos fases con lock y rollback, **revisión humana obligatoria**. Sin fuga de soluciones ni path-traversal explotable.
+- **Tutor:** guard de salida cerrado — Gemma elige **1 de 5 etiquetas**; cualquier desviación se descarta y cae a plantilla determinista (`lib/pedagogy.ts`, `lib/tutor-service.ts`). HMAC-SHA-256 con `timingSafeEqual` y anti-replay monotónico. Auth interna fail-closed con comparación en tiempo constante. El router Ollama en `lib/llm.ts` sólo acepta loopback, modelo fijado, respuesta acotada y sin redirecciones; una caída activa el respaldo determinista o un fallback cloud explícito.
+- **Ejercicios:** separación pública/privada estricta, `O_NOFOLLOW`, integridad fail-closed y **revisión humana obligatoria**. El bundle privado activa público, solución y evidencia regional con un solo `rename`, lock recuperable y rollback.
 - **Config/flags/ops:** flags fail-closed con el servidor como autoridad sobre `?avatar=1` (`lib/feature-flags.ts`, `app/api/livekit/token/route.ts:24`); sin defaults inseguros; contenedores read-only/no-root/no-new-privileges; imágenes pinneadas por digest; ingesta sin superficie HTTP; manejo de errores que no filtra internals (`lib/http.ts:20-46`).
 
 ---

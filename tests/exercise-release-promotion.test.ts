@@ -29,12 +29,14 @@ import {
   type PrivateExerciseSolutionsManifest,
   type PublicExerciseManifest,
 } from "@/lib/exercise-manifest";
+import { EXERCISE_INGEST_CONTRACT_VERSION } from "@/lib/gemma-ingest";
 import {
   BOOK_INDEX_VERSION,
   INDEX_EXTRACTOR_VERSION,
 } from "@/lib/retrieval";
 import {
   promoteExerciseRelease,
+  validateExerciseIngestionReport,
   validateReviewedExerciseRelease,
   verifyRuntimeBookArtifacts,
   type RuntimeBookArtifactVerification,
@@ -127,6 +129,38 @@ function privateManifest(
   };
 }
 
+function ingestionReport(): Record<string, unknown> {
+  return {
+    schemaVersion: 3,
+    bookId: catalogEntry.id,
+    sourceSha256: catalogEntry.expectedSha256,
+    provider: "ollama",
+    endpointScope: "loopback",
+    contractVersion: EXERCISE_INGEST_CONTRACT_VERSION,
+    model: "gemma-release-test",
+    generatedAt: "2026-07-25T00:00:00.000Z",
+    exerciseCount: 1,
+    reviewRequired: true,
+    coverage: {
+      pageCount: catalogEntry.pages,
+      pagesReviewed: Array.from(
+        { length: catalogEntry.pages },
+        (_, index) => {
+          const page = index + 1;
+          return {
+            page,
+            status:
+              page === 13 ? "exercise_found" : "no_exercise",
+            candidateCount: page === 13 ? 1 : 0,
+          };
+        },
+      ),
+      blockers: [],
+    },
+    issues: [],
+  };
+}
+
 async function secureDirectory(
   directory: string,
   mode: number,
@@ -180,14 +214,22 @@ async function writeReviewedPair(
     jobDirectory,
     `${catalogEntry.id}.private.reviewed.json`,
   );
+  const reportPath = path.join(
+    jobDirectory,
+    `${catalogEntry.id}.ingestion-report.json`,
+  );
   await writeFile(publicPath, JSON.stringify(publicManifest(revision)), {
     mode: 0o600,
   });
   await writeFile(privatePath, JSON.stringify(privateManifest(revision)), {
     mode: 0o600,
   });
+  await writeFile(reportPath, JSON.stringify(ingestionReport()), {
+    mode: 0o600,
+  });
   await chmod(publicPath, 0o600);
   await chmod(privatePath, 0o600);
+  await chmod(reportPath, 0o600);
 }
 
 function onePagePdf(): Buffer {
@@ -320,6 +362,71 @@ describe("validación y rutas de promoción", () => {
       ),
     ).toThrow(/exercise\.none-published/u);
   });
+
+  it("exige cobertura completa, única y coherente antes de promover", () => {
+    const manifest = publicManifest();
+    expect(
+      validateExerciseIngestionReport(ingestionReport(), manifest),
+    ).toMatchObject({
+      pageCount: catalogEntry.pages,
+      reviewedPages: catalogEntry.pages,
+    });
+
+    const duplicate = ingestionReport();
+    const duplicateCoverage = duplicate.coverage as {
+      pagesReviewed: Array<Record<string, unknown>>;
+    };
+    duplicateCoverage.pagesReviewed[1] = {
+      ...duplicateCoverage.pagesReviewed[1],
+      page: 1,
+    };
+    expect(() =>
+      validateExerciseIngestionReport(duplicate, manifest),
+    ).toThrow(/coverage\.(?:duplicate-page|missing-page)/u);
+
+    const contradictory = ingestionReport();
+    const contradictoryCoverage = contradictory.coverage as {
+      pagesReviewed: Array<Record<string, unknown>>;
+    };
+    contradictoryCoverage.pagesReviewed[12] = {
+      page: 13,
+      status: "no_exercise",
+      candidateCount: 1,
+    };
+    expect(() =>
+      validateExerciseIngestionReport(contradictory, manifest),
+    ).toThrow(/coverage\.no-exercise-has-candidates/u);
+
+    const emptyFound = ingestionReport();
+    const emptyFoundCoverage = emptyFound.coverage as {
+      pagesReviewed: Array<Record<string, unknown>>;
+    };
+    emptyFoundCoverage.pagesReviewed[12] = {
+      page: 13,
+      status: "exercise_found",
+      candidateCount: 0,
+    };
+    expect(() =>
+      validateExerciseIngestionReport(emptyFound, manifest),
+    ).toThrow(/coverage\.exercise-found-empty/u);
+
+    const uncertain = ingestionReport();
+    const uncertainCoverage = uncertain.coverage as {
+      pagesReviewed: Array<Record<string, unknown>>;
+      blockers: Array<Record<string, unknown>>;
+    };
+    uncertainCoverage.pagesReviewed[12] = {
+      page: 13,
+      status: "uncertain",
+      candidateCount: 1,
+    };
+    uncertainCoverage.blockers = [
+      { code: "page-uncertain", page: 13 },
+    ];
+    expect(() =>
+      validateExerciseIngestionReport(uncertain, manifest),
+    ).toThrow(/coverage\.(?:uncertain-page|blocker)/u);
+  });
 });
 
 describe.skipIf(operatorUid <= 0)(
@@ -431,7 +538,7 @@ describe.skipIf(operatorUid <= 0)(
 );
 
 describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
-  it("publica privado primero y conserva snapshots nuevo y anterior", async () => {
+  it("activa público y privado en un solo bundle y conserva snapshots", async () => {
     const layout = await testLayout();
     await writeReviewedPair(layout.jobDirectory, 1);
 
@@ -460,7 +567,7 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
     expect(first.previousReleaseSnapshot).toBe(false);
 
     await writeReviewedPair(layout.jobDirectory, 2);
-    let observedPrivateBeforePublic = false;
+    let observedAtomicBundle = false;
     const publicDestination = path.join(
       layout.runtimeRoot,
       "manifests",
@@ -472,6 +579,11 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
       "exercise-solutions",
       `${catalogEntry.id}.private.json`,
     );
+    const bundleDestination = path.join(
+      layout.runtimeRoot,
+      "exercise-solutions",
+      `${catalogEntry.id}.release.json`,
+    );
     const second = await promoteExerciseRelease({
       jobId: "job-test",
       bookId: catalogEntry.id,
@@ -482,16 +594,29 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
       now: () => new Date("2026-07-25T00:20:00.000Z"),
       hooks: {
         verifyRuntimeArtifacts: verifiedFixtureRuntime,
-        afterPrivateActivation: async () => {
-          const activePrivate = JSON.parse(
-            await readFile(privateDestination, "utf8"),
+        afterBundleActivation: async () => {
+          const activeBundle = JSON.parse(
+            await readFile(bundleDestination, "utf8"),
           );
-          const activePublic = JSON.parse(
-            await readFile(publicDestination, "utf8"),
-          );
-          expect(activePrivate.solutions[0].revision).toBe(2);
-          expect(activePublic.exercises[0].revision).toBe(1);
-          observedPrivateBeforePublic = true;
+          expect(
+            activeBundle.privateManifest.solutions[0].revision,
+          ).toBe(2);
+          expect(
+            activeBundle.publicManifest.exercises[0].revision,
+          ).toBe(2);
+          // Compatibility mirrors have not moved yet, but no reader can mix
+          // them with the authoritative bundle.
+          expect(
+            JSON.parse(
+              await readFile(privateDestination, "utf8"),
+            ).solutions[0].revision,
+          ).toBe(1);
+          expect(
+            JSON.parse(
+              await readFile(publicDestination, "utf8"),
+            ).exercises[0].revision,
+          ).toBe(1);
+          observedAtomicBundle = true;
         },
       },
     });
@@ -501,7 +626,7 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
       publishedExercises: 1,
       previousReleaseSnapshot: true,
     });
-    expect(observedPrivateBeforePublic).toBe(true);
+    expect(observedAtomicBundle).toBe(true);
     expect(
       JSON.parse(await readFile(publicDestination, "utf8")).exercises[0]
         .revision,
@@ -512,6 +637,7 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
     ).toBe(2);
     expect((await lstat(publicDestination)).mode & 0o777).toBe(0o640);
     expect((await lstat(privateDestination)).mode & 0o777).toBe(0o640);
+    expect((await lstat(bundleDestination)).mode & 0o777).toBe(0o640);
 
     const snapshotRoot = path.join(
       layout.runtimeRoot,
@@ -524,6 +650,24 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
           snapshotRoot,
           "new",
           `${catalogEntry.id}.public.json`,
+        ),
+      ),
+    ).resolves.toBeInstanceOf(Buffer);
+    await expect(
+      readFile(
+        path.join(
+          snapshotRoot,
+          "new",
+          `${catalogEntry.id}.release.json`,
+        ),
+      ),
+    ).resolves.toBeInstanceOf(Buffer);
+    await expect(
+      readFile(
+        path.join(
+          snapshotRoot,
+          "new",
+          `${catalogEntry.id}.ingestion-report.json`,
         ),
       ),
     ).resolves.toBeInstanceOf(Buffer);
@@ -545,10 +689,88 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
     expect(releaseMetadata).toMatchObject({
       status: "published",
       runtimeArtifacts: fixtureRuntimeArtifacts,
+      coverageReport: {
+        pageCount: catalogEntry.pages,
+        reviewedPages: catalogEntry.pages,
+      },
     });
   });
 
-  it("restaura el privado anterior si falla la activación pública", async () => {
+  it("rechaza la promoción si falta el reporte de cobertura", async () => {
+    const layout = await testLayout("job-without-coverage");
+    await writeReviewedPair(layout.jobDirectory, 1);
+    await rm(
+      path.join(
+        layout.jobDirectory,
+        `${catalogEntry.id}.ingestion-report.json`,
+      ),
+    );
+
+    await expect(
+      promoteExerciseRelease({
+        jobId: "job-without-coverage",
+        bookId: catalogEntry.id,
+        ingestRoot: layout.ingestRoot,
+        runtimeRoot: layout.runtimeRoot,
+        releaseId: "release-without-coverage",
+        currentUid: operatorUid,
+        hooks: {
+          verifyRuntimeArtifacts: verifiedFixtureRuntime,
+        },
+      }),
+    ).rejects.toThrow(/reporte de cobertura/u);
+
+    await expect(
+      lstat(
+        path.join(
+          layout.runtimeRoot,
+          "manifests",
+          "exercises",
+          `${catalogEntry.id}.public.json`,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("recupera un lock antiguo sólo cuando su proceso ya no existe", async () => {
+    const layout = await testLayout("job-stale-lock");
+    await writeReviewedPair(layout.jobDirectory, 1);
+    const lockPath = path.join(
+      layout.runtimeRoot,
+      ".exercise-release.lock",
+    );
+    await writeFile(
+      lockPath,
+      `${JSON.stringify({
+        pid: 2_147_483_647,
+        uid: operatorUid,
+        createdAt: "2020-01-01T00:00:00.000Z",
+      })}\n`,
+      { mode: 0o600 },
+    );
+    await chmod(lockPath, 0o600);
+
+    await expect(
+      promoteExerciseRelease({
+        jobId: "job-stale-lock",
+        bookId: catalogEntry.id,
+        ingestRoot: layout.ingestRoot,
+        runtimeRoot: layout.runtimeRoot,
+        releaseId: "release-after-stale-lock",
+        currentUid: operatorUid,
+        hooks: {
+          verifyRuntimeArtifacts: verifiedFixtureRuntime,
+        },
+      }),
+    ).resolves.toMatchObject({
+      releaseId: "release-after-stale-lock",
+    });
+    await expect(lstat(lockPath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("restaura el bundle anterior si falla después de activarlo", async () => {
     const layout = await testLayout();
     await writeReviewedPair(layout.jobDirectory, 1);
     await promoteExerciseRelease({
@@ -574,8 +796,14 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
       "exercise-solutions",
       `${catalogEntry.id}.private.json`,
     );
+    const bundleDestination = path.join(
+      layout.runtimeRoot,
+      "exercise-solutions",
+      `${catalogEntry.id}.release.json`,
+    );
     const previousPublic = await readFile(publicDestination);
     const previousPrivate = await readFile(privateDestination);
+    const previousBundle = await readFile(bundleDestination);
 
     await writeReviewedPair(layout.jobDirectory, 2);
     await expect(
@@ -588,8 +816,8 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
         currentUid: operatorUid,
         hooks: {
           verifyRuntimeArtifacts: verifiedFixtureRuntime,
-          afterPrivateActivation: () => {
-            throw new Error("fallo simulado antes del público");
+          afterBundleActivation: () => {
+            throw new Error("fallo simulado tras activar el bundle");
           },
         },
       }),
@@ -600,6 +828,9 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
     );
     await expect(readFile(privateDestination)).resolves.toEqual(
       previousPrivate,
+    );
+    await expect(readFile(bundleDestination)).resolves.toEqual(
+      previousBundle,
     );
     await expect(
       lstat(path.join(layout.runtimeRoot, ".exercise-release.lock")),

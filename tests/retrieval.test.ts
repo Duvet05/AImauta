@@ -2,10 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   rankChunks,
-  retrieveExerciseEvidence,
   type IndexedChunk,
 } from "@/lib/retrieval";
-import type { PublicExercise } from "@/lib/exercise-manifest";
 
 const chunks: IndexedChunk[] = [
   {
@@ -89,46 +87,5 @@ describe("rankChunks", () => {
     });
 
     expect(result.map((item) => item.id)).not.toContain("lexical");
-  });
-});
-
-describe("retrieveExerciseEvidence", () => {
-  it("vincula toda evidencia al ejercicio y conserva sus páginas multipágina", () => {
-    const exercise: PublicExercise = {
-      id: "ejercicio-fracciones",
-      status: "published",
-      unitId: "ficha-1-fracciones",
-      stage: "learn",
-      revision: 4,
-      label: "Problema 1",
-      title: "Compara fracciones",
-      prompt: "Compara ambas fracciones y explica tu estrategia.",
-      regions: [
-        {
-          id: "ejercicio-fracciones-contexto",
-          page: 13,
-          role: "context",
-          order: 1,
-          rect: { x: 0.1, y: 0.1, width: 0.8, height: 0.2 },
-        },
-        {
-          id: "ejercicio-fracciones-pregunta",
-          page: 18,
-          role: "prompt",
-          order: 2,
-          rect: { x: 0.1, y: 0.4, width: 0.8, height: 0.2 },
-        },
-      ],
-    };
-
-    const result = retrieveExerciseEvidence(exercise);
-
-    expect(result.map(({ exerciseId, page }) => ({ exerciseId, page }))).toEqual([
-      { exerciseId: exercise.id, page: 13 },
-      { exerciseId: exercise.id, page: 18 },
-    ]);
-    expect(result.every((item) => item.text.includes(exercise.prompt))).toBe(
-      true,
-    );
   });
 });

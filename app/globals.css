@@ -1948,7 +1948,6 @@ svg {
     min-height: auto;
   }
 
-<<<<<<< HEAD
   .hero-quipu {
     top: 4.5rem;
     right: -6rem;
@@ -1956,8 +1955,6 @@ svg {
     opacity: 0.1;
   }
 
-=======
->>>>>>> 55c993ad15eb849404a24bf3ba059eae2aa68afa
   .problem-section,
   .teacher-section {
     grid-template-columns: 1fr;
@@ -2045,7 +2042,6 @@ svg {
     font-size: 0.95rem;
   }
 
-<<<<<<< HEAD
   .hero-quipu {
     top: 4rem;
     right: -5.5rem;
@@ -2054,8 +2050,6 @@ svg {
     transform: rotate(6deg);
   }
 
-=======
->>>>>>> 55c993ad15eb849404a24bf3ba059eae2aa68afa
   .learning-journey-section {
     margin-top: 3.75rem;
     padding-block: 4.25rem;

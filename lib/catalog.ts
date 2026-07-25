@@ -104,6 +104,11 @@ export type TutorablePublishedCatalogEntry = PublishedCatalogEntry & {
   materialType: TutorableMaterialType;
 };
 
+export type AuthoringCatalogEntry = CatalogEntry & {
+  materialType: TutorableMaterialType;
+  status: Exclude<CatalogStatus, "disabled">;
+};
+
 /**
  * Public material shape. The normalized taxonomy remains available through
  * `levelId`, `gradeNumber` and `courseId`; labels are derived for compatibility
@@ -643,8 +648,9 @@ function toBook(entry: TutorablePublishedCatalogEntry): Book {
 const publishedBooks: readonly Book[] = catalogEntries
   .filter(isPublishedTutorableCatalogEntry)
   .map(toBook);
-const curriculumEligibleEntries: readonly CatalogEntry[] =
-  catalogEntries.filter(isTutorableCatalogEntry);
+const curriculumEligibleEntries = catalogEntries.filter(
+  isTutorableCatalogEntry
+);
 
 /**
  * Security-scoped catalog used by curriculum, ingestion and manifest code.
@@ -653,6 +659,24 @@ const curriculumEligibleEntries: readonly CatalogEntry[] =
  */
 export function getCatalogEntries(): readonly CatalogEntry[] {
   return curriculumEligibleEntries;
+}
+
+/**
+ * Editorial lookup for deterministic, offline preparation only.
+ *
+ * Draft and review materials need curriculum classification while their PDF,
+ * index and exercise manifests are being prepared. They remain absent from
+ * every public lookup, and disabled materials stay unavailable here as well.
+ */
+export function getAuthoringCatalogEntry(
+  id: string
+): AuthoringCatalogEntry | undefined {
+  const matching = curriculumEligibleEntries.filter(
+    (entry) => entry.id === id && entry.status !== "disabled"
+  );
+  return matching.length === 1
+    ? (matching[0] as AuthoringCatalogEntry)
+    : undefined;
 }
 
 /**

@@ -21,8 +21,13 @@ import { consumeRateLimit } from "@/lib/rate-limit";
 
 export type TutorTurnResult = {
   message: string;
-  citations: Array<{ sourceId: string; page: number }>;
+  citations: Array<{
+    sourceId: string;
+    page: number;
+    chunkId: string;
+  }>;
   mode:
+    | "ollama"
     | "openai"
     | "xai"
     | "guided-fallback"
@@ -121,13 +126,15 @@ export async function guideLearningTurn(input: {
   const exercisePages = [
     ...new Set(exercise.regions.map((region) => region.page))
   ].sort((left, right) => left - right);
-  const reviewedSolution = await getReviewedExerciseSolution({
-    bookId: verified.bookId,
-    exerciseId: exercise.id,
-    revision: exercise.revision
-  });
-
-  const evidence = retrieveExerciseEvidence(exercise)
+  const evidence = (
+    await retrieveExerciseEvidence({
+      bookId: verified.bookId,
+      exercise,
+      question: input.message,
+      attempt: input.attempt,
+      page: verified.page
+    })
+  )
     .filter(
       (item) =>
         item.exerciseId === exercise.id &&
@@ -138,11 +145,25 @@ export async function guideLearningTurn(input: {
     )
     .map((item, index) => ({ ...item, sourceId: `S${index + 1}` }));
   if (evidence.length === 0) {
-    throw new LearningSessionError(
-      "El ejercicio seleccionado no tiene material de referencia disponible.",
-      "exercise"
-    );
+    return {
+      message:
+        "El material de referencia de este ejercicio no está disponible. AImauta no dará pistas hasta que el cuaderno validado esté listo.",
+      citations: [],
+      mode: "exercise-locked",
+      sessionToken: input.sessionToken,
+      session: verified,
+      activity: verifiedActivity,
+      policy: {
+        hintLevel: 0,
+        canRevealSolution: false
+      }
+    };
   }
+  const reviewedSolution = await getReviewedExerciseSolution({
+    bookId: verified.bookId,
+    exerciseId: exercise.id,
+    revision: exercise.revision
+  });
   const current = recordLearningTurn({
     token: input.sessionToken,
     attempt: input.attempt,
@@ -164,7 +185,8 @@ export async function guideLearningTurn(input: {
   });
   const citations = evidence.map((item) => ({
     sourceId: item.sourceId,
-    page: item.page
+    page: item.page,
+    chunkId: item.id
   }));
 
   if (policy.canRevealSolution) {

@@ -1,5 +1,9 @@
 import curriculaManifest from "@/config/curricula.v3.json";
-import { getBook, getCatalogEntries } from "@/lib/catalog";
+import {
+  getAuthoringCatalogEntry,
+  getBook,
+  getCatalogEntries
+} from "@/lib/catalog";
 
 export type LearningStage =
   | "orientation"
@@ -284,16 +288,16 @@ export function getFirstTutorablePage(
   return undefined;
 }
 
-export function getPageActivity(
+function classifyPageActivity(
   bookId: string,
-  page: number
+  page: number,
+  pages: number | undefined
 ): PageActivity {
-  const book = getBook(bookId);
   if (
-    !book ||
+    pages === undefined ||
     !Number.isInteger(page) ||
     page < 1 ||
-    page > book.pages
+    page > pages
   ) {
     return unavailableActivity(page);
   }
@@ -301,7 +305,7 @@ export function getPageActivity(
   const curriculum = getBookCurriculum(bookId);
   if (
     !curriculum ||
-    !isCurriculumStructureSafe(curriculum, book.pages)
+    !isCurriculumStructureSafe(curriculum, pages)
   ) {
     return unavailableActivity(page);
   }
@@ -359,4 +363,28 @@ export function getPageActivity(
     endPage: section.endPage,
     tutorAvailable: section.stage !== "assessment"
   };
+}
+
+export function getPageActivity(
+  bookId: string,
+  page: number
+): PageActivity {
+  return classifyPageActivity(bookId, page, getBook(bookId)?.pages);
+}
+
+/**
+ * Offline/editorial classification for preparing draft and review books.
+ *
+ * This never changes public availability: request-time code must continue to
+ * use getPageActivity(), which only sees safely published books.
+ */
+export function getAuthoringPageActivity(
+  bookId: string,
+  page: number
+): PageActivity {
+  return classifyPageActivity(
+    bookId,
+    page,
+    getAuthoringCatalogEntry(bookId)?.pages
+  );
 }
