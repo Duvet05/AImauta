@@ -40,9 +40,9 @@ model Course {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  grade    Grade     @relation(fields: [gradeId], references: [id], onDelete: Cascade)
-  students Student[] @relation("StudentCourses")
-  teachers Teacher[] @relation("TeacherCourses")
+  grade       Grade        @relation(fields: [gradeId], references: [id], onDelete: Cascade)
+  teachers    Teacher[]    @relation("TeacherCourses")
+  enrollments Enrollment[]
 
   @@unique([gradeId, name])
   @@index([gradeId])
@@ -56,7 +56,7 @@ model Student {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  courses Course[] @relation("StudentCourses")
+  enrollments Enrollment[]
 }
 
 model Teacher {
@@ -67,5 +67,74 @@ model Teacher {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  courses Course[] @relation("TeacherCourses")
+  courses       Course[]       @relation("TeacherCourses")
+  progressNotes ProgressNote[]
+}
+
+// A student's participation in one course. Per-student grades and teacher
+// feedback attach here rather than to Student or Course directly, since both
+// are scoped to a specific student/course pairing.
+model Enrollment {
+  id        String   @id @default(cuid())
+  studentId String
+  courseId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  student       Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  course        Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  evaluations   Evaluation[]
+  progressNotes ProgressNote[]
+
+  @@unique([studentId, courseId])
+  @@index([studentId])
+  @@index([courseId])
+}
+
+// One graded evaluation for a student in a course. unitId is a plain string,
+// not a foreign key: units live in the versioned book-catalog config
+// (lib/curriculum.ts / config/curricula.v3.json), not in this database.
+model Evaluation {
+  id           String    @id @default(cuid())
+  enrollmentId String
+  title        String?
+  score        Float?
+  maxScore     Float?
+  unitId       String?
+  evaluatedAt  DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  enrollment    Enrollment     @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  progressNotes ProgressNote[]
+
+  @@index([enrollmentId])
+}
+
+enum ProgressStatus {
+  EXCELLING
+  ON_TRACK
+  NEEDS_SUPPORT
+  AT_RISK
+}
+
+// A teacher's qualitative feedback and status indicator for a student's
+// progress in a course. Append-only: the "current" status for an enrollment
+// is simply its most recent ProgressNote, keeping history intact rather than
+// overwriting a single mutable field.
+model ProgressNote {
+  id           String         @id @default(cuid())
+  enrollmentId String
+  teacherId    String
+  evaluationId String?
+  feedback     String
+  status       ProgressStatus
+  createdAt    DateTime       @default(now())
+
+  enrollment Enrollment  @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  teacher    Teacher     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  evaluation Evaluation? @relation(fields: [evaluationId], references: [id], onDelete: SetNull)
+
+  @@index([enrollmentId])
+  @@index([teacherId])
 }

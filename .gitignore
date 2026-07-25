@@ -78,3 +78,7 @@ next-env.d.ts
 .pytest_cache/
 
 /lib/generated/prisma
+
+# graphify knowledge graph build output (regenerate with /graphify)
+# The readable summary is committed at docs/GRAPH_REPORT.md instead.
+/graphify-out/
