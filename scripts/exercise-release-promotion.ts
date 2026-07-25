@@ -65,6 +65,14 @@ const allowedIndexStages = new Set<LearningStage>([
   "practice",
   "assessment",
 ]);
+const allowedIngestionIssueCodes = new Set([
+  "candidate-forbidden-page",
+  "candidate-crosses-curriculum",
+  "candidate-too-many-pages",
+  "candidate-stable-id-conflict",
+  "candidate-low-confidence",
+  "solution-low-confidence",
+]);
 
 export class ExerciseReleasePromotionError extends Error {
   constructor(message: string) {
@@ -504,6 +512,32 @@ export function validateExerciseIngestionReport(
   }
   if (!Array.isArray(value.issues)) {
     details.push("coverage.invalid-issues $.issues");
+  } else {
+    value.issues.forEach((issue, index) => {
+      const issuePath = `$.issues[${index}]`;
+      if (
+        !isRecord(issue) ||
+        typeof issue.code !== "string" ||
+        !allowedIngestionIssueCodes.has(issue.code) ||
+        typeof issue.candidateId !== "string" ||
+        issue.candidateId.length < 1 ||
+        issue.candidateId.length > 120
+      ) {
+        details.push(`coverage.invalid-issue ${issuePath}`);
+        return;
+      }
+      if (
+        (issue.resolution !== "accepted-after-review" &&
+          issue.resolution !== "rejected-after-review") ||
+        typeof issue.resolutionNote !== "string" ||
+        issue.resolutionNote.trim().length < 3 ||
+        issue.resolutionNote.length > 1_000 ||
+        typeof issue.reviewedAt !== "string" ||
+        !Number.isFinite(Date.parse(issue.reviewedAt))
+      ) {
+        details.push(`coverage.unresolved-issue ${issuePath}`);
+      }
+    });
   }
 
   const coverage = value.coverage;

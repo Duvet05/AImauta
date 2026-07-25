@@ -426,6 +426,34 @@ describe("validación y rutas de promoción", () => {
     expect(() =>
       validateExerciseIngestionReport(uncertain, manifest),
     ).toThrow(/coverage\.(?:uncertain-page|blocker)/u);
+
+    const unresolved = ingestionReport();
+    unresolved.issues = [
+      {
+        code: "candidate-low-confidence",
+        candidateId: "candidate-1",
+      },
+    ];
+    expect(() =>
+      validateExerciseIngestionReport(unresolved, manifest),
+    ).toThrow(/coverage\.unresolved-issue/u);
+
+    const resolved = ingestionReport();
+    resolved.issues = [
+      {
+        code: "candidate-low-confidence",
+        candidateId: "candidate-1",
+        resolution: "accepted-after-review",
+        resolutionNote: "La región fue cotejada con el PDF.",
+        reviewedAt: "2026-07-25T12:00:00.000Z",
+      },
+    ];
+    expect(
+      validateExerciseIngestionReport(resolved, manifest),
+    ).toMatchObject({
+      pageCount: catalogEntry.pages,
+      reviewedPages: catalogEntry.pages,
+    });
   });
 });
 
