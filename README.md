@@ -14,7 +14,7 @@ _Un tutor socrático que parte del intento real del estudiante, orienta con pist
 ![Next.js](https://img.shields.io/badge/Next.js-App_Router-172d2a?logo=nextdotjs&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
 ![Prisma + Postgres](https://img.shields.io/badge/Prisma-Postgres-172d2a?logo=prisma&logoColor=white)
-![LLM router](https://img.shields.io/badge/LLM-OpenAI_→_xAI-ee8068)
+![LLM router](https://img.shields.io/badge/LLM-OpenAI_→_xAI_→_Gemini-ee8068)
 ![LiveKit](https://img.shields.io/badge/LiveKit-voz-ee8068)
 ![Hecho en Perú](https://img.shields.io/badge/Hecho_en-Perú_🇵🇪-d9ed8d?labelColor=172d2a)
 
@@ -91,7 +91,8 @@ Voz:    navegador ─► LiveKit ─► worker STT ─► /api/internal/turn
                                                   │
                                                   ├─► RAG interno localhost:3310
                                                   │    (evidencia validada con fuente)
-                                                  ├─► OpenAI → xAI (elige el movimiento)
+                                                  ├─► OpenAI → xAI → Gemini
+                                                  │    (elige el movimiento)
                                                   └─► guía segura de respaldo (determinista)
 
         navegador ◄─ LiveKit ◄─ worker TTS ◄────── respuesta socrática aprobada
@@ -109,9 +110,10 @@ Una plataforma para menores exige rigor. AImauta lo trae de fábrica:
 - **Publicación _fail-closed_.** Solo el material en estado `published` llega al navegador. Todo material exige tamaño fijado, `SHA-256`, fuente oficial, licencia revisada, taxonomía válida y currículo versionado sin huecos. Cualquier estado desconocido se trata como no disponible.
 - **La ayuda se limita a `learn` y `practice`.** En `assessment` (Evaluamos) no hay RAG, texto ni voz — validado también en el servidor, no solo en la interfaz.
 - **Sesiones anónimas.** Token firmado con `HMAC-SHA-256`, válido 2 horas. Sin cuentas, sin conversaciones persistidas y **sin datos de menores en Git**.
-- **Presupuesto LLM cerrado.** OpenAI `gpt-4.1` es el primario y xAI `grok-4.3`
-  el único fallback. Cada intento reserva en PostgreSQL un presupuesto diario
-  compartido; si el control falla o se agota, se usa la guía determinista.
+- **Presupuesto LLM cerrado.** OpenAI `gpt-4.1`, xAI `grok-4.3` y Gemini
+  `gemini-3.6-flash` forman una cadena explícita y permitida en código. Cada
+  intento reserva en PostgreSQL un presupuesto diario compartido; si el control
+  falla o se agota, se usa la guía determinista.
 - **Tratamiento externo explícito.** AImauta no persiste prompts ni respuestas
   en su base de datos, pero el intento y evidencia limitada se procesan
   temporalmente en el proveedor configurado con `store: false`. Este parámetro
@@ -142,7 +144,7 @@ La importación usa **exclusivamente** la descarga oficial del MINEDU; los metad
 | **Visor** | PDF.js (`pdfjs-dist`) con capa de texto |
 | **Avatar 3D** | Three.js · modelo MakeHuman CC0, local |
 | **Datos** | Prisma · PostgreSQL |
-| **Tutor / IA** | RAG interno FastAPI · router **OpenAI → xAI** · migración posterior a Gemma |
+| **Tutor / IA** | RAG interno FastAPI · router **OpenAI → xAI → Gemini** · migración posterior a Gemma |
 | **Voz** | LiveKit Cloud Inference (Deepgram Nova-3 / Inworld TTS 2 · Silero VAD) |
 | **Pruebas** | Vitest |
 | **Licencia** | MIT |
@@ -157,7 +159,7 @@ secretos aleatorios e independientes (≥ 32 caracteres):
 `AIMAUTA_ADMIN_SECRET`,
 `AIMAUTA_ASSIGNMENT_ADMIN_SECRET` y `AIMAUTA_ASSIGNMENT_TOKEN_SECRET`. Las
 tareas también requieren `DATABASE_URL` y el origen HTTPS
-`AIMAUTA_PUBLIC_URL`. Las claves de OpenAI y xAI se guardan fuera de Git en
+`AIMAUTA_PUBLIC_URL`. Las claves de OpenAI, xAI y Google se guardan fuera de Git en
 `/home/hii1sc/aimauta-runtime/model-providers.env`, separado del entorno web y
 con permisos `0600`.
 

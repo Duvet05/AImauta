@@ -49,7 +49,7 @@ PowerEdge: Next.js (standalone) ─────────┤                  
   │    └─ índices v2 read-only
   ├─ directorio + tareas QR ─ Prisma ─► PostgreSQL            (sin LLM propio)
   ├─ API LiveKit                         │
-  ├─ HTTPS ──────────────────────────────┴─► OpenAI → xAI
+  ├─ HTTPS ──────────────────────────────┴─► OpenAI → xAI → Gemini
   └─ túnel SSH opcional 127.0.0.1:11435 ──► Aule 127.0.0.1:11434
                                               (Gemma posterior)
 
@@ -62,8 +62,8 @@ PowerEdge conserva la autoridad pedagógica, el contenido, el recuperador y el
 worker. El servicio RAG separado adapta el límite HTTP del prototipo de Marcelo,
 pero abre únicamente los índices v2 verificados de AImauta y escucha solo en
 `127.0.0.1:3310`; no recibe claves de modelo, PDFs arbitrarios ni datos
-persistentes del estudiante. El router temporal usa OpenAI como primario y xAI
-como fallback. El túnel privado a
+persistentes del estudiante. El router temporal usa la cadena explícita
+OpenAI → xAI → Gemini del ejemplo de despliegue. El túnel privado a
 Ollama/Aule se conserva para una migración posterior a Gemma, pero el router
 actual no lo selecciona. LiveKit Cloud transporta el audio y ejecuta STT/TTS
 por *Inference*. La ingesta de ejercicios es offline y usa Gemma 4 por el
@@ -274,16 +274,21 @@ sobreviva.
 
 ### Router temporal y presupuesto de inferencia
 
-`lib/llm.ts` admite una cadena cerrada: OpenAI `gpt-4.1` como primario y, si se
-configuró, xAI `grok-4.3` como único fallback. Los endpoints y modelos están
-permitidos explícitamente en código; una variable que intente seleccionar otro
-proveedor o modelo —incluido Ollama— no genera tráfico. No hay reintentos: un
-turno realiza como máximo un intento en OpenAI y uno en xAI.
+`lib/llm.ts` admite una cadena cerrada y explícita de hasta tres proveedores:
+OpenAI `gpt-4.1`, xAI `grok-4.3` y Gemini `gemini-3.6-flash`. El ejemplo de
+operación conserva OpenAI como primario y ordena xAI y Gemini como fallbacks,
+pero cualquiera de los tres puede ser el primario si se nombra expresamente.
+Los endpoints y modelos están permitidos en código; una variable que intente
+seleccionar otro proveedor o modelo —incluido Ollama— no genera tráfico. No hay
+reintentos dentro de un proveedor.
 
-Ambos proveedores reciben una petición mínima por Responses API con
-`store: false`. OpenAI recibe como `safety_identifier` únicamente un hash
-unidireccional del UUID efímero de sesión; xAI se invoca sin razonamiento
-extendido. El backend no adjunta el token HMAC, el token QR, notas ni
+OpenAI y xAI reciben una petición mínima por Responses API. Gemini usa
+`generateContent` en el endpoint fijo de Google, autentica por
+`x-goog-api-key`, solicita razonamiento `minimal` sin resúmenes de pensamiento
+y rechaza respuestas truncadas, múltiples o sin un único texto final. Las tres
+rutas envían `store: false`. OpenAI recibe como `safety_identifier` únicamente
+un hash unidireccional del UUID efímero de sesión; xAI se invoca sin
+razonamiento extendido. El backend no adjunta el token HMAC, el token QR, notas ni
 identificadores del directorio escolar. Sí se procesan el texto libre que el
 estudiante escribió y fragmentos acotados de evidencia curricular; ese texto
 podría incluir un dato que el propio estudiante escriba.
@@ -298,13 +303,16 @@ pero nunca aumentarlos. Hay además un máximo de dos solicitudes concurrentes,
 o los proveedores no están disponibles, `tutor-service` usa la guía
 determinista sin eludir el límite.
 
-`store: false` evita crear estado de aplicación en la Responses API, pero no
-equivale por sí solo a retención cero. La configuración estándar de
+`store: false` desactiva el almacenamiento de la petición en las APIs
+compatibles, pero no equivale por sí solo a retención cero ni reemplaza los
+controles del proyecto. La configuración estándar de
 [OpenAI](https://developers.openai.com/api/docs/guides/your-data) y
 [xAI](https://docs.x.ai/developers/faq/security) puede conservar contenido por
-hasta 30 días para monitoreo de abuso. Antes de un piloto institucional con
-menores se debe verificar el control de retención apropiado, además de los
-consentimientos y acuerdos aplicables.
+hasta 30 días para monitoreo de abuso; Google separa los logs configurables de
+los datos que pueda conservar para ese monitoreo, según su
+[política de logs](https://ai.google.dev/gemini-api/docs/logs-policy). Antes de
+un piloto institucional con menores se debe verificar el control de retención
+apropiado en cada proyecto, además de los consentimientos y acuerdos aplicables.
 
 El endpoint interno exige `Authorization: Bearer <AIMAUTA_AGENT_SECRET>` con
 comparación en tiempo constante (`lib/internal-auth.ts`), y **falla cerrado**
@@ -416,7 +424,7 @@ por evolucionar la misma sesión.
 
 ```text
 Silero VAD ─► LiveKit Inference · Deepgram Nova-3 (STT)
-   └─► POST /api/internal/turn ─► tutor-service ─► OpenAI → xAI o respaldo
+   └─► POST /api/internal/turn ─► tutor-service ─► router cloud o respaldo
    ◄─────────────────── respuesta aprobada
 ◄─ LiveKit Inference · Inworld TTS-2, voz «Diego» (TTS)
 ```
@@ -496,7 +504,7 @@ la indexación corren en PowerEdge; la Mac solo edita y versiona.
 Secretos obligatorios en producción (≥32 chars, independientes):
 `AIMAUTA_SESSION_SECRET`, `AIMAUTA_AGENT_SECRET`, `AIMAUTA_ADMIN_SECRET`,
 `AIMAUTA_ASSIGNMENT_ADMIN_SECRET` y `AIMAUTA_ASSIGNMENT_TOKEN_SECRET`; además
-se requieren `DATABASE_URL` y las credenciales OpenAI/xAI en un archivo
+se requieren `DATABASE_URL` y las credenciales del proveedor cloud elegido en un archivo
 runtime separado. Con voz activa se añaden las variables `LIVEKIT_*`. Ollama
 permanece disponible en `Aule` para la ingesta privada y la migración posterior
 del tutor, y se alcanza por un
@@ -519,13 +527,13 @@ PowerEdge (runtime público)
   └─ PDFs autorizados, índices y manifiestos reproducibles
 
 Egress externo del runtime
-  └─ OpenAI principal → xAI fallback: selección pedagógica cerrada
+  └─ OpenAI → xAI → Google Gemini: selección pedagógica cerrada y explícita
 
 Canal privado opcional PowerEdge–Aule
   └─ SSH sobre la tailnet: 127.0.0.1:11435 → Ollama 127.0.0.1:11434
 
-Egress externo (pipeline offline, no runtime)
-  └─ Google generativelanguage.googleapis.com sólo en modo ingesta explícito
+Egress externo (pipeline offline)
+  └─ Google generativelanguage.googleapis.com en modo ingesta explícito
 ```
 
 ## Límites de contenido y datos
@@ -548,5 +556,5 @@ La postura de seguridad, los hallazgos verificados y la hoja de ruta se
 documentan en [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md). Pendientes principales:
 autenticación por usuario (rol docente/admin) para el directorio; mover
 anti-replay y rate-limit a un almacén compartido antes de escalar; y definir la
-gobernanza de datos (consentimiento, retención verificada en OpenAI/xAI y egress
-a Google) antes de un piloto con menores.
+gobernanza de datos (consentimiento y retención verificada en OpenAI, xAI y
+Google) antes de un piloto con menores.

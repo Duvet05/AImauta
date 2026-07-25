@@ -151,8 +151,8 @@ export default function PrivacidadPage() {
               audios, imágenes ni datos de navegación.
             </p>
             <p>
-              Para producir una pista, AImauta envía temporalmente a OpenAI o,
-              si el servicio principal falla, a xAI el texto acotado de la
+              Para producir una pista, AImauta envía temporalmente al proveedor
+              configurado —OpenAI, xAI o Google Gemini— el texto acotado de la
               pregunta, el intento y fragmentos del material curricular. No
               adjunta el token QR, el token firmado de sesión, notas ni
               identificadores del directorio escolar. Como el intento es texto
@@ -161,10 +161,10 @@ export default function PrivacidadPage() {
             </p>
             <p>
               Las solicitudes se realizan con almacenamiento de respuesta
-              desactivado. Aun así, las configuraciones estándar de ambos
-              proveedores pueden conservar contenido hasta 30 días para
-              monitoreo de abuso. Un acuerdo o configuración de retención cero
-              debe verificarse por separado antes de un piloto institucional.
+              desactivado. Aun así, cada proveedor mantiene controles y
+              retenciones independientes para seguridad y monitoreo de abuso.
+              Un acuerdo o configuración de retención cero debe verificarse por
+              separado antes de un piloto institucional.
               Consulte los{" "}
               <a href="https://developers.openai.com/api/docs/guides/your-data">
                 controles de datos de OpenAI
@@ -172,6 +172,10 @@ export default function PrivacidadPage() {
               y la{" "}
               <a href="https://docs.x.ai/developers/faq/security">
                 información de seguridad de xAI
+              </a>
+              , y la{" "}
+              <a href="https://ai.google.dev/gemini-api/docs/logs-policy">
+                política de logs de Gemini
               </a>
               .
             </p>

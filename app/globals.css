@@ -100,9 +100,15 @@ svg {
   position: absolute;
   inset: 0;
   content: "";
-  opacity: 0.075;
-  background: url("/brand/amauta-pattern.svg") center / 160px auto repeat;
-  mask-image: linear-gradient(to right, transparent, black 50%, black);
+  opacity: 0.065;
+  background: url("/svg/pattern.svg") center top / min(1000px, 100vw) auto
+    no-repeat;
+  mask-image: linear-gradient(
+    to bottom,
+    black,
+    rgba(0, 0, 0, 0.72) 70%,
+    transparent
+  );
 }
 
 .hero-quipu {
@@ -518,8 +524,9 @@ svg {
   z-index: -1;
   inset: 0;
   content: "";
-  opacity: 0.055;
-  background: url("/brand/amauta-pattern.svg") center / 145px auto repeat;
+  opacity: 0.045;
+  background: url("/svg/pattern.svg") center / min(1000px, 100vw) auto
+    no-repeat;
   mask-image: linear-gradient(to bottom, black, transparent 92%);
 }
 

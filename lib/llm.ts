@@ -12,7 +12,7 @@ import {
   type TurnPolicy,
 } from "@/lib/pedagogy";
 
-export type TutorLlmProvider = "openai" | "xai";
+export type TutorLlmProvider = "openai" | "xai" | "gemini";
 
 export type TutorLlmResult = {
   content: string;
@@ -50,6 +50,7 @@ const HARD_MAX_CONCURRENCY = 2;
 const HARD_MAX_ATTEMPTS_PER_MINUTE = 20;
 const HARD_MAX_OUTPUT_TOKENS = 16;
 const MAX_PROVIDER_RESPONSE_BYTES = 64 * 1024;
+const APPROVED_GEMINI_MODEL = "gemini-3.6-flash";
 
 class ProviderRequestError extends Error {
   constructor(
@@ -139,21 +140,32 @@ function consumeMinuteAttempt(now = Date.now()): boolean {
 }
 
 function providerOrder(): TutorLlmProvider[] {
+  const allowed = new Set<TutorLlmProvider>([
+    "openai",
+    "xai",
+    "gemini",
+  ]);
   const primary = (
     process.env.LLM_PROVIDER ?? "openai"
   ).trim().toLowerCase();
-  if (primary !== "openai") {
+  if (!allowed.has(primary as TutorLlmProvider)) {
     return [];
   }
-  const fallback = (
-    process.env.LLM_FALLBACK_PROVIDER ??
+  const fallbacks = (
     process.env.LLM_FALLBACK_PROVIDERS ??
+    process.env.LLM_FALLBACK_PROVIDER ??
     ""
   )
-    .split(",")[0]
-    ?.trim()
-    .toLowerCase();
-  return fallback === "xai" ? ["openai", "xai"] : ["openai"];
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(
+      (value): value is TutorLlmProvider =>
+        allowed.has(value as TutorLlmProvider) && value !== primary,
+    );
+  return [
+    primary as TutorLlmProvider,
+    ...new Set(fallbacks),
+  ].slice(0, 3);
 }
 
 function providerConfig(
@@ -168,6 +180,26 @@ function providerConfig(
     return {
       apiKey,
       endpoint: "https://api.openai.com/v1/responses",
+      model,
+      provider,
+    };
+  }
+  if (provider === "gemini") {
+    const apiKey = process.env.GOOGLE_GENAI_API_KEY;
+    const model = process.env.GOOGLE_GENAI_MODEL;
+    if (
+      !apiKey ||
+      apiKey !== apiKey.trim() ||
+      apiKey.length > 4_096 ||
+      model !== APPROVED_GEMINI_MODEL
+    ) {
+      return null;
+    }
+    return {
+      apiKey,
+      endpoint:
+        "https://generativelanguage.googleapis.com/v1beta/models/" +
+        `${APPROVED_GEMINI_MODEL}:generateContent`,
       model,
       provider,
     };
@@ -333,6 +365,71 @@ function tokenCount(value: unknown): number | undefined {
     : undefined;
 }
 
+function geminiResult(
+  payload: unknown,
+): {
+  content: string;
+  inputTokens?: number;
+  outputTokens?: number;
+} | null {
+  if (
+    !isRecord(payload) ||
+    !Array.isArray(payload.candidates) ||
+    payload.candidates.length !== 1
+  ) {
+    return null;
+  }
+  const candidate = payload.candidates[0];
+  if (
+    !isRecord(candidate) ||
+    candidate.finishReason !== "STOP" ||
+    !isRecord(candidate.content) ||
+    candidate.content.role !== "model" ||
+    !Array.isArray(candidate.content.parts)
+  ) {
+    return null;
+  }
+
+  const textParts: string[] = [];
+  for (const part of candidate.content.parts) {
+    if (!isRecord(part)) {
+      return null;
+    }
+    if (part.thought === true) {
+      continue;
+    }
+    if (typeof part.text !== "string" || !part.text.trim()) {
+      return null;
+    }
+    textParts.push(part.text.trim());
+  }
+  if (textParts.length !== 1) {
+    return null;
+  }
+
+  let inputTokens: number | undefined;
+  let outputTokens: number | undefined;
+  if (isRecord(payload.usageMetadata)) {
+    inputTokens = tokenCount(payload.usageMetadata.promptTokenCount);
+    const answerTokens = tokenCount(
+      payload.usageMetadata.candidatesTokenCount,
+    );
+    const thinkingTokens =
+      tokenCount(payload.usageMetadata.thoughtsTokenCount) ?? 0;
+    if (
+      answerTokens !== undefined &&
+      answerTokens + thinkingTokens <= 10_000_000
+    ) {
+      outputTokens = answerTokens + thinkingTokens;
+    }
+  }
+  return {
+    content: textParts[0],
+    inputTokens,
+    outputTokens,
+  };
+}
+
 async function settleReservationSafely(input: {
   reservation: Awaited<ReturnType<typeof reserveLlmUsage>>;
   actualInputTokens?: number;
@@ -371,27 +468,54 @@ async function askProvider(
   let actualInputTokens: number | undefined;
   let actualOutputTokens: number | undefined;
   try {
-    const body: Record<string, unknown> = {
-      model: config.model,
-      input: [
-        { role: "system", content: input.systemPrompt },
-        { role: "user", content: prompt },
-      ],
-      max_output_tokens: maxOutputTokens,
-      store: false,
-    };
-    if (config.provider === "openai") {
-      body.safety_identifier = safetyIdentifier(input.sessionId);
+    let body: Record<string, unknown>;
+    if (config.provider === "gemini") {
+      body = {
+        systemInstruction: {
+          parts: [{ text: input.systemPrompt }],
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          maxOutputTokens,
+          thinkingConfig: {
+            thinkingLevel: "minimal",
+            includeThoughts: false,
+          },
+        },
+        store: false,
+      };
     } else {
-      body.reasoning = { effort: "none" };
+      body = {
+        model: config.model,
+        input: [
+          { role: "system", content: input.systemPrompt },
+          { role: "user", content: prompt },
+        ],
+        max_output_tokens: maxOutputTokens,
+        store: false,
+      };
+      if (config.provider === "openai") {
+        body.safety_identifier = safetyIdentifier(input.sessionId);
+      } else {
+        body.reasoning = { effort: "none" };
+      }
     }
 
     let response: Response;
     try {
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${config.apiKey}`,
       };
+      if (config.provider === "gemini") {
+        headers["x-goog-api-key"] = config.apiKey;
+      } else {
+        headers.Authorization = `Bearer ${config.apiKey}`;
+      }
       response = await fetch(config.endpoint, {
         method: "POST",
         headers,
@@ -412,11 +536,18 @@ async function askProvider(
     } catch {
       throw new ProviderRequestError(config.provider, null);
     }
-    const content = responseText(payload);
+    const gemini =
+      config.provider === "gemini" ? geminiResult(payload) : null;
+    const content =
+      gemini?.content ??
+      (config.provider === "gemini" ? null : responseText(payload));
     if (!content) {
       throw new ProviderRequestError(config.provider, null);
     }
-    if (isRecord(payload) && isRecord(payload.usage)) {
+    if (gemini) {
+      actualInputTokens = gemini.inputTokens;
+      actualOutputTokens = gemini.outputTokens;
+    } else if (isRecord(payload) && isRecord(payload.usage)) {
       actualInputTokens = tokenCount(payload.usage.input_tokens);
       actualOutputTokens = tokenCount(payload.usage.output_tokens);
     }

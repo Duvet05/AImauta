@@ -36,6 +36,8 @@ const envKeys = [
   "OPENAI_MODEL",
   "XAI_API_KEY",
   "XAI_MODEL",
+  "GOOGLE_GENAI_API_KEY",
+  "GOOGLE_GENAI_MODEL",
   "OLLAMA_BASE_URL",
   "OLLAMA_MODEL",
   "OLLAMA_TIMEOUT_MS",
@@ -66,6 +68,35 @@ function response(content: string): Response {
       usage: {
         input_tokens: 321,
         output_tokens: 2,
+      },
+    }),
+    {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    },
+  );
+}
+
+function geminiResponse(
+  content: string,
+  finishReason = "STOP",
+): Response {
+  return new Response(
+    JSON.stringify({
+      candidates: [
+        {
+          finishReason,
+          content: {
+            role: "model",
+            parts: [{ text: content }],
+          },
+        },
+      ],
+      usageMetadata: {
+        promptTokenCount: 280,
+        candidatesTokenCount: 2,
+        thoughtsTokenCount: 1,
+        totalTokenCount: 283,
       },
     }),
     {
@@ -108,6 +139,85 @@ describe("router LLM del tutor", () => {
 
     await expect(askTutorModel(tutorInput)).resolves.toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("usa Gemini 3.6 Flash por REST sin almacenar ni exponer la clave", async () => {
+    process.env.LLM_PROVIDER = "gemini";
+    process.env.GOOGLE_GENAI_API_KEY = "google-test-key";
+    process.env.GOOGLE_GENAI_MODEL = "gemini-3.6-flash";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(geminiResponse("COMPRUEBA"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(askTutorModel(tutorInput)).resolves.toEqual({
+      content: "COMPRUEBA",
+      provider: "gemini",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "https://generativelanguage.googleapis.com/v1beta/models/" +
+        "gemini-3.6-flash:generateContent",
+    );
+
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const headers = new Headers(request.headers);
+    expect(headers.get("x-goog-api-key")).toBe("google-test-key");
+    expect(headers.has("authorization")).toBe(false);
+    expect(request.redirect).toBe("error");
+    const body = JSON.parse(String(request.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      systemInstruction: {
+        parts: [{ text: tutorInput.systemPrompt }],
+      },
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text:
+                "Mi pregunta: ¿Cómo empiezo?\nMi intento: Observaría los datos.",
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        maxOutputTokens: 16,
+        thinkingConfig: {
+          thinkingLevel: "minimal",
+          includeThoughts: false,
+        },
+      },
+      store: false,
+    });
+    expect(body.generationConfig).not.toHaveProperty("candidateCount");
+    expect(body.generationConfig).not.toHaveProperty("temperature");
+    expect(budget.settle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actualInputTokens: 280,
+        actualOutputTokens: 3,
+      }),
+    );
+  });
+
+  it("descarta una respuesta Gemini incompleta y usa el fallback explícito", async () => {
+    process.env.LLM_PROVIDER = "gemini";
+    process.env.LLM_FALLBACK_PROVIDER = "xai";
+    process.env.GOOGLE_GENAI_API_KEY = "google-test-key";
+    process.env.GOOGLE_GENAI_MODEL = "gemini-3.6-flash";
+    process.env.XAI_API_KEY = "xai-test-key";
+    process.env.XAI_MODEL = "grok-4.3";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(geminiResponse("OBSERVA", "MAX_TOKENS"))
+      .mockResolvedValueOnce(response("REFORMULA"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(askTutorModel(tutorInput)).resolves.toEqual({
+      content: "REFORMULA",
+      provider: "xai",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("usa OpenAI por defecto cuando hay una credencial aprobada", async () => {
@@ -234,10 +344,13 @@ describe("router LLM del tutor", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("rechaza modelos distintos de los dos modelos aprobados", async () => {
+  it("rechaza modelos distintos de los tres modelos aprobados", async () => {
     configureProviders();
+    process.env.LLM_FALLBACK_PROVIDERS = "xai,gemini";
     process.env.OPENAI_MODEL = "expensive-unreviewed-model";
     process.env.XAI_MODEL = "deprecated-model";
+    process.env.GOOGLE_GENAI_API_KEY = "google-test-key";
+    process.env.GOOGLE_GENAI_MODEL = "gemini-experimental";
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -245,10 +358,13 @@ describe("router LLM del tutor", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("falla sin incluir credenciales cuando ambos proveedores caen", async () => {
+  it("falla sin incluir credenciales cuando los tres proveedores caen", async () => {
     configureProviders();
+    process.env.LLM_FALLBACK_PROVIDERS = "xai,gemini";
     process.env.OPENAI_API_KEY = "do-not-leak-openai";
     process.env.XAI_API_KEY = "do-not-leak-xai";
+    process.env.GOOGLE_GENAI_API_KEY = "do-not-leak-google";
+    process.env.GOOGLE_GENAI_MODEL = "gemini-3.6-flash";
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(new Response(null, { status: 429 })),
@@ -258,7 +374,7 @@ describe("router LLM del tutor", () => {
       (caught: unknown) => caught,
     );
     expect(error).toBeInstanceOf(Error);
-    expect(String(error)).toContain("openai, xai");
+    expect(String(error)).toContain("openai, xai, gemini");
     expect(String(error)).not.toContain("do-not-leak");
   });
 });

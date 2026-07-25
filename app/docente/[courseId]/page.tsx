@@ -64,12 +64,12 @@ export default async function CursoPage({
     notFound();
   }
 
-  // Without a teacher in context the panel can display the course but must not
-  // offer actions, since every write is scoped to a teacher of this course.
+  // Only an explicitly identified teacher may write. Falling back to the
+  // course's first teacher would file an observation about a child under the
+  // name of someone who never wrote it, and recordProgressNote could not tell:
+  // that teacher does teach this course, so its ownership check would pass.
   const activeTeacher =
-    course.teachers.find((teacher) => teacher.id === docente) ??
-    course.teachers[0] ??
-    null;
+    course.teachers.find((teacher) => teacher.id === docente) ?? null;
 
   const roster = [...course.enrollments].sort((left, right) =>
     `${left.student.lastName} ${left.student.firstName}`.localeCompare(
@@ -154,6 +154,13 @@ export default async function CursoPage({
 
         <section className="panel-section" aria-labelledby="estudiantes">
           <h2 id="estudiantes">Cómo va cada estudiante</h2>
+          {!activeTeacher ? (
+            <p className="panel-note">
+              Entra desde tu curso en la lista de cursos para registrar
+              observaciones. Aquí solo puedes consultarlas.
+            </p>
+          ) : null}
+
           {roster.length === 0 ? (
             <p className="panel-note">
               Este curso todavía no tiene estudiantes matriculados.
