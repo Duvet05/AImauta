@@ -419,7 +419,9 @@ function welcomeMessage(activity?: PageActivity): ConversationMessage {
     return {
       id: crypto.randomUUID(),
       role: "tutor",
-      content: `Estás en la ficha ${activity.unitNumber}: ${activity.unitTitle}. Lee el material y escribe tu primer intento. Si la página tiene un ejercicio marcado, podrás seleccionarlo para pedir una pista.`,
+      content: activity.tutorAvailable
+        ? `Estás en la ficha ${activity.unitNumber}: ${activity.unitTitle}. Lee la página y escribe qué entendiste o qué intentaste; ya puedes pedirme una pista basada en esta página.`
+        : `Estás en la ficha ${activity.unitNumber}: ${activity.unitTitle}. Lee el material y desarrolla tu respuesta por tu cuenta.`,
     };
   }
 
@@ -427,7 +429,7 @@ function welcomeMessage(activity?: PageActivity): ConversationMessage {
     id: "welcome",
     role: "tutor",
     content:
-      "Lee el material y escribe tu primer intento. Las pistas se habilitan cuando seleccionas un ejercicio marcado.",
+      "Lee el material y anota qué entendiste antes de continuar.",
   };
 }
 
