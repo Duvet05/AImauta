@@ -106,7 +106,10 @@ function manifestDirectory(): string {
 }
 
 function manifestPath(bookId: string): string {
-  return path.join(manifestDirectory(), `${bookId}.public.json`);
+  return path.join(
+    /* turbopackIgnore: true */ manifestDirectory(),
+    `${bookId}.public.json`
+  );
 }
 
 function copyExercise(exercise: PublicExercise): PublicExercise {
@@ -184,7 +187,7 @@ async function readAndValidateManifest(
   try {
     try {
       handle = await open(
-        filePath,
+        /* turbopackIgnore: true */ filePath,
         constants.O_RDONLY | constants.O_NOFOLLOW,
       );
     } catch (error) {
@@ -196,7 +199,9 @@ async function readAndValidateManifest(
           ? error.code
           : "";
       if (code === "ENOENT") {
-        const directory = await stat(manifestDirectory()).catch(
+        const directory = await stat(
+          /* turbopackIgnore: true */ manifestDirectory()
+        ).catch(
           () => null,
         );
         if (directory?.isDirectory()) {

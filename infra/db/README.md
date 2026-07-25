@@ -11,11 +11,14 @@ publica en `127.0.0.1`.
 ```bash
 cp infra/db/db.env.example infra/db/db.env
 # editar infra/db/db.env y fijar POSTGRES_PASSWORD
+chmod 600 infra/db/db.env
 
 docker compose --env-file infra/db/db.env -f infra/db/compose.yaml up -d
 ```
 
-`db.env` queda ignorado por Git; no se debe commitear.
+`db.env` queda ignorado por Git, debe conservar modo `0600` y no se debe
+commitear. No ejecute `git clean -fdX`: ese modo también elimina archivos
+ignorados que contienen secretos, incluidos `.env` e `infra/db/db.env`.
 
 En la raíz del proyecto, `.env` debe apuntar al mismo usuario, contraseña,
 base de datos y puerto que `infra/db/db.env`:
@@ -28,7 +31,15 @@ Luego, aplicar el esquema:
 
 ```bash
 npm run db:migrate
+npm run db:seed
 ```
+
+`db:migrate` usa el flujo interactivo de desarrollo. Para alinear una base ya
+existente exclusivamente con migraciones confirmadas, use
+`npx prisma migrate deploy` y después `npm run db:seed`. La migración que
+introduce `Enrollment` copia primero cada relación de `_StudentCourses` y solo
+entonces elimina la tabla implícita; nunca se acepta una migración que descarte
+matrículas existentes.
 
 Los datos persisten en el volumen nombrado `aimauta-db-data` entre reinicios
 del contenedor. Para descartarlos por completo:

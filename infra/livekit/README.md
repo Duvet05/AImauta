@@ -62,7 +62,7 @@ convencional no transportan por sí solos ICE/TURN UDP.
 Ejecutar en el nodo Linux, nunca en la Mac:
 
 ```bash
-cd /home/hii1sc/aimauta-build
+cd /home/hii1sc/aimauta-production
 
 infra/livekit/init-env.sh \
   /home/hii1sc/aimauta-runtime/livekit.env \

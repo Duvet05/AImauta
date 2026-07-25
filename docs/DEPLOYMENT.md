@@ -28,7 +28,8 @@ no participa en ICE/TURN.
 ## Rutas
 
 ```text
-Código y build:       /home/hii1sc/aimauta-build
+Checkout de trabajo:  /home/hii1sc/aimauta-production
+Releases inmutables:  /home/hii1sc/aimauta-releases/<commit>
 PDFs:                 /home/hii1sc/aimauta-runtime/content
 Índices:              /home/hii1sc/aimauta-runtime/indexes
 Manifiestos:          /home/hii1sc/aimauta-runtime/manifests
@@ -37,12 +38,16 @@ Entorno de LiveKit:   /home/hii1sc/aimauta-runtime/livekit-cloud.env
 Entorno de pruebas:   /home/hii1sc/aimauta-runtime/voice-test-venv
 ```
 
-Los directorios de runtime sobreviven a una actualización y no están dentro del
-repositorio.
+El checkout se usa para editar, instalar dependencias y ejecutar todas las
+validaciones. Cada despliegue se construye desde una copia limpia del commit
+aprobado bajo `aimauta-releases`; los contenedores activos nunca deben apuntar
+al checkout. Los directorios de runtime sobreviven a una actualización y no
+están dentro del repositorio ni de un release.
 
 ## Requisitos
 
-- PowerEdge con Git, Node.js 22 o superior, npm y Docker Engine.
+- PowerEdge con Git, Node.js 22 o superior, npm, Docker Engine y el plugin
+  Compose v2.
 - Python 3.12 o 3.13 en PowerEdge para ejecutar las pruebas del worker.
 - Tailscale y acceso SSH por llave desde PowerEdge hacia Aule.
 - Ollama y `gemma4:e4b-it-qat` instalados en Aule.
@@ -52,26 +57,76 @@ repositorio.
 No se reutilizan proyectos, API keys ni secretos de Nebu, SIHSALUS u otros
 sistemas.
 
+Comprobar las herramientas Docker antes de abrir una ventana de despliegue:
+
+```bash
+docker compose version
+docker buildx version
+```
+
+El 25 de julio de 2026 este PowerEdge todavía no tenía disponible Buildx. Los
+builds se validaron con el constructor clásico, pero Docker ya muestra su aviso
+de retirada. La instalación del plugin oficial queda como mantenimiento del
+host compartido; no se improvisa durante una promoción ni se sustituye el
+Docker Engine con producción activa.
+
 ## Preparación inicial
 
 En PowerEdge:
 
 ```bash
 install -d -m 0750 \
-  /home/hii1sc/aimauta-build \
+  /home/hii1sc/aimauta-production \
+  /home/hii1sc/aimauta-releases \
   /home/hii1sc/aimauta-runtime/content \
   /home/hii1sc/aimauta-runtime/indexes \
   /home/hii1sc/aimauta-runtime/manifests
 
 git clone git@github.com:Duvet05/AImauta.git \
-  /home/hii1sc/aimauta-build
+  /home/hii1sc/aimauta-production
 
-cd /home/hii1sc/aimauta-build
+cd /home/hii1sc/aimauta-production
 npm ci
 ```
 
 Si el clon ya existe, se actualiza con un avance `fast-forward` de la rama
 aprobada. No se reemplazan archivos de runtime al actualizar el código.
+
+## Contrato de release
+
+`/home/hii1sc/aimauta-production` puede contener trabajo en curso y artefactos
+ignorados. No se construye ni se ejecuta producción desde allí. Después de
+aprobar las pruebas, el operador crea un release exclusivamente con archivos
+versionados:
+
+```bash
+set -euo pipefail
+cd /home/hii1sc/aimauta-production
+
+test -z "$(git status --porcelain)"
+release_id="$(git rev-parse --short HEAD)"
+release_root=/home/hii1sc/aimauta-releases
+release_dir="${release_root}/${release_id}"
+test ! -e "$release_dir"
+
+staging_dir="$(mktemp -d "${release_root}/.${release_id}.XXXXXX")"
+git archive --format=tar HEAD | tar -x -C "$staging_dir"
+mv "$staging_dir" "$release_dir"
+chmod -R a-w "$release_dir"
+```
+
+El nombre del directorio y las etiquetas de ambas imágenes deben usar el mismo
+`release_id`. `git archive` impide copiar `.env`, `infra/db/db.env`,
+`node_modules`, cachés, archivos no versionados o cambios sin commit. No se
+edita un release creado; una corrección exige otro commit y otro directorio.
+
+Para identificar el release web activo sin inspeccionar secretos:
+
+```bash
+docker inspect aimauta-web-app-1 \
+  --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}} {{.Config.Image}}'
+docker inspect aimauta-voice-agent --format '{{.Config.Image}}'
+```
 
 ## Canal privado hacia Ollama
 
@@ -88,20 +143,30 @@ ssh -NT \
   aule
 ```
 
-`aule` debe ser un alias SSH configurado en PowerEdge, autenticado por llave y
+El alias debe estar configurado en PowerEdge, autenticado por llave y
 alcanzable dentro de Tailscale. El túnel se registra con el administrador de
 servicios del host para que reinicie ante una caída; debe ejecutarse con el
 usuario de servicio de AImauta y sin contraseña interactiva.
 
-En el PowerEdge actual, la unidad de usuario se encuentra en:
+En el PowerEdge actual, ambos túneles son configuración administrada por el
+host:
 
 ```text
 /home/hii1sc/.config/systemd/user/aimauta-aule-ollama-tunnel.service
+/home/hii1sc/.config/systemd/user/aimauta-aule-edge-tunnel.service
+/home/hii1sc/.ssh/aimauta_aule_direct_config
 ```
 
-La unidad ya está habilitada y reinicia el túnel ante fallas. Para que arranque
-después de un reinicio incluso antes del primer inicio de sesión de `hii1sc`, un
-administrador debe habilitar una vez el *linger* del usuario:
+Las unidades instaladas usan los alias `aimauta-aule-ollama-direct` y
+`aimauta-aule-edge-direct`. Difieren deliberadamente de las plantillas
+versionadas bajo `infra/web`, por lo que un redespliegue de la aplicación no las
+copia ni las sobrescribe. Una modificación de túneles es mantenimiento de red
+separado: se respalda la unidad activa, se valida el perfil SSH, se reinicia un
+túnel por vez y se comprueba su endpoint antes de tocar el siguiente.
+
+Las unidades ya están habilitadas y reinician los túneles ante fallas. Para que
+arranquen después de un reinicio incluso antes del primer inicio de sesión de
+`hii1sc`, un administrador debe habilitar una vez el *linger* del usuario:
 
 ```bash
 sudo loginctl enable-linger hii1sc
@@ -110,7 +175,11 @@ sudo loginctl enable-linger hii1sc
 Comprobar desde PowerEdge:
 
 ```bash
+systemctl --user is-active \
+  aimauta-aule-ollama-tunnel.service \
+  aimauta-aule-edge-tunnel.service
 curl --fail http://127.0.0.1:11435/api/tags
+curl --fail http://127.0.0.1:3308/_edge-health
 ```
 
 La aplicación usa:
@@ -174,7 +243,7 @@ Git.
 Preparar sin iniciar ni publicar servicios:
 
 ```bash
-cd /home/hii1sc/aimauta-build
+cd /home/hii1sc/aimauta-production
 
 infra/livekit/init-env.sh \
   /home/hii1sc/aimauta-runtime/livekit.env \
@@ -315,7 +384,7 @@ Cada entrada del catálogo debe haber superado
 [la política de contenidos](CONTENT_POLICY.md). En PowerEdge:
 
 ```bash
-cd /home/hii1sc/aimauta-build
+cd /home/hii1sc/aimauta-production
 
 npm run catalog:validate
 
@@ -360,11 +429,12 @@ se omiten estas comprobaciones ni se reutiliza un índice de otra edición.
 En PowerEdge:
 
 ```bash
-cd /home/hii1sc/aimauta-build
+cd /home/hii1sc/aimauta-production
 npm run catalog:validate
 npm run lint
 npm run typecheck
 npm test
+npm run audit:production
 
 AIMAUTA_CONTENT_DIR=/home/hii1sc/aimauta-runtime/content \
   AIMAUTA_INDEX_DIR=/home/hii1sc/aimauta-runtime/indexes \
@@ -377,6 +447,18 @@ de 40 turnos, los rate limits, el índice v2, la exclusión de `Evaluamos` y
 material docente en RAG, los movimientos pedagógicos cerrados, el endpoint
 interno y la indisponibilidad controlada de LiveKit.
 
+`npm run audit:production` debe terminar sin alertas. Las alertas exclusivas de
+herramientas de desarrollo se revisan por separado; no se ejecuta
+`npm audit fix --force`, porque puede degradar dependencias mayores o romper la
+compatibilidad de Next.js. Los overrides transitivos de Prisma fijados en
+`package.json` son parches de seguridad deliberados y se conservan solo mientras
+pasen generación del cliente, migraciones, pruebas y build.
+
+El `postbuild` elimina `.env` y `.env.production` del standalone —Next.js los
+copia cuando existen en el checkout— y recorre el artefacto para rechazar
+secretos o directorios ajenos al runtime. Una promoción usa además un release
+creado con `git archive`, donde esos archivos nunca existen.
+
 ### Worker de voz
 
 Crear una vez el entorno de pruebas en PowerEdge:
@@ -385,23 +467,22 @@ Crear una vez el entorno de pruebas en PowerEdge:
 python3 -m venv /home/hii1sc/aimauta-runtime/voice-test-venv
 /home/hii1sc/aimauta-runtime/voice-test-venv/bin/pip install \
   --require-hashes \
-  -r /home/hii1sc/aimauta-build/services/voice-agent/requirements.lock
+  -r /home/hii1sc/aimauta-production/services/voice-agent/requirements.lock
 /home/hii1sc/aimauta-runtime/voice-test-venv/bin/pip install \
   --no-deps \
-  -e /home/hii1sc/aimauta-build/services/voice-agent
+  -e /home/hii1sc/aimauta-production/services/voice-agent
 /home/hii1sc/aimauta-runtime/voice-test-venv/bin/pip install \
   --no-deps \
   --require-hashes \
-  -r /home/hii1sc/aimauta-build/services/voice-agent/requirements-test.lock
+  -r /home/hii1sc/aimauta-production/services/voice-agent/requirements-test.lock
 ```
 
-Ejecutar sus pruebas y construir la imagen de producción:
+Ejecutar sus pruebas:
 
 ```bash
-cd /home/hii1sc/aimauta-build
+cd /home/hii1sc/aimauta-production
 /home/hii1sc/aimauta-runtime/voice-test-venv/bin/pytest \
   services/voice-agent/tests
-docker build -t aimauta-voice-agent:local services/voice-agent
 ```
 
 `requirements-test.lock` fija también con hashes las herramientas de arranque y
@@ -409,7 +490,9 @@ prueba, incluido `pip`, `pytest` y `pytest-asyncio`; se instala sin resolver
 dependencias implícitas sobre el lock de runtime. La imagen de producción
 instala solamente `requirements.lock`, elimina `pip` del entorno copiado,
 excluye pruebas y ejecuta el worker como un usuario sin privilegios. No se
-despliega una revisión si falla una comprobación.
+despliega una revisión si falla una comprobación. La imagen de producción se
+construye después desde el release limpio y recibe la misma etiqueta de commit
+que la imagen web.
 
 ## Inicio de servicios
 
@@ -432,43 +515,64 @@ a la aplicación. Next.js confía exclusivamente en el `X-Forwarded-For`
 canónico escrito por Funnel. El túnel conserva ese encabezado sin exponer
 ninguna escucha de PowerEdge. No se debe dirigir Funnel al puerto 3309.
 
-Desde un checkout limpio:
+Desde el release limpio creado previamente:
 
 ```bash
-infra/web/init-env.sh /home/hii1sc/aimauta-runtime/web.env
-AIMAUTA_RELEASE="$(git rev-parse --short HEAD)" \
-  docker compose -f infra/web/compose.yaml build
-AIMAUTA_RELEASE="$(git rev-parse --short HEAD)" \
-  docker compose -f infra/web/compose.yaml up -d
+release_id="$(git -C /home/hii1sc/aimauta-production rev-parse --short HEAD)"
+release_dir="/home/hii1sc/aimauta-releases/${release_id}"
+test -d "$release_dir"
 
-install -m 600 infra/web/aimauta-aule-ollama-tunnel.service \
-  /home/hii1sc/.config/systemd/user/aimauta-aule-ollama-tunnel.service
-install -m 600 infra/web/aimauta-aule-edge-tunnel.service \
-  /home/hii1sc/.config/systemd/user/aimauta-aule-edge-tunnel.service
-systemctl --user daemon-reload
-systemctl --user enable --now aimauta-aule-ollama-tunnel.service
-systemctl --user enable --now aimauta-aule-edge-tunnel.service
+# Solo en la preparación inicial; nunca sustituye un archivo con secretos.
+if [ ! -e /home/hii1sc/aimauta-runtime/web.env ]; then
+  "$release_dir/infra/web/init-env.sh" \
+    /home/hii1sc/aimauta-runtime/web.env
+fi
+
+AIMAUTA_RELEASE="$release_id" \
+  AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
+  docker compose -f "$release_dir/infra/web/compose.yaml" build --pull
+AIMAUTA_RELEASE="$release_id" \
+  AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
+  docker compose -f "$release_dir/infra/web/compose.yaml" \
+  up -d --no-build --force-recreate
+
+# Los túneles son configuración administrada por el host.
+systemctl --user is-active \
+  aimauta-aule-ollama-tunnel.service \
+  aimauta-aule-edge-tunnel.service
 ```
 
 En Aule, con Tailscale `1.98.9` o posterior:
 
 ```bash
+tailscale version
 tailscale funnel --yes --bg --https=8443 http://127.0.0.1:3308
 ```
 
-PowerEdge debe conservar `Linger=yes`. Funnel no se activa en versiones
-afectadas por TS-2026-008.
+La versión se comprueba en **Aule**; la versión de PowerEdge no demuestra la
+versión del nodo que ejecuta Funnel. PowerEdge debe conservar `Linger=yes`.
+Funnel no se activa en versiones afectadas por
+[TS-2026-008](https://tailscale.com/security-bulletins#ts-2026-008).
+
+La auditoría del 25 de julio de 2026 encontró Tailscale `1.98.4` en PowerEdge,
+con Tailscale SSH, Serve, Funnel y Services deshabilitados. No se habilita
+ninguna de esas funciones allí antes de actualizar a `1.98.9` o posterior. La
+actualización del daemon es mantenimiento del host compartido y queda fuera de
+una promoción normal de AImauta.
 
 La llave `aimauta_aule_edge_ed25519` es exclusiva de este reverse y no se
 reutiliza para Ollama. En Aule su entrada de `authorized_keys` debe restringirse
 a la IP Tailscale de PowerEdge y al listener exacto:
 
 ```text
-from="100.120.80.60",restrict,port-forwarding,permitlisten="127.0.0.1:3308",permitopen="127.0.0.1:9",command="/bin/false" ssh-ed25519 <clave-pública> aimauta-poweredge-to-aule-edge
+from="<IP-Tailscale-actual-de-PowerEdge>",restrict,port-forwarding,permitlisten="127.0.0.1:3308",permitopen="127.0.0.1:9",command="/bin/false" ssh-ed25519 <clave-pública> aimauta-poweredge-to-aule-edge
 ```
 
-Antes de habilitar la unidad se verifica la huella fuera de banda y se prueba
-que la llave no puede abrir shell ni un segundo puerto.
+La IP autorizada se obtiene con `tailscale ip -4`; no se copia un valor antiguo
+de esta guía. Antes de habilitar la unidad se verifica la huella fuera de banda
+y se prueba que la llave no puede abrir shell ni un segundo puerto.
 
 Este perfil habilita PDF y tutor de texto con Gemma. La vista previa local se
 habilita con `AIMAUTA_AVATAR_ENABLED=true` y sigue oculta salvo en una URL de
@@ -488,11 +592,15 @@ Después de escribir los archivos protegidos, recrear la aplicación para que
 Next.js adopte las variables:
 
 ```bash
-cd /home/hii1sc/aimauta-build
-AIMAUTA_RELEASE="$(git rev-parse --short HEAD)" \
+release_id="$(git -C /home/hii1sc/aimauta-production rev-parse --short HEAD)"
+release_dir="/home/hii1sc/aimauta-releases/${release_id}"
+test -d "$release_dir"
+
+AIMAUTA_RELEASE="$release_id" \
   AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
   AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
-  docker compose -f infra/web/compose.yaml up -d --no-build --force-recreate
+  docker compose -f "$release_dir/infra/web/compose.yaml" \
+  up -d --no-build --force-recreate
 ```
 
 Si se migra desde una instalación self-hosted anterior, terminar primero las
@@ -504,6 +612,10 @@ paso no aplica.
 Iniciar el worker en PowerEdge:
 
 ```bash
+docker build \
+  -t "aimauta-voice-agent:${release_id}" \
+  "$release_dir/services/voice-agent"
+
 docker run -d \
   --name aimauta-voice-agent \
   --restart unless-stopped \
@@ -515,7 +627,7 @@ docker run -d \
   --stop-timeout 660 \
   --tmpfs /tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777 \
   --env-file /home/hii1sc/aimauta-runtime/voice-agent.env \
-  aimauta-voice-agent:local
+  "aimauta-voice-agent:${release_id}"
 ```
 
 `--network host` permite que el contenedor alcance
@@ -601,10 +713,16 @@ La validación no debe imprimir tokens pedagógicos, transcripciones,
 
 ## Actualización
 
-En PowerEdge:
+La actualización parte de un commit aprobado y termina con imágenes etiquetadas
+con ese mismo commit. Nunca se despliegan cambios locales sin confirmar.
+
+### 1. Actualizar y validar el checkout
 
 ```bash
-cd /home/hii1sc/aimauta-build
+set -euo pipefail
+cd /home/hii1sc/aimauta-production
+test -z "$(git status --porcelain)"
+
 git fetch origin
 git switch main
 git pull --ff-only origin main
@@ -614,15 +732,16 @@ npm run catalog:validate
 
 /home/hii1sc/aimauta-runtime/voice-test-venv/bin/pip install \
   --require-hashes \
-  -r /home/hii1sc/aimauta-build/services/voice-agent/requirements.lock
+  -r /home/hii1sc/aimauta-production/services/voice-agent/requirements.lock
 /home/hii1sc/aimauta-runtime/voice-test-venv/bin/pip install \
   --no-deps \
   --require-hashes \
-  -r /home/hii1sc/aimauta-build/services/voice-agent/requirements-test.lock
+  -r /home/hii1sc/aimauta-production/services/voice-agent/requirements-test.lock
 /home/hii1sc/aimauta-runtime/voice-test-venv/bin/pip install \
   --no-deps \
-  -e /home/hii1sc/aimauta-build/services/voice-agent
+  -e /home/hii1sc/aimauta-production/services/voice-agent
 
+# Ejecutar estas dos operaciones solo si cambió el material o su contrato.
 AIMAUTA_CONTENT_DIR=/home/hii1sc/aimauta-runtime/content \
   AIMAUTA_MANIFEST_DIR=/home/hii1sc/aimauta-runtime/manifests \
   npm run content:sync
@@ -634,26 +753,71 @@ AIMAUTA_CONTENT_DIR=/home/hii1sc/aimauta-runtime/content \
 npm run lint
 npm run typecheck
 npm test
+npm run audit:production
 
 AIMAUTA_CONTENT_DIR=/home/hii1sc/aimauta-runtime/content \
   AIMAUTA_INDEX_DIR=/home/hii1sc/aimauta-runtime/indexes \
-npm run build
+  npm run build
 
 /home/hii1sc/aimauta-runtime/voice-test-venv/bin/pytest \
   services/voice-agent/tests
-docker build -t aimauta-voice-agent:local services/voice-agent
+```
 
-AIMAUTA_RELEASE="$(git rev-parse --short HEAD)" \
+La sincronización puede omitirse cuando el catálogo no incorpora un material ni
+una edición nueva. La indexación debe repetirse cuando cambian el PDF, el
+contrato del índice, el extractor o la versión curricular. Un cambio de
+contrato runtime necesita su propio plan de rollback; no se presupone que una
+imagen anterior consumirá artefactos nuevos.
+
+### 2. Crear y construir el release
+
+Crear el directorio mediante el procedimiento de
+[Contrato de release](#contrato-de-release). Luego:
+
+```bash
+release_id="$(git -C /home/hii1sc/aimauta-production rev-parse --short HEAD)"
+release_dir="/home/hii1sc/aimauta-releases/${release_id}"
+test -d "$release_dir"
+
+AIMAUTA_RELEASE="$release_id" \
   AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
   AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
-  docker compose -f infra/web/compose.yaml build --pull
-AIMAUTA_RELEASE="$(git rev-parse --short HEAD)" \
+  docker compose -f "$release_dir/infra/web/compose.yaml" config --quiet
+
+AIMAUTA_RELEASE="$release_id" \
   AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
   AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
-  docker compose -f infra/web/compose.yaml up -d --no-build --force-recreate
+  docker compose -f "$release_dir/infra/web/compose.yaml" build --pull
 
-docker stop --time 660 aimauta-voice-agent
-docker rm aimauta-voice-agent
+docker build \
+  -t "aimauta-voice-agent:${release_id}" \
+  "$release_dir/services/voice-agent"
+
+docker image inspect \
+  "aimauta-web:${release_id}" \
+  "aimauta-voice-agent:${release_id}" >/dev/null
+```
+
+Todos los builds terminan antes de sustituir un contenedor. Si alguno falla, el
+release activo permanece intacto.
+
+### 3. Promover
+
+La recreación de Next.js descarta las sesiones pedagógicas guardadas en memoria.
+La sustitución del worker termina sesiones de voz activas; se realiza en una
+ventana sin participantes.
+
+```bash
+AIMAUTA_RELEASE="$release_id" \
+  AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
+  docker compose -f "$release_dir/infra/web/compose.yaml" \
+  up -d --no-build --force-recreate
+
+if docker container inspect aimauta-voice-agent >/dev/null 2>&1; then
+  docker stop --time 660 aimauta-voice-agent
+  docker rm aimauta-voice-agent
+fi
 docker run -d \
   --name aimauta-voice-agent \
   --restart unless-stopped \
@@ -665,20 +829,82 @@ docker run -d \
   --stop-timeout 660 \
   --tmpfs /tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777 \
   --env-file /home/hii1sc/aimauta-runtime/voice-agent.env \
-  aimauta-voice-agent:local
+  "aimauta-voice-agent:${release_id}"
 ```
 
-La sincronización puede omitirse cuando el catálogo no incorpora un material ni
-una edición nueva; si se ejecuta, el pin evita una descarga distinta de la
-aprobada y el manifiesto conserva los registros de los demás libros. La
-indexación debe repetirse cuando cambian el PDF, el contrato del índice, el
-extractor o la versión curricular. El perfil web se reconstruye y recrea
-mediante Compose; después se reinicia el worker, si está habilitado, y se repite
-la validación posterior.
-Los comandos `docker stop`/`rm` aplican solo cuando el worker ya existe; en el
-primer despliegue se omiten. Reiniciar un contenedor existente no adopta la
-imagen recién construida: el administrador debe sustituirlo. El worker no
-guarda estado durable dentro del contenedor.
+Si la voz está deshabilitada, se construye la imagen para comprobarla pero se
+omite el bloque de sustitución del worker. Reiniciar un contenedor existente no
+adopta una imagen nueva: siempre debe recrearse. El worker no guarda estado
+durable dentro del contenedor.
+
+### 4. Validar y conservar rollback
+
+Ejecutar toda la sección [Validación posterior](#validación-posterior) y
+confirmar además:
+
+```bash
+docker compose -f "$release_dir/infra/web/compose.yaml" ps
+docker inspect aimauta-web-app-1 \
+  --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}} {{.Config.Image}}'
+docker inspect aimauta-voice-agent --format '{{.Config.Image}}'
+systemctl --user is-active \
+  aimauta-aule-ollama-tunnel.service \
+  aimauta-aule-edge-tunnel.service
+```
+
+Se conservan como mínimo el release y las imágenes activos más el último
+release conocido como bueno. Para volver a una versión anterior cuyo runtime
+siga siendo compatible:
+
+```bash
+previous_id=abcdef0
+previous_dir="/home/hii1sc/aimauta-releases/${previous_id}"
+test -d "$previous_dir"
+docker image inspect "aimauta-web:${previous_id}" >/dev/null
+
+AIMAUTA_RELEASE="$previous_id" \
+  AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
+  docker compose -f "$previous_dir/infra/web/compose.yaml" \
+  up -d --no-build --force-recreate
+```
+
+Si también se revierte voz, se sustituye el worker con
+`aimauta-voice-agent:${previous_id}` usando las mismas restricciones del bloque
+de promoción. Si el release cambió índices, manifiestos o PDF, se restauran
+primero los artefactos runtime compatibles mediante su procedimiento específico.
+
+## Limpieza segura en el host compartido
+
+Antes de limpiar, inventariar:
+
+```bash
+cd /home/hii1sc/aimauta-production
+git status --short
+git clean -nd
+git clean -ndX
+docker system df
+docker ps -a
+```
+
+- No ejecutar `git clean -fdX`: `.env` e `infra/db/db.env` son secretos
+  ignorados y también serían eliminados.
+- No ejecutar `docker system prune -a`, `docker container prune` ni
+  `docker volume prune`: PowerEdge aloja otros productos y sus contenedores,
+  imágenes y volúmenes están fuera del alcance de AImauta.
+- No borrar `/home/hii1sc/aimauta-runtime`,
+  `/home/hii1sc/aimauta-ingest` ni el release activo. Los PDFs, índices,
+  manifiestos, soluciones, entornos y secretos viven fuera de Git.
+- Los worktrees bajo `/home/hii1sc/.aimauta-worktrees` son carriles de trabajo;
+  se eliminan solo cuando su rama haya sido integrada y esté limpia.
+- Las cachés `__pycache__`, `.pytest_cache`, `.next`, `*.tsbuildinfo`,
+  `next-env.d.ts` y `lib/generated/prisma` son regenerables, pero se eliminan
+  únicamente por rutas explícitas. Nunca se usa un glob desde `/home`.
+- Una imagen o un release viejo se elimina por nombre exacto y solo después de
+  verificar que no lo referencia un contenedor y que queda al menos un rollback
+  bueno.
+- PostgreSQL de `infra/db` es un servicio local separado y no forma parte de la
+  promoción web. Su volumen nunca se elimina durante una actualización.
 
 ## Operación segura
 

@@ -476,7 +476,7 @@ async function loadBookIndex(
   indexPath: string,
   book: Book
 ): Promise<BookIndex> {
-  const before = await stat(indexPath);
+  const before = await stat(/* turbopackIgnore: true */ indexPath);
   if (!before.isFile() || before.size <= 0 || before.size > MAX_INDEX_BYTES) {
     fail(book.id, "el archivo no es regular o excede el tamaño permitido");
   }
@@ -494,12 +494,14 @@ async function loadBookIndex(
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(await readFile(indexPath, "utf8"));
+    parsed = JSON.parse(
+      await readFile(/* turbopackIgnore: true */ indexPath, "utf8")
+    );
   } catch {
     fail(book.id, "el archivo no contiene JSON válido");
   }
 
-  const after = await stat(indexPath);
+  const after = await stat(/* turbopackIgnore: true */ indexPath);
   if (
     !after.isFile() ||
     before.mtimeMs !== after.mtimeMs ||
@@ -567,7 +569,10 @@ export async function retrieveEvidence(input: {
   const indexDir =
     process.env.AIMAUTA_INDEX_DIR ??
     path.resolve(process.cwd(), "data", "indexes");
-  const indexPath = path.join(indexDir, `${book.id}.json`);
+  const indexPath = path.join(
+    /* turbopackIgnore: true */ indexDir,
+    `${book.id}.json`
+  );
 
   try {
     const index = await loadBookIndex(indexPath, book);
