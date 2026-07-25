@@ -3,11 +3,6 @@
 import { revalidatePath } from "next/cache";
 
 import { requireTeacherSession } from "@/app/docente/guard";
-import {
-  AssignmentValidationError,
-  createToken,
-  validateAssignmentDraft,
-} from "@/lib/assignments";
 import type { ProgressStatus } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 
@@ -24,6 +19,9 @@ const PROGRESS_STATUSES: readonly ProgressStatus[] = [
  * Records qualitative feedback for a student in a course. ProgressNote is
  * append-only by design, so this always creates: the history of how a student
  * moved is what makes the panel useful, and overwriting would erase it.
+ *
+ * This is the teacher's own observation of a named student in their class, and
+ * is unrelated to assignment runs, which stay anonymous.
  */
 export async function recordProgressNote(
   formData: FormData,
@@ -59,87 +57,6 @@ export async function recordProgressNote(
   });
 
   revalidatePath(`/docente/${enrollment.courseId}`);
-  return { ok: true };
-}
-
-/**
- * Creates a task and its share token in one step, so the teacher leaves the
- * form with a link and QR ready to hand out.
- */
-export async function createAssignment(
-  formData: FormData,
-): Promise<ActionResult> {
-  await requireTeacherSession();
-
-  const teacherId = readString(formData, "teacherId");
-  const courseId = readString(formData, "courseId");
-  if (!teacherId || !courseId) {
-    return { ok: false, message: "Falta identificar el curso o el docente." };
-  }
-
-  let draft;
-  try {
-    draft = validateAssignmentDraft({
-      bookId: formData.get("bookId"),
-      title: formData.get("title"),
-      instructions: formData.get("instructions"),
-      firstPage: formData.get("firstPage"),
-      lastPage: formData.get("lastPage"),
-      unitId: formData.get("unitId"),
-    });
-  } catch (error) {
-    if (error instanceof AssignmentValidationError) {
-      return { ok: false, message: error.message };
-    }
-    throw error;
-  }
-
-  const course = await prisma.course.findFirst({
-    where: { id: courseId, teachers: { some: { id: teacherId } } },
-    select: { id: true },
-  });
-  if (!course) {
-    return { ok: false, message: "No puedes asignar tareas en ese curso." };
-  }
-
-  await prisma.assignment.create({
-    data: { ...draft, teacherId, courseId, token: createToken() },
-  });
-
-  revalidatePath(`/docente/${courseId}`);
-  return { ok: true };
-}
-
-/**
- * Closing a task keeps the record and its completions; it only stops new
- * students from opening the link. Deleting would lose evidence of work already
- * done, which is the opposite of what the panel is for.
- */
-export async function closeAssignment(
-  formData: FormData,
-): Promise<ActionResult> {
-  await requireTeacherSession();
-
-  const assignmentId = readString(formData, "assignmentId");
-  const teacherId = readString(formData, "teacherId");
-  if (!assignmentId || !teacherId) {
-    return { ok: false, message: "Falta identificar la tarea." };
-  }
-
-  const assignment = await prisma.assignment.findFirst({
-    where: { id: assignmentId, teacherId },
-    select: { id: true, courseId: true },
-  });
-  if (!assignment) {
-    return { ok: false, message: "Esa tarea no es tuya." };
-  }
-
-  await prisma.assignment.update({
-    where: { id: assignment.id },
-    data: { active: false },
-  });
-
-  revalidatePath(`/docente/${assignment.courseId}`);
   return { ok: true };
 }
 

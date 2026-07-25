@@ -3,14 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireTeacherSession } from "@/app/docente/guard";
-import { AssignmentComposer } from "@/components/assignment-composer";
-import { AssignmentList } from "@/components/assignment-list";
 import { BrandMark } from "@/components/brand-mark";
 import { ProgressNoteForm } from "@/components/progress-note-form";
-import { autonomyLabels } from "@/lib/assignments";
-import { getBooks } from "@/lib/catalog";
 import { prisma } from "@/lib/prisma";
-import { assignmentUrl } from "@/lib/site-url";
 
 export const metadata: Metadata = {
   title: "Curso",
@@ -24,6 +19,12 @@ const statusLabels = {
   ON_TRACK: { label: "En camino", tone: "ontrack" },
   NEEDS_SUPPORT: { label: "Necesita apoyo", tone: "support" },
   AT_RISK: { label: "Requiere atención", tone: "risk" },
+} as const;
+
+const assignmentStatusLabels = {
+  ACTIVE: "Activa",
+  REVOKED: "Revocada",
+  ARCHIVED: "Archivada",
 } as const;
 
 export default async function CursoPage({
@@ -54,7 +55,8 @@ export default async function CursoPage({
       assignments: {
         orderBy: { createdAt: "desc" },
         include: {
-          completions: { orderBy: { completedAt: "desc" } },
+          items: { orderBy: { position: "asc" } },
+          _count: { select: { runs: true } },
         },
       },
     },
@@ -77,8 +79,6 @@ export default async function CursoPage({
       "es-PE",
     ),
   );
-
-  const books = getBooks();
 
   return (
     <main id="contenido-principal" className="panel-page">
@@ -161,48 +161,64 @@ export default async function CursoPage({
         </section>
 
         <section className="panel-section" aria-labelledby="tareas">
-          <h2 id="tareas">Tareas asignadas</h2>
+          <h2 id="tareas">Tareas compartidas por QR</h2>
           {course.assignments.length === 0 ? (
             <p className="panel-note">
-              Aún no has asignado tareas en este curso. Crea la primera abajo.
+              Aún no hay tareas en este curso. Se crean desde la API de
+              actividades y aparecerán aquí con su avance.
             </p>
           ) : (
-            <AssignmentList
-              teacherId={activeTeacher?.id ?? ""}
-              assignments={course.assignments.map((assignment) => ({
-                id: assignment.id,
-                title: assignment.title,
-                active: assignment.active,
-                firstPage: assignment.firstPage,
-                lastPage: assignment.lastPage,
-                url: assignmentUrl(assignment.token),
-                qrUrl: `/api/assignments/${assignment.id}/qr`,
-                completions: assignment.completions.map((completion) => ({
-                  id: completion.id,
-                  studentAlias: completion.studentAlias,
-                  autonomyLabel: autonomyLabels[completion.autonomy].label,
-                  teacherHint: autonomyLabels[completion.autonomy].teacherHint,
-                  shareToken: completion.shareToken,
-                })),
-              }))}
-            />
-          )}
-        </section>
+            <ul className="assignment-list">
+              {course.assignments.map((assignment) => (
+                <li
+                  key={assignment.id}
+                  className={`assignment-row${
+                    assignment.status === "ACTIVE" ? "" : " assignment-closed"
+                  }`}
+                >
+                  <div className="assignment-head">
+                    <div>
+                      <strong>{assignment.title}</strong>
+                      <span className="assignment-meta">
+                        {assignment.items.length}{" "}
+                        {assignment.items.length === 1
+                          ? "objetivo"
+                          : "objetivos"}{" "}
+                        · {assignment._count.runs}{" "}
+                        {assignment._count.runs === 1
+                          ? "intento registrado"
+                          : "intentos registrados"}{" "}
+                        · vence{" "}
+                        {new Intl.DateTimeFormat("es-PE", {
+                          dateStyle: "medium",
+                          timeZone: "America/Lima",
+                        }).format(assignment.expiresAt)}
+                      </span>
+                    </div>
+                    <span className="status-pill status-none">
+                      {assignmentStatusLabels[assignment.status]}
+                    </span>
+                  </div>
 
-        {activeTeacher ? (
-          <section className="panel-section" aria-labelledby="nueva-tarea">
-            <h2 id="nueva-tarea">Asignar una tarea nueva</h2>
-            <AssignmentComposer
-              teacherId={activeTeacher.id}
-              courseId={course.id}
-              books={books.map((book) => ({
-                id: book.id,
-                title: book.title,
-                pages: book.pages,
-              }))}
-            />
-          </section>
-        ) : null}
+                  {assignment.items.length > 0 ? (
+                    <ul className="completion-list">
+                      {assignment.items.map((item) => (
+                        <li key={item.id}>
+                          <strong>{item.label}</strong>
+                          <span>{item.title}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="panel-note panel-note-privacy">
+            Los intentos son anónimos: la plataforma no guarda quién resolvió
+            cada tarea, solo cuántas veces se trabajó y hasta dónde se llegó.
+          </p>
+        </section>
       </div>
     </main>
   );

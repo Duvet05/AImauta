@@ -4,6 +4,10 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   typedRoutes: true,
+  // @napi-rs/canvas loads a platform-specific .node binary, which the bundler
+  // cannot place in an ESM chunk. Leaving it external makes the route require
+  // it from node_modules at runtime, the same way the PDF page renderer does.
+  serverExternalPackages: ["@napi-rs/canvas"],
   async headers() {
     return [
       {

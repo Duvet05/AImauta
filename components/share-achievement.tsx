@@ -3,28 +3,26 @@
 import { useState } from "react";
 
 type ShareAchievementProps = {
-  shareToken: string;
-  studentAlias: string;
+  token: string;
   assignmentTitle: string;
 };
 
 /**
  * Sharing surface for a finished activity.
  *
- * Prefers the native share sheet, which on a phone lets the family send the
- * actual image file into a WhatsApp chat. Falls back to wa.me with the link,
- * which is what desktop and older browsers can do.
+ * Prefers the native share sheet, which on a phone sends the actual image file
+ * into a WhatsApp chat. Falls back to wa.me with the receipt link, which is
+ * what desktop and older browsers can do.
  */
 export function ShareAchievement({
-  shareToken,
-  studentAlias,
+  token,
   assignmentTitle,
 }: ShareAchievementProps) {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const imageUrl = `/api/logro/${encodeURIComponent(shareToken)}/image`;
-  const message = `${studentAlias} terminó "${assignmentTitle}" con AImauta.`;
+  const imageUrl = `/api/completado/${encodeURIComponent(token)}/image`;
+  const message = `¡Actividad completada! "${assignmentTitle}" — con AImauta.`;
 
   async function share() {
     setBusy(true);
@@ -35,7 +33,7 @@ export function ShareAchievement({
         const response = await fetch(imageUrl);
         if (response.ok) {
           const blob = await response.blob();
-          const file = new File([blob], "logro-aimauta.png", {
+          const file = new File([blob], "aimauta-actividad-completada.png", {
             type: "image/png",
           });
           if (navigator.canShare({ files: [file] })) {
@@ -78,16 +76,16 @@ export function ShareAchievement({
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={imageUrl}
-        alt={`Constancia de ${studentAlias} por completar ${assignmentTitle}`}
-        width={520}
-        height={520}
+        alt={`Constancia de la actividad ${assignmentTitle} completada`}
+        width={480}
+        height={480}
       />
 
       <div className="achievement-buttons">
         <button type="button" onClick={share} disabled={busy}>
           {busy ? "Preparando…" : "Compartir por WhatsApp"}
         </button>
-        <a href={imageUrl} download="logro-aimauta.png">
+        <a href={imageUrl} download="aimauta-actividad-completada.png">
           Descargar imagen
         </a>
         <button type="button" onClick={copyLink}>

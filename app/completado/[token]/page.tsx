@@ -3,6 +3,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 
 import { BrandMark } from "@/components/brand-mark";
+import { ShareAchievement } from "@/components/share-achievement";
 import { verifyCompletionReceipt } from "@/lib/assignment-service";
 
 import styles from "../../a/[token]/assignment-access.module.css";
@@ -62,6 +63,10 @@ export default async function CompletionPage({
                   {receipt.totalItemCount}
                 </li>
               </ul>
+              <ShareAchievement
+                token={token}
+                assignmentTitle={receipt.assignmentTitle}
+              />
             </>
           ) : (
             <p className={styles.instructions}>
