@@ -11,10 +11,13 @@ import {
 import { createHash, randomBytes } from "node:crypto";
 import path from "node:path";
 
-import { getBook, type Book } from "@/lib/catalog";
 import {
+  getAuthoringCatalogEntry,
+  type AuthoringCatalogEntry,
+} from "@/lib/catalog";
+import {
+  getAuthoringPageActivity,
   getBookCurriculum,
-  getPageActivity,
   type LearningStage,
 } from "@/lib/curriculum";
 import {
@@ -24,6 +27,11 @@ import {
   type PrivateExerciseSolutionsManifest,
   type PublicExerciseManifest,
 } from "@/lib/exercise-manifest";
+import {
+  encodeExerciseReleaseBundle,
+  parseExerciseReleaseBundle,
+} from "@/lib/exercise-release-bundle";
+import { EXERCISE_INGEST_CONTRACT_VERSION } from "@/lib/gemma-ingest";
 import {
   BOOK_INDEX_VERSION,
   INDEX_EXTRACTOR_VERSION,
@@ -43,6 +51,8 @@ const MAX_INDEX_BYTES = 64 * 1024 * 1024;
 const MAX_CHUNKS_PER_PAGE = 50;
 const MAX_CHUNK_TEXT_LENGTH = 50_000;
 const MAX_CHUNK_ID_LENGTH = 240;
+const MAX_LOCK_BYTES = 4_096;
+const STALE_LOCK_AGE_MS = 5 * 60_000;
 const safeIdPattern = /^[a-z0-9]+(?:[a-z0-9._-]*[a-z0-9])?$/u;
 const allowedIndexKinds = new Set([
   "content",
@@ -70,6 +80,12 @@ export type ValidatedExerciseRelease = {
   privateBytes: Buffer;
 };
 
+export type ValidatedExerciseIngestionReport = {
+  bytes: Buffer;
+  pageCount: number;
+  reviewedPages: number;
+};
+
 export type ExerciseReleasePromotionInput = {
   jobId: string;
   bookId: string;
@@ -79,6 +95,8 @@ export type ExerciseReleasePromotionInput = {
   currentUid?: number;
   now?: () => Date;
   hooks?: {
+    afterBundleActivation?: () => void | Promise<void>;
+    /** @deprecated Use afterBundleActivation in transaction tests. */
     afterPrivateActivation?: () => void | Promise<void>;
     /**
      * Transaction tests replace only this expensive read. The CLI never
@@ -101,7 +119,7 @@ export type ExerciseReleasePromotionResult = {
 
 export type RuntimeBookArtifactVerificationInput = {
   runtimeRoot: string;
-  book: Book;
+  book: AuthoringCatalogEntry;
   expectedUid: number;
 };
 
@@ -154,7 +172,7 @@ function sameStringRecord(
 
 function validateRuntimeBookIndex(
   value: unknown,
-  book: Book,
+  book: AuthoringCatalogEntry,
 ): number {
   if (!isRecord(value)) {
     artifactFailure("el índice RAG no es un objeto JSON");
@@ -252,7 +270,7 @@ function validateRuntimeBookIndex(
       artifactFailure("un fragmento del índice RAG es inválido");
     }
 
-    const activity = getPageActivity(book.id, chunk.page);
+    const activity = getAuthoringPageActivity(book.id, chunk.page);
     if (
       (activity.stage === "assessment" &&
         activity.unitId === null) ||
@@ -433,6 +451,159 @@ function validationFailure(details: readonly string[]): never {
   );
 }
 
+export function validateExerciseIngestionReport(
+  input: unknown,
+  publicManifest: PublicExerciseManifest,
+): ValidatedExerciseIngestionReport {
+  let value = input;
+  if (typeof input === "string") {
+    try {
+      value = JSON.parse(input) as unknown;
+    } catch {
+      validationFailure(["coverage.invalid-json $.coverage"]);
+    }
+  }
+
+  const details: string[] = [];
+  if (!isRecord(value)) {
+    validationFailure(["coverage.invalid-report $"]);
+  }
+  if (value.schemaVersion !== 3) {
+    details.push("coverage.invalid-schema-version $.schemaVersion");
+  }
+  if (value.bookId !== publicManifest.bookId) {
+    details.push("coverage.book-mismatch $.bookId");
+  }
+  if (value.sourceSha256 !== publicManifest.sourceSha256) {
+    details.push("coverage.source-mismatch $.sourceSha256");
+  }
+  if (value.provider !== "ollama" && value.provider !== "google") {
+    details.push("coverage.invalid-provider $.provider");
+  }
+  if (
+    (value.provider === "ollama" && value.endpointScope !== "loopback") ||
+    (value.provider === "google" &&
+      value.endpointScope !== "google-api")
+  ) {
+    details.push("coverage.invalid-endpoint-scope $.endpointScope");
+  }
+  if (value.contractVersion !== EXERCISE_INGEST_CONTRACT_VERSION) {
+    details.push("coverage.contract-version $.contractVersion");
+  }
+  if (value.model !== publicManifest.model) {
+    details.push("coverage.model-mismatch $.model");
+  }
+  if (value.generatedAt !== publicManifest.generatedAt) {
+    details.push("coverage.generation-mismatch $.generatedAt");
+  }
+  if (value.exerciseCount !== publicManifest.exercises.length) {
+    details.push("coverage.exercise-count-mismatch $.exerciseCount");
+  }
+  if (value.reviewRequired !== true) {
+    details.push("coverage.review-required $.reviewRequired");
+  }
+  if (!Array.isArray(value.issues)) {
+    details.push("coverage.invalid-issues $.issues");
+  }
+
+  const coverage = value.coverage;
+  if (!isRecord(coverage)) {
+    details.push("coverage.missing $.coverage");
+    validationFailure(details);
+  }
+  if (coverage.pageCount !== publicManifest.pageCount) {
+    details.push("coverage.page-count-mismatch $.coverage.pageCount");
+  }
+
+  const pagesReviewed = coverage.pagesReviewed;
+  const seenPages = new Set<number>();
+  if (
+    !Array.isArray(pagesReviewed) ||
+    pagesReviewed.length !== publicManifest.pageCount
+  ) {
+    details.push("coverage.incomplete $.coverage.pagesReviewed");
+  }
+  if (Array.isArray(pagesReviewed)) {
+    pagesReviewed.forEach((entry, index) => {
+      const entryPath = `$.coverage.pagesReviewed[${index}]`;
+      if (
+        !isRecord(entry) ||
+        !Number.isSafeInteger(entry.page) ||
+        Number(entry.page) < 1 ||
+        Number(entry.page) > publicManifest.pageCount ||
+        (entry.status !== "no_exercise" &&
+          entry.status !== "exercise_found" &&
+          entry.status !== "uncertain") ||
+        !Number.isSafeInteger(entry.candidateCount) ||
+        Number(entry.candidateCount) < 0
+      ) {
+        details.push(`coverage.invalid-page ${entryPath}`);
+        return;
+      }
+
+      const page = Number(entry.page);
+      const candidateCount = Number(entry.candidateCount);
+      if (seenPages.has(page)) {
+        details.push(`coverage.duplicate-page ${entryPath}.page`);
+      }
+      seenPages.add(page);
+      if (page !== index + 1) {
+        details.push(`coverage.noncontiguous ${entryPath}.page`);
+      }
+      if (entry.status === "no_exercise" && candidateCount !== 0) {
+        details.push(
+          `coverage.no-exercise-has-candidates ${entryPath}.candidateCount`,
+        );
+      }
+      if (entry.status === "exercise_found" && candidateCount < 1) {
+        details.push(
+          `coverage.exercise-found-empty ${entryPath}.candidateCount`,
+        );
+      }
+      if (entry.status === "uncertain") {
+        details.push(`coverage.uncertain-page ${entryPath}.status`);
+      }
+    });
+  }
+  for (let page = 1; page <= publicManifest.pageCount; page += 1) {
+    if (!seenPages.has(page)) {
+      details.push(`coverage.missing-page $.coverage.pagesReviewed.${page}`);
+    }
+  }
+
+  const blockers = coverage.blockers;
+  if (!Array.isArray(blockers)) {
+    details.push("coverage.invalid-blockers $.coverage.blockers");
+  } else {
+    blockers.forEach((blocker, index) => {
+      const blockerPath = `$.coverage.blockers[${index}]`;
+      if (
+        !isRecord(blocker) ||
+        typeof blocker.code !== "string" ||
+        blocker.code.length < 1 ||
+        !Number.isSafeInteger(blocker.page) ||
+        Number(blocker.page) < 1 ||
+        Number(blocker.page) > publicManifest.pageCount
+      ) {
+        details.push(`coverage.invalid-blocker ${blockerPath}`);
+        return;
+      }
+      details.push(
+        `coverage.blocker ${blockerPath}:${blocker.code}:page-${blocker.page}`,
+      );
+    });
+  }
+
+  if (details.length > 0) {
+    validationFailure(details);
+  }
+  return {
+    bytes: canonicalBytes(value),
+    pageCount: publicManifest.pageCount,
+    reviewedPages: seenPages.size,
+  };
+}
+
 export function validateReviewedExerciseRelease(
   publicInput: unknown,
   privateInput: unknown,
@@ -593,6 +764,7 @@ async function restoreDestination(input: {
 async function optionalPublishedFile(
   filePath: string,
   expectedUid: number,
+  maximumBytes = MAX_MANIFEST_BYTES,
 ): Promise<Buffer | null> {
   const metadata = await lstat(filePath).catch((error: unknown) => {
     if (
@@ -609,7 +781,7 @@ async function optionalPublishedFile(
   }
   return readStableOwnedFile(filePath, {
     expectedUid,
-    maximumBytes: MAX_MANIFEST_BYTES,
+    maximumBytes,
     expectedMode: 0o640,
   });
 }
@@ -684,36 +856,111 @@ async function acquirePromotionLock(
     runtimeRoot,
     path.join(runtimeRoot, ".exercise-release.lock"),
   );
-  let handle: FileHandle | null = null;
-  try {
-    handle = await open(
-      lockPath,
-      constants.O_WRONLY |
-        constants.O_CREAT |
-        constants.O_EXCL |
-        constants.O_NOFOLLOW,
-      0o600,
-    );
-    await handle.chmod(0o600);
-    await handle.writeFile(
-      `${JSON.stringify({
-        pid: process.pid,
-        uid: expectedUid,
-        createdAt: new Date().toISOString(),
-      })}\n`,
-    );
-    await handle.sync();
-    await syncDirectory(runtimeRoot);
-  } catch {
-    if (handle) {
-      await handle.close().catch(() => undefined);
-      await removeIfPresent(lockPath).catch(() => undefined);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let handle: FileHandle | null = null;
+    try {
+      handle = await open(
+        lockPath,
+        constants.O_WRONLY |
+          constants.O_CREAT |
+          constants.O_EXCL |
+          constants.O_NOFOLLOW,
+        0o600,
+      );
+      await handle.chmod(0o600);
+      await handle.writeFile(
+        `${JSON.stringify({
+          pid: process.pid,
+          uid: expectedUid,
+          createdAt: new Date().toISOString(),
+        })}\n`,
+      );
+      await handle.sync();
+      await syncDirectory(runtimeRoot);
+      return { handle, path: lockPath };
+    } catch (error) {
+      if (handle) {
+        await handle.close().catch(() => undefined);
+        await removeIfPresent(lockPath).catch(() => undefined);
+      }
+      const code =
+        error instanceof Error &&
+        "code" in error &&
+        typeof error.code === "string"
+          ? error.code
+          : "";
+      if (
+        attempt === 0 &&
+        code === "EEXIST" &&
+        (await removeStalePromotionLock(
+          lockPath,
+          runtimeRoot,
+          expectedUid,
+        ))
+      ) {
+        continue;
+      }
+      break;
     }
-    throw new ExerciseReleasePromotionError(
-      "Ya existe una promoción en curso o un lock pendiente de revisión.",
-    );
   }
-  return { handle, path: lockPath };
+  throw new ExerciseReleasePromotionError(
+    "Ya existe una promoción en curso o un lock pendiente de revisión.",
+  );
+}
+
+async function removeStalePromotionLock(
+  lockPath: string,
+  runtimeRoot: string,
+  expectedUid: number,
+): Promise<boolean> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(
+      (
+        await readStableOwnedFile(lockPath, {
+          expectedUid,
+          maximumBytes: MAX_LOCK_BYTES,
+          expectedMode: 0o600,
+        })
+      ).toString("utf8"),
+    ) as unknown;
+  } catch {
+    return false;
+  }
+  if (
+    !isRecord(parsed) ||
+    !Number.isSafeInteger(parsed.pid) ||
+    Number(parsed.pid) < 1 ||
+    parsed.uid !== expectedUid ||
+    typeof parsed.createdAt !== "string"
+  ) {
+    return false;
+  }
+  const createdAt = Date.parse(parsed.createdAt);
+  if (
+    !Number.isFinite(createdAt) ||
+    Date.now() - createdAt < STALE_LOCK_AGE_MS
+  ) {
+    return false;
+  }
+
+  try {
+    process.kill(Number(parsed.pid), 0);
+    return false;
+  } catch (error) {
+    if (
+      !(
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ESRCH"
+      )
+    ) {
+      return false;
+    }
+  }
+  await unlink(lockPath);
+  await syncDirectory(runtimeRoot);
+  return true;
 }
 
 async function releasePromotionLock(lock: {
@@ -788,10 +1035,10 @@ export async function promoteExerciseRelease(
   await assertOwnedDirectory(contentDirectory, expectedUid, 0o750);
   await assertOwnedDirectory(indexesDirectory, expectedUid, 0o750);
 
-  const book = getBook(input.bookId);
+  const book = getAuthoringCatalogEntry(input.bookId);
   if (!book) {
     throw new ExerciseReleasePromotionError(
-      "El libro no está publicado o no admite tutor/RAG.",
+      "El libro no admite preparación editorial o está deshabilitado.",
     );
   }
 
@@ -803,23 +1050,50 @@ export async function promoteExerciseRelease(
     jobDirectory,
     path.join(jobDirectory, `${input.bookId}.private.reviewed.json`),
   );
-  const [reviewedPublic, reviewedPrivate] = await Promise.all([
-    readStableOwnedFile(reviewedPublicPath, {
-      expectedUid,
-      maximumBytes: MAX_MANIFEST_BYTES,
-      expectedMode: 0o600,
-    }),
-    readStableOwnedFile(reviewedPrivatePath, {
-      expectedUid,
-      maximumBytes: MAX_MANIFEST_BYTES,
-      expectedMode: 0o600,
-    }),
-  ]);
+  const ingestionReportPath = directChildPath(
+    jobDirectory,
+    path.join(jobDirectory, `${input.bookId}.ingestion-report.json`),
+  );
+  let reviewedPublic: Buffer;
+  let reviewedPrivate: Buffer;
+  let ingestionReport: Buffer;
+  try {
+    [reviewedPublic, reviewedPrivate, ingestionReport] = await Promise.all([
+      readStableOwnedFile(reviewedPublicPath, {
+        expectedUid,
+        maximumBytes: MAX_MANIFEST_BYTES,
+        expectedMode: 0o600,
+      }),
+      readStableOwnedFile(reviewedPrivatePath, {
+        expectedUid,
+        maximumBytes: MAX_MANIFEST_BYTES,
+        expectedMode: 0o600,
+      }),
+      readStableOwnedFile(ingestionReportPath, {
+        expectedUid,
+        maximumBytes: MAX_MANIFEST_BYTES,
+        expectedMode: 0o600,
+      }),
+    ]);
+  } catch {
+    throw new ExerciseReleasePromotionError(
+      "El job no contiene manifests revisados y reporte de cobertura seguros.",
+    );
+  }
   const validated = validateReviewedExerciseRelease(
     reviewedPublic.toString("utf8"),
     reviewedPrivate.toString("utf8"),
     input.bookId,
   );
+  const validatedCoverage = validateExerciseIngestionReport(
+    ingestionReport.toString("utf8"),
+    validated.publicManifest,
+  );
+  const coverageReportMetadata = {
+    sha256: sha256(validatedCoverage.bytes),
+    pageCount: validatedCoverage.pageCount,
+    reviewedPages: validatedCoverage.reviewedPages,
+  };
 
   const releaseId =
     input.releaseId ?? generatedReleaseId((input.now ?? (() => new Date()))());
@@ -831,6 +1105,8 @@ export async function promoteExerciseRelease(
 
   const publicName = `${input.bookId}.public.json`;
   const privateName = `${input.bookId}.private.json`;
+  const bundleName = `${input.bookId}.release.json`;
+  const coverageName = `${input.bookId}.ingestion-report.json`;
   const publicDestination = directChildPath(
     publicDirectory,
     path.join(publicDirectory, publicName),
@@ -839,6 +1115,16 @@ export async function promoteExerciseRelease(
     privateDirectory,
     path.join(privateDirectory, privateName),
   );
+  const bundleDestination = directChildPath(
+    privateDirectory,
+    path.join(privateDirectory, bundleName),
+  );
+  const bundleBytes = encodeExerciseReleaseBundle({
+    releaseId,
+    bookId: input.bookId,
+    publicManifest: validated.publicManifest,
+    privateManifest: validated.privateManifest,
+  });
 
   if (
     input.hooks?.verifyRuntimeArtifacts &&
@@ -857,28 +1143,58 @@ export async function promoteExerciseRelease(
     expectedUid,
   });
   const lock = await acquirePromotionLock(runtimeRoot, expectedUid);
+  let bundleTemporary: string | null = null;
   let privateTemporary: string | null = null;
   let publicTemporary: string | null = null;
+  let bundleActivated = false;
   let privateActivated = false;
   let publicActivated = false;
 
   try {
-    const [previousPublic, previousPrivate] = await Promise.all([
+    const [legacyPublic, legacyPrivate, previousBundleBytes] =
+      await Promise.all([
       optionalPublishedFile(publicDestination, expectedUid),
       optionalPublishedFile(privateDestination, expectedUid),
+      optionalPublishedFile(
+        bundleDestination,
+        expectedUid,
+        MAX_MANIFEST_BYTES * 2,
+      ),
     ]);
-    if (Boolean(previousPublic) !== Boolean(previousPrivate)) {
+    if (
+      !previousBundleBytes &&
+      Boolean(legacyPublic) !== Boolean(legacyPrivate)
+    ) {
       throw new ExerciseReleasePromotionError(
         "El release activo está incompleto; se requiere reparación manual.",
       );
     }
-    if (previousPublic && previousPrivate) {
+    let previousPublic = legacyPublic;
+    let previousPrivate = legacyPrivate;
+    if (previousBundleBytes) {
+      let previousBundle;
+      try {
+        previousBundle = parseExerciseReleaseBundle(previousBundleBytes);
+      } catch {
+        throw new ExerciseReleasePromotionError(
+          "El release atómico activo es inválido; se requiere reparación manual.",
+        );
+      }
+      if (previousBundle.bookId !== input.bookId) {
+        throw new ExerciseReleasePromotionError(
+          "El release atómico activo pertenece a otro libro.",
+        );
+      }
+      previousPublic = canonicalBytes(previousBundle.publicManifest);
+      previousPrivate = canonicalBytes(previousBundle.privateManifest);
+    } else if (previousPublic && previousPrivate) {
       validateReviewedExerciseRelease(
         previousPublic.toString("utf8"),
         previousPrivate.toString("utf8"),
         input.bookId,
       );
     }
+    const hadPrevious = Boolean(previousPublic && previousPrivate);
 
     const snapshot = await createReleaseDirectory(
       releasesDirectory,
@@ -895,6 +1211,16 @@ export async function promoteExerciseRelease(
       privateName,
       validated.privateBytes,
     );
+    await writeSnapshotFile(
+      snapshot.next,
+      bundleName,
+      bundleBytes,
+    );
+    await writeSnapshotFile(
+      snapshot.next,
+      coverageName,
+      validatedCoverage.bytes,
+    );
     if (previousPublic && previousPrivate) {
       await writeSnapshotFile(
         snapshot.previous,
@@ -906,6 +1232,13 @@ export async function promoteExerciseRelease(
         privateName,
         previousPrivate,
       );
+      if (previousBundleBytes) {
+        await writeSnapshotFile(
+          snapshot.previous,
+          bundleName,
+          previousBundleBytes,
+        );
+      }
     }
     await syncDirectory(snapshot.next);
     await syncDirectory(snapshot.previous);
@@ -918,13 +1251,20 @@ export async function promoteExerciseRelease(
         jobId: input.jobId,
         createdAt: (input.now ?? (() => new Date()))().toISOString(),
         status: "prepared",
-        hadPrevious: Boolean(previousPublic),
+        hadPrevious,
         runtimeArtifacts,
+        coverageReport: coverageReportMetadata,
       },
       releaseId,
     );
     await syncDirectory(releasesDirectory);
 
+    bundleTemporary = await stageReplacement(
+      privateDirectory,
+      bundleName,
+      bundleBytes,
+      releaseId,
+    );
     privateTemporary = await stageReplacement(
       privateDirectory,
       privateName,
@@ -938,12 +1278,22 @@ export async function promoteExerciseRelease(
       releaseId,
     );
 
+    // This is the only runtime activation point. Both public exercise data and
+    // private reviewed guidance become visible through one atomic rename.
+    await rename(bundleTemporary, bundleDestination);
+    bundleTemporary = null;
+    bundleActivated = true;
+    await syncDirectory(privateDirectory);
+
+    await input.hooks?.afterBundleActivation?.();
+    await input.hooks?.afterPrivateActivation?.();
+
+    // Compatibility mirrors are updated only after the authoritative bundle.
+    // A crash here cannot expose mixed revisions because readers prefer it.
     await rename(privateTemporary, privateDestination);
     privateTemporary = null;
     privateActivated = true;
     await syncDirectory(privateDirectory);
-
-    await input.hooks?.afterPrivateActivation?.();
 
     await rename(publicTemporary, publicDestination);
     publicTemporary = null;
@@ -959,8 +1309,9 @@ export async function promoteExerciseRelease(
         jobId: input.jobId,
         createdAt: (input.now ?? (() => new Date()))().toISOString(),
         status: "published",
-        hadPrevious: Boolean(previousPublic),
+        hadPrevious,
         runtimeArtifacts,
+        coverageReport: coverageReportMetadata,
       },
       `${releaseId}-published`,
     );
@@ -971,10 +1322,11 @@ export async function promoteExerciseRelease(
       publishedExercises: validated.publicManifest.exercises.filter(
         (exercise) => exercise.status === "published",
       ).length,
-      previousReleaseSnapshot: Boolean(previousPublic),
+      previousReleaseSnapshot: hadPrevious,
     };
   } catch (error) {
     await Promise.allSettled([
+      removeIfPresent(bundleTemporary),
       removeIfPresent(privateTemporary),
       removeIfPresent(publicTemporary),
     ]);
@@ -1016,6 +1368,28 @@ export async function promoteExerciseRelease(
           directory: privateDirectory,
           finalPath: privateDestination,
           previous: previousPrivate,
+          releaseId,
+        });
+      } catch (rollbackError) {
+        rollbackFailures.push(rollbackError);
+      }
+    }
+    if (bundleActivated) {
+      try {
+        const previousBundle = await optionalPublishedFile(
+          path.join(
+            releasesDirectory,
+            releaseId,
+            "previous",
+            bundleName,
+          ),
+          expectedUid,
+          MAX_MANIFEST_BYTES * 2,
+        );
+        await restoreDestination({
+          directory: privateDirectory,
+          finalPath: bundleDestination,
+          previous: previousBundle,
           releaseId,
         });
       } catch (rollbackError) {

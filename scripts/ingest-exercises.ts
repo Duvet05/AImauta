@@ -7,12 +7,21 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 
-import { getCatalogEntries } from "@/lib/catalog";
-import { ingestExercisesFromPdf } from "@/lib/exercise-ingestion";
+import { getAuthoringCatalogEntry } from "@/lib/catalog";
 import {
+  ingestExercisesFromPdf,
+  type DetectExercisesCallback,
+  type SolveExerciseCallback,
+} from "@/lib/exercise-ingestion";
+import {
+  EXERCISE_INGEST_CONTRACT_VERSION,
   detectExerciseWindowWithGemma,
   solveExerciseWithGemma,
 } from "@/lib/gemma-ingest";
+import {
+  detectExerciseWindowWithOllama,
+  solveExerciseWithOllama,
+} from "@/lib/ollama-gemma-ingest";
 import {
   absoluteConfiguredRoot,
   assertOwnedDirectory,
@@ -23,10 +32,13 @@ import {
   readStableOwnedFile,
 } from "@/scripts/private-runtime-paths";
 
-const DEFAULT_MODEL = "gemma-4-26b-a4b-it";
+const DEFAULT_GOOGLE_MODEL = "gemma-4-26b-a4b-it";
+const DEFAULT_OLLAMA_MODEL = "gemma4:e4b-it-qat";
 const DEFAULT_INGEST_ROOT = "/home/hii1sc/aimauta-ingest";
 const MAX_API_KEY_BYTES = 4_096;
-const safeModelPattern = /^[a-z0-9][a-z0-9._-]{0,127}$/u;
+const safeModelPattern = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/u;
+
+type IngestProvider = "google" | "ollama";
 
 type IngestLayout = {
   root: string;
@@ -39,7 +51,8 @@ type CliOptions = {
   bookId: string;
   pdfPath: string;
   outputDir: string;
-  apiKeyFile: string;
+  apiKeyFile?: string;
+  provider: IngestProvider;
   model: string;
 };
 
@@ -83,27 +96,57 @@ function parseOptions(
     "--output",
     "--api-key-file",
     "--model",
+    "--provider",
   ]);
+  const seen = new Set<string>();
   for (let index = 0; index < args.length; index += 2) {
-    if (!allowed.has(args[index]) || !args[index + 1]) {
+    const name = args[index];
+    if (
+      !allowed.has(name) ||
+      seen.has(name) ||
+      !args[index + 1]
+    ) {
       throw new IngestCliError(
         "Uso: exercises:ingest --book ID --pdf /ruta/libro.pdf " +
-          "--output /ruta/job --api-key-file /ruta/secreto [--model MODELO]",
-      );
+          "--output /ruta/job [--provider google|ollama] " +
+          "[--api-key-file /ruta/secreto] [--model MODELO]",
+        );
     }
+    seen.add(name);
   }
 
   const bookId = optionValue(args, "--book");
   const pdfPath = optionValue(args, "--pdf");
   const outputDir = optionValue(args, "--output");
+  const providerValue =
+    optionValue(args, "--provider") ??
+    process.env.AIMAUTA_INGEST_PROVIDER?.trim() ??
+    "ollama";
+  if (providerValue !== "google" && providerValue !== "ollama") {
+    throw new IngestCliError(
+      "AIMAUTA_INGEST_PROVIDER debe ser google u ollama.",
+    );
+  }
+  const provider: IngestProvider = providerValue;
+  const explicitApiKeyFile = optionValue(args, "--api-key-file");
+  if (provider === "ollama" && explicitApiKeyFile) {
+    throw new IngestCliError(
+      "--api-key-file sólo se admite con el proveedor google.",
+    );
+  }
   const apiKeyFile =
-    optionValue(args, "--api-key-file") ??
-    process.env.AIMAUTA_GEMINI_API_KEY_FILE?.trim() ??
-    path.join(layout.secrets, "model-api-key");
+    provider === "google"
+      ? explicitApiKeyFile ??
+        process.env.AIMAUTA_GEMINI_API_KEY_FILE?.trim() ??
+        path.join(layout.secrets, "model-api-key")
+      : undefined;
   const model =
     optionValue(args, "--model") ??
-    process.env.AIMAUTA_GEMINI_MODEL?.trim() ??
-    DEFAULT_MODEL;
+    (provider === "google"
+      ? process.env.AIMAUTA_GEMINI_MODEL?.trim() ??
+        DEFAULT_GOOGLE_MODEL
+      : process.env.AIMAUTA_OLLAMA_INGEST_MODEL?.trim() ??
+        DEFAULT_OLLAMA_MODEL);
   if (
     !bookId ||
     !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(bookId) ||
@@ -111,9 +154,9 @@ function parseOptions(
     !path.isAbsolute(pdfPath) ||
     !outputDir ||
     !path.isAbsolute(outputDir) ||
-    !apiKeyFile ||
-    !path.isAbsolute(apiKeyFile) ||
-    !safeModelPattern.test(model)
+    (apiKeyFile !== undefined && !path.isAbsolute(apiKeyFile)) ||
+    !safeModelPattern.test(model) ||
+    model.includes("..")
   ) {
     throw new IngestCliError("La configuración de la ingesta no es válida.");
   }
@@ -121,7 +164,10 @@ function parseOptions(
     bookId,
     pdfPath: path.resolve(pdfPath),
     outputDir: directChildPath(layout.jobs, outputDir),
-    apiKeyFile: directChildPath(layout.secrets, apiKeyFile),
+    ...(apiKeyFile
+      ? { apiKeyFile: directChildPath(layout.secrets, apiKeyFile) }
+      : {}),
+    provider,
     model,
   };
 }
@@ -146,6 +192,75 @@ async function readApiKey(
     throw new IngestCliError("El archivo de clave no es válido.");
   }
   return apiKey;
+}
+
+async function providerCallbacks(
+  options: CliOptions,
+  expectedUid: number,
+): Promise<{
+  detect: DetectExercisesCallback;
+  solve: SolveExerciseCallback;
+}> {
+  if (options.provider === "ollama") {
+    const baseUrl =
+      process.env.AIMAUTA_OLLAMA_INGEST_URL?.trim() ??
+      "http://127.0.0.1:11434";
+    const provider = {
+      baseUrl,
+      model: options.model,
+    };
+    return {
+      detect: (images) =>
+        detectExerciseWindowWithOllama({ ...provider, images }),
+      solve: ({ exerciseId, context, images }) =>
+        solveExerciseWithOllama({
+          ...provider,
+          exerciseId,
+          context,
+          images,
+        }),
+    };
+  }
+
+  if (!options.apiKeyFile) {
+    throw new IngestCliError(
+      "El proveedor google requiere un archivo de clave.",
+    );
+  }
+  const apiKey = await readApiKey(options.apiKeyFile, expectedUid);
+  const endpoint = process.env.AIMAUTA_GEMINI_ENDPOINT?.trim();
+  const nonGoogleEndpointOptIn =
+    process.env.AIMAUTA_ALLOW_NON_GOOGLE_GEMINI_ENDPOINT?.trim();
+  if (
+    nonGoogleEndpointOptIn !== undefined &&
+    nonGoogleEndpointOptIn !== "true" &&
+    nonGoogleEndpointOptIn !== "false"
+  ) {
+    throw new IngestCliError(
+      "AIMAUTA_ALLOW_NON_GOOGLE_GEMINI_ENDPOINT debe ser true o false.",
+    );
+  }
+  const provider = {
+    apiKey,
+    model: options.model,
+    ...(endpoint
+      ? {
+          endpoint,
+          allowNonGoogleEndpoint: nonGoogleEndpointOptIn === "true",
+        }
+      : {}),
+  };
+  return {
+    detect: (images) =>
+      detectExerciseWindowWithGemma({ ...provider, images }),
+    solve: ({ exerciseId, context, images }) =>
+      solveExerciseWithGemma({
+        ...provider,
+        exerciseId,
+        context,
+        images,
+      }),
+  };
 }
 
 async function writeArtifacts(input: {
@@ -208,60 +323,29 @@ async function main(): Promise<void> {
   await assertOwnedDirectory(layout.secrets, layout.uid, 0o700);
 
   const options = parseOptions(process.argv.slice(2), layout);
-  const catalogMatches = getCatalogEntries().filter(
-    (entry) => entry.id === options.bookId,
-  );
-  if (catalogMatches.length !== 1) {
+  const catalogEntry = getAuthoringCatalogEntry(options.bookId);
+  if (!catalogEntry) {
     throw new IngestCliError(
-      "El libro debe existir una sola vez en el catálogo versionado.",
+      "El libro debe existir, admitir tutor y no estar deshabilitado.",
     );
   }
 
   await assertOwnedRegularFile(options.pdfPath, {
     expectedUid: layout.uid,
-    maximumBytes: catalogMatches[0].expectedBytes,
+    maximumBytes: catalogEntry.expectedBytes,
   });
-  const apiKey = await readApiKey(options.apiKeyFile, layout.uid);
   await prepareOwnedJobDirectory(
     layout.jobs,
     options.outputDir,
     layout.uid,
   );
-  const endpoint = process.env.AIMAUTA_GEMINI_ENDPOINT?.trim();
-  const nonGoogleEndpointOptIn =
-    process.env.AIMAUTA_ALLOW_NON_GOOGLE_GEMINI_ENDPOINT?.trim();
-  if (
-    nonGoogleEndpointOptIn !== undefined &&
-    nonGoogleEndpointOptIn !== "true" &&
-    nonGoogleEndpointOptIn !== "false"
-  ) {
-    throw new IngestCliError(
-      "AIMAUTA_ALLOW_NON_GOOGLE_GEMINI_ENDPOINT debe ser true o false.",
-    );
-  }
-  const provider = {
-    apiKey,
-    model: options.model,
-    ...(endpoint
-      ? {
-          endpoint,
-          allowNonGoogleEndpoint: nonGoogleEndpointOptIn === "true",
-        }
-      : {}),
-  };
+  const { detect, solve } = await providerCallbacks(options, layout.uid);
   const result = await ingestExercisesFromPdf({
-    catalogEntry: catalogMatches[0],
+    catalogEntry,
     pdfPath: options.pdfPath,
     model: options.model,
-    detect: (images) =>
-      detectExerciseWindowWithGemma({ ...provider, images }),
-    solve: ({ exerciseId, context, images }) =>
-      solveExerciseWithGemma({
-        ...provider,
-        exerciseId,
-        context,
-        images,
-      }),
+    detect,
+    solve,
   });
 
   await writeArtifacts({
@@ -270,12 +354,18 @@ async function main(): Promise<void> {
     publicManifest: result.publicManifest,
     privateManifest: result.privateManifest,
     report: {
-      schemaVersion: 1,
+      schemaVersion: 3,
       bookId: options.bookId,
+      sourceSha256: result.publicManifest.sourceSha256,
+      provider: options.provider,
+      endpointScope:
+        options.provider === "ollama" ? "loopback" : "google-api",
+      contractVersion: EXERCISE_INGEST_CONTRACT_VERSION,
       model: options.model,
       generatedAt: result.publicManifest.generatedAt,
       exerciseCount: result.publicManifest.exercises.length,
       reviewRequired: true,
+      coverage: result.coverage,
       issues: result.issues,
     },
   });

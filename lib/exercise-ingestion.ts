@@ -20,7 +20,7 @@ import type {
   NormalizedBox
 } from "@/lib/gemma-ingest";
 import {
-  getPageActivity,
+  getAuthoringPageActivity,
   type PageActivity
 } from "@/lib/curriculum";
 import {
@@ -60,6 +60,26 @@ export type ExerciseIngestionIssue = {
   candidateId: string;
 };
 
+export type ExercisePageReviewStatus =
+  ExerciseDetectionResult["pagesReviewed"][number]["status"];
+
+export type ExercisePageCoverage = {
+  page: number;
+  status: ExercisePageReviewStatus;
+  candidateCount: number;
+};
+
+export type ExerciseCoverageBlocker = {
+  code: "page-uncertain" | "page-status-conflict";
+  page: number;
+};
+
+export type ExerciseIngestionCoverage = {
+  pageCount: number;
+  pagesReviewed: readonly ExercisePageCoverage[];
+  blockers: readonly ExerciseCoverageBlocker[];
+};
+
 export type ExerciseIngestionInput = {
   catalogEntry: CatalogEntry;
   pdfPath: string;
@@ -76,6 +96,7 @@ export type ExerciseIngestionInput = {
 export type ExerciseIngestionResult = {
   publicManifest: PublicExerciseManifest;
   privateManifest: PrivateExerciseSolutionsManifest;
+  coverage: ExerciseIngestionCoverage;
   issues: readonly ExerciseIngestionIssue[];
 };
 
@@ -242,10 +263,18 @@ function normalizeCandidate(
   };
 }
 
+type NormalizedDetection = {
+  candidates: Candidate[];
+  pagesReviewed: Array<{
+    page: number;
+    status: ExercisePageReviewStatus;
+  }>;
+};
+
 function normalizeDetection(
   value: unknown,
   pages: readonly number[]
-): Candidate[] {
+): NormalizedDetection {
   if (
     !isRecord(value) ||
     !Array.isArray(value.pagesReviewed) ||
@@ -257,7 +286,7 @@ function normalizeDetection(
   }
 
   const pageSet = new Set(pages);
-  const reviewed = new Set<number>();
+  const reviewed = new Map<number, ExercisePageReviewStatus>();
   for (const entry of value.pagesReviewed) {
     if (
       !isRecord(entry) ||
@@ -270,15 +299,35 @@ function normalizeDetection(
     ) {
       fail("INVALID_DETECTION");
     }
-    reviewed.add(Number(entry.page));
+    reviewed.set(Number(entry.page), entry.status);
   }
   if (pages.some((page) => !reviewed.has(page))) {
     fail("INVALID_DETECTION");
   }
 
-  return value.exercises.map((exercise) =>
+  const candidates = value.exercises.map((exercise) =>
     normalizeCandidate(exercise, pageSet)
   );
+  const candidatesPerPage = new Map<number, number>();
+  for (const candidate of candidates) {
+    for (const page of new Set(candidate.regions.map((region) => region.page))) {
+      candidatesPerPage.set(page, (candidatesPerPage.get(page) ?? 0) + 1);
+    }
+  }
+
+  const pagesReviewed = pages.map((page) => {
+    const status = reviewed.get(page) as ExercisePageReviewStatus;
+    const candidateCount = candidatesPerPage.get(page) ?? 0;
+    if (
+      (status === "no_exercise" && candidateCount !== 0) ||
+      (status === "exercise_found" && candidateCount < 1)
+    ) {
+      fail("INVALID_DETECTION");
+    }
+    return { page, status };
+  });
+
+  return { candidates, pagesReviewed };
 }
 
 function normalizedWords(value: string): Set<string> {
@@ -534,6 +583,49 @@ function groupCandidates(values: readonly Candidate[]): CandidateGroup[] {
     });
 }
 
+function buildIngestionCoverage(
+  pageCount: number,
+  observations: ReadonlyMap<number, readonly ExercisePageReviewStatus[]>,
+  groups: readonly CandidateGroup[]
+): ExerciseIngestionCoverage {
+  const candidatesPerPage = new Map<number, number>();
+  for (const group of groups) {
+    for (const page of new Set(group.regions.map((region) => region.page))) {
+      candidatesPerPage.set(page, (candidatesPerPage.get(page) ?? 0) + 1);
+    }
+  }
+
+  const pagesReviewed: ExercisePageCoverage[] = [];
+  const blockers: ExerciseCoverageBlocker[] = [];
+  for (let page = 1; page <= pageCount; page += 1) {
+    const pageObservations = observations.get(page);
+    if (!pageObservations || pageObservations.length === 0) {
+      fail("INVALID_DETECTION");
+    }
+    const statuses = new Set(pageObservations);
+    const status =
+      statuses.size === 1
+        ? (pageObservations[0] as ExercisePageReviewStatus)
+        : "uncertain";
+    const candidateCount = candidatesPerPage.get(page) ?? 0;
+    if (
+      (status === "no_exercise" && candidateCount !== 0) ||
+      (status === "exercise_found" && candidateCount < 1)
+    ) {
+      fail("INVALID_DETECTION");
+    }
+    pagesReviewed.push({ page, status, candidateCount });
+
+    if (statuses.size > 1) {
+      blockers.push({ code: "page-status-conflict", page });
+    } else if (status === "uncertain") {
+      blockers.push({ code: "page-uncertain", page });
+    }
+  }
+
+  return { pageCount, pagesReviewed, blockers };
+}
+
 function normalizedRect(box: NormalizedBox): NormalizedRect {
   return {
     x: box[1] / 1_000,
@@ -712,6 +804,10 @@ export async function ingestExercisesFromPdf(
   });
 
   const detected: Candidate[] = [];
+  const pageReviewObservations = new Map<
+    number,
+    ExercisePageReviewStatus[]
+  >();
   const issues: ExerciseIngestionIssue[] = [];
   try {
     let overlapCache = new Map<number, RenderedPdfPage>();
@@ -738,26 +834,40 @@ export async function ingestExercisesFromPdf(
       } catch {
         fail("DETECTION_FAILED");
       }
-      const windowCandidates = normalizeDetection(result, pages);
+      const normalized = normalizeDetection(result, pages);
       if (
-        detected.length + windowCandidates.length >
+        detected.length + normalized.candidates.length >
         MAX_DETECTED_CANDIDATES
       ) {
         fail("BUDGET_EXCEEDED");
       }
-      detected.push(...windowCandidates);
+      detected.push(...normalized.candidates);
+      for (const reviewedPage of normalized.pagesReviewed) {
+        const observations =
+          pageReviewObservations.get(reviewedPage.page) ?? [];
+        observations.push(reviewedPage.status);
+        pageReviewObservations.set(reviewedPage.page, observations);
+      }
       const overlapPage = pages.at(-1) as number;
       overlapCache = new Map([
         [overlapPage, imagesByPage.get(overlapPage) as RenderedPdfPage]
       ]);
     }
 
-    const classified = groupCandidates(detected)
+    const groups = groupCandidates(detected);
+    const coverage = buildIngestionCoverage(
+      renderer.pageCount,
+      pageReviewObservations,
+      groups
+    );
+    const classifyPage =
+      input.pageActivity ?? getAuthoringPageActivity;
+    const classified = groups
       .map((group) => {
         const classification = classifyGroup(
           input.catalogEntry.id,
           group,
-          input.pageActivity ?? getPageActivity
+          classifyPage
         );
         if (!classification.ok) {
           issues.push({
@@ -879,13 +989,13 @@ export async function ingestExercisesFromPdf(
       privateManifest,
       {
         catalogEntries: [input.catalogEntry],
-        pageActivity: input.pageActivity ?? getPageActivity
+        pageActivity: classifyPage
       }
     );
     if (manifestIssues.length > 0) {
       fail("MANIFEST_INVALID");
     }
-    return { publicManifest, privateManifest, issues };
+    return { publicManifest, privateManifest, coverage, issues };
   } finally {
     await renderer.close();
   }

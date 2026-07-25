@@ -22,6 +22,7 @@ import {
   type PrivateExerciseSolutionsManifest,
   type PublicExerciseManifest,
 } from "@/lib/exercise-manifest";
+import { encodeExerciseReleaseBundle } from "@/lib/exercise-release-bundle";
 import {
   ExerciseSolutionUnavailableError,
   getReviewedExerciseSolution,
@@ -33,6 +34,7 @@ let manifestDir: string;
 let solutionDir: string;
 let publicManifestPath: string;
 let privateManifestPath: string;
+let releaseBundlePath: string;
 let privateTargetPath: string;
 
 function publicManifest(
@@ -179,6 +181,10 @@ beforeAll(async () => {
     solutionDir,
     `${bookId}.private.json`,
   );
+  releaseBundlePath = path.join(
+    solutionDir,
+    `${bookId}.release.json`,
+  );
   privateTargetPath = path.join(solutionDir, "private-target.json");
   process.env.AIMAUTA_EXERCISE_MANIFEST_DIR = manifestDir;
   process.env.AIMAUTA_EXERCISE_SOLUTION_DIR = solutionDir;
@@ -188,6 +194,7 @@ beforeEach(async () => {
   await Promise.all([
     rm(publicManifestPath, { force: true }),
     rm(privateManifestPath, { force: true }),
+    rm(releaseBundlePath, { force: true }),
     rm(privateTargetPath, { force: true }),
   ]);
 });
@@ -202,6 +209,59 @@ afterAll(async () => {
 });
 
 describe("almacén privado de soluciones", () => {
+  it("prefiere el bundle atómico y nunca mezcla mirrors obsoletos", async () => {
+    const bundle = encodeExerciseReleaseBundle({
+      releaseId: "release-test-atomic",
+      bookId,
+      publicManifest: publicManifest(),
+      privateManifest: privateManifest(),
+    });
+    await writeFile(releaseBundlePath, bundle, { mode: 0o600 });
+    await publishPair(
+      { ...publicManifest(), sourceSha256: "0".repeat(64) },
+      {
+        ...privateManifest(),
+        solutions: privateManifest().solutions.map((solution) => ({
+          ...solution,
+          reviewed: false,
+        })),
+      },
+    );
+
+    await expect(
+      getReviewedExerciseSolution({
+        bookId,
+        exerciseId: "ejercicio-uno",
+        revision: 1,
+      }),
+    ).resolves.toMatchObject({
+      finalAnswer: "RESPUESTA-PRIVADA-UNO",
+      reviewed: true,
+    });
+  });
+
+  it("falla cerrado si existe un bundle corrupto aunque los mirrors sean válidos", async () => {
+    await publishPair();
+    await writeJson(releaseBundlePath, {
+      schemaVersion: 1,
+      releaseId: "release-corrupto",
+      bookId,
+      publicManifest: publicManifest(),
+      privateManifest: {
+        ...privateManifest(),
+        sourceSha256: "0".repeat(64),
+      },
+    });
+
+    await expect(
+      getReviewedExerciseSolution({
+        bookId,
+        exerciseId: "ejercicio-uno",
+        revision: 1,
+      }),
+    ).rejects.toBeInstanceOf(ExerciseSolutionUnavailableError);
+  });
+
   it("acepta un par público/privado válido y devuelve una copia revisada", async () => {
     await publishPair();
 

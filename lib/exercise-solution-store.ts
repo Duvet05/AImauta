@@ -7,6 +7,7 @@ import {
   validateExerciseManifests,
   type PrivateExerciseSolution,
 } from "@/lib/exercise-manifest";
+import { loadExerciseReleaseBundle } from "@/lib/exercise-release-bundle";
 import { loadPublicExerciseManifest } from "@/lib/exercise-store";
 
 const DEFAULT_SOLUTION_DIR = "/srv/aimauta/exercise-solutions";
@@ -103,10 +104,15 @@ export async function getReviewedExerciseSolution(input: {
   revision: number;
 }): Promise<PrivateExerciseSolution> {
   try {
-    const publicManifest = await loadPublicExerciseManifest(input.bookId);
-    const privateInput = await readPrivateManifest(input.bookId);
-    const privateResult =
-      parsePrivateExerciseSolutionsManifest(privateInput);
+    const bundle = await loadExerciseReleaseBundle(input.bookId);
+    const publicManifest = bundle
+      ? bundle.publicManifest
+      : await loadPublicExerciseManifest(input.bookId);
+    const privateResult = bundle
+      ? { ok: true as const, value: bundle.privateManifest }
+      : parsePrivateExerciseSolutionsManifest(
+          await readPrivateManifest(input.bookId)
+        );
     if (
       !privateResult.ok ||
       validateExerciseManifests(

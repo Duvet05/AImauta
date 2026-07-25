@@ -14,8 +14,9 @@ expresamente que corresponden a Aule o a una consola de proveedor.
 ## Topología
 
 - **PowerEdge:** Next.js, PDFs, índices/RAG y worker de voz autohospedado.
-- **Proveedores LLM temporales:** OpenAI principal y xAI como fallback.
-- **Aule opcional:** Ollama con Gemma, escuchando solamente en loopback.
+- **Tutor LLM:** Gemma 4 en Ollama/Aule por túnel loopback privado.
+- **Fallbacks opcionales:** OpenAI y xAI, deshabilitados salvo configuración
+  explícita.
 - **LiveKit Cloud:** señalización, SFU, TURN, dispatch, Deepgram STT e
   Inworld TTS.
 - **Tailscale + SSH:** canal privado PowerEdge–Aule para Ollama.
@@ -53,8 +54,8 @@ están dentro del repositorio ni de un release.
   Compose v2.
 - Python 3.12 o 3.13 en PowerEdge para ejecutar las pruebas del worker.
 - Tailscale y acceso SSH por llave desde PowerEdge hacia Aule.
-- Claves API de OpenAI y xAI mientras se prepara Gemma 4 administrado.
-- Opcionalmente, Ollama y `gemma4:e4b-it-qat` instalados en Aule.
+- Ollama y `gemma4:e4b-it-qat` instalados en Aule.
+- Opcionalmente, claves dedicadas de OpenAI/xAI para fallback.
 - Un proyecto LiveKit Cloud y un par API dedicados a AImauta.
 - Un proxy HTTPS administrado delante de Next.js.
 
@@ -346,18 +347,22 @@ contenedor de Next.js; el migrador y el build no las necesitan:
 
 ```dotenv
 # /home/hii1sc/aimauta-runtime/model-providers.env
-LLM_PROVIDER=openai
+LLM_PROVIDER=ollama
+LLM_FALLBACK_PROVIDERS=
+OLLAMA_BASE_URL=http://127.0.0.1:11435
+OLLAMA_MODEL=gemma4:e4b-it-qat
+OLLAMA_TIMEOUT_MS=45000
 OPENAI_API_KEY=clave-de-un-proyecto-openai-dedicado
 OPENAI_MODEL=gpt-4.1
-LLM_FALLBACK_PROVIDER=xai
 XAI_API_KEY=clave-de-un-equipo-xai-dedicado
 XAI_MODEL=grok-4.3
 ```
 
 No se admite seleccionar otro modelo mediante variables de entorno: la lista
-permitida queda cerrada en código para evitar una activación accidental más
-cara. Gemma/Ollama permanece reservado para la siguiente migración y el router
-actual no lo selecciona.
+permitida queda cerrada en código. Ollama sólo admite `localhost`, `127.0.0.0/8`
+o `::1`, bloquea redirecciones y valida que la respuesta corresponda
+exactamente a `gemma4:e4b-it-qat`. Los fallbacks de nube sólo se intentan si se
+nombran y tienen sus credenciales dedicadas.
 
 `LIVEKIT_API_URL` usa el mismo host del proyecto con esquema HTTPS para
 RoomService y AgentDispatch. La URL WSS llega al navegador; la API key y el
@@ -380,14 +385,14 @@ incluir ruta, query, fragmento ni credenciales. `DATABASE_URL` apunta al
 PostgreSQL administrado de AImauta; con `network_mode: host`, el contenedor
 alcanza el listener de loopback del host.
 
-Los límites diarios se comparten entre OpenAI y xAI y se reservan en
+Los límites diarios se comparten entre Gemma, OpenAI y xAI y se reservan en
 PostgreSQL antes de cada llamada. Las variables permiten reducir los máximos
 compilados de 300 intentos, 150 000 tokens de entrada y 6 000 tokens de salida
 por día, nunca aumentarlos. Cada fallback cuenta como un segundo intento; no hay
 reintentos automáticos. Si el registro de presupuesto falla, el tutor usa la
 respuesta determinista y no llama a ningún proveedor.
 
-Todas las peticiones usan `store: false`, pero este parámetro no equivale a
+Las peticiones de nube usan `store: false`, pero este parámetro no equivale a
 retención cero. OpenAI documenta que sus datos de API no se usan para entrenar
 por defecto y que el monitoreo de abuso puede conservar contenido hasta 30
 días; xAI documenta el mismo plazo predeterminado para auditoría. Para un piloto
@@ -609,8 +614,8 @@ Internet → Tailscale Funnel HTTPS en Aule
          → reverse SSH Aule 127.0.0.1:3308
          → Nginx PowerEdge 127.0.0.1:3308
          → Next.js PowerEdge 127.0.0.1:3309
-         → OpenAI → xAI
-         → Ollama Aule 127.0.0.1:11434 (opcional)
+         → Gemma 4 · Ollama Aule 127.0.0.1:11434
+         → OpenAI → xAI (fallbacks opcionales)
 ```
 
 Nginx aplica límite de cuerpo, solicitudes y conexiones, bloquea externamente

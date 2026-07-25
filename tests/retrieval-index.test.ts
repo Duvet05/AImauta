@@ -5,8 +5,15 @@ import path from "node:path";
 
 import {
   BookIndexError,
-  retrieveEvidence
+  retrieveEvidence,
+  retrieveExerciseEvidence
 } from "@/lib/retrieval";
+import { getBook } from "@/lib/catalog";
+import { encodeExerciseReleaseBundle } from "@/lib/exercise-release-bundle";
+import {
+  EXERCISE_COORDINATE_SPACE,
+  type PublicExercise
+} from "@/lib/exercise-manifest";
 import { makeBookIndex } from "./book-index-fixture";
 
 const bookId = "fichas-matematica-1-secundaria";
@@ -23,8 +30,76 @@ async function publishIndex(value: unknown): Promise<string> {
   return directory;
 }
 
+async function publishExerciseBundle(
+  exercise: PublicExercise
+): Promise<void> {
+  const book = getBook(bookId);
+  if (!book) {
+    throw new Error("fixture sin libro publicado");
+  }
+  const directory = await mkdtemp(
+    path.join(tmpdir(), "aimauta-exercise-release-")
+  );
+  createdDirectories.push(directory);
+  process.env.AIMAUTA_EXERCISE_SOLUTION_DIR = directory;
+  const generatedAt = "2026-07-25T12:00:00.000Z";
+  const model = "gemma4:e4b-it-qat";
+  const bundle = encodeExerciseReleaseBundle({
+    releaseId: "release-retrieval-test",
+    bookId,
+    publicManifest: {
+      schemaVersion: 1,
+      bookId,
+      sourceSha256: book.expectedSha256,
+      pageCount: book.pages,
+      coordinateSpace: EXERCISE_COORDINATE_SPACE,
+      renderVersion: "pdfjs-6.1.200@2x",
+      model,
+      generatedAt,
+      exercises: [exercise]
+    },
+    privateManifest: {
+      schemaVersion: 1,
+      bookId,
+      sourceSha256: book.expectedSha256,
+      model,
+      generatedAt,
+      solutions: [
+        {
+          exerciseId: exercise.id,
+          revision: exercise.revision,
+          reviewed: true,
+          finalAnswer: "Respuesta revisada.",
+          pedagogicalSteps: [
+            "Identifica los datos.",
+            "Comprueba el resultado."
+          ],
+          hints: [
+            { level: 1, text: "Observa los datos." },
+            { level: 2, text: "Relaciona las cantidades." },
+            { level: 3, text: "Comprueba tu operación." }
+          ],
+          rubric: [
+            {
+              criterion: "Procedimiento",
+              expectedEvidence: "Explica la estrategia usada."
+            }
+          ],
+          confidence: 0.95
+        }
+      ]
+    }
+  });
+  await writeFile(
+    path.join(directory, `${bookId}.release.json`),
+    bundle,
+    { mode: 0o600 }
+  );
+}
+
 afterEach(async () => {
   delete process.env.AIMAUTA_INDEX_DIR;
+  delete process.env.AIMAUTA_EXERCISE_SOLUTION_DIR;
   await Promise.all(
     createdDirectories.splice(0).map((directory) =>
       rm(directory, { recursive: true, force: true })
@@ -78,6 +153,192 @@ describe("contrato del índice RAG v2", () => {
       id: "attempt-match",
       sourceId: "S1"
     });
+  });
+
+  it("vincula el ejercicio multipágina sólo a su transcripción regional revisada", async () => {
+    await publishIndex(
+      makeBookIndex([
+        {
+          id: "real-page-13",
+          page: 13,
+          text: "Compara ambas fracciones y explica tu estrategia con los datos de la situación."
+        },
+        {
+          id: "unrelated-page-13",
+          page: 13,
+          text: "Calcula el perímetro de un cuadrado diferente."
+        },
+        {
+          id: "teacher-page-13",
+          page: 13,
+          text: "Compara ambas fracciones. La respuesta final es tres cuartos.",
+          teacherOnly: true
+        },
+        {
+          id: "real-page-14",
+          page: 14,
+          text: "Explica tu estrategia para comparar las fracciones representadas."
+        },
+        {
+          id: "outside-exercise",
+          page: 15,
+          text: "Compara ambas fracciones y explica tu estrategia."
+        }
+      ])
+    );
+    const exercise: PublicExercise = {
+      id: "ejercicio-fracciones",
+      status: "published",
+      unitId: "ficha-1-fracciones",
+      stage: "learn",
+      revision: 4,
+      label: "Problema 1",
+      title: "Compara fracciones",
+      prompt: "Compara ambas fracciones y explica tu estrategia.",
+      regions: [
+        {
+          id: "ejercicio-fracciones-contexto",
+          page: 13,
+          role: "context",
+          order: 1,
+          rect: { x: 0.1, y: 0.1, width: 0.8, height: 0.2 }
+        },
+        {
+          id: "ejercicio-fracciones-pregunta",
+          page: 14,
+          role: "prompt",
+          order: 2,
+          rect: { x: 0.1, y: 0.4, width: 0.8, height: 0.2 }
+        }
+      ]
+    };
+    await publishExerciseBundle(exercise);
+
+    const evidence = await retrieveExerciseEvidence({
+      bookId,
+      exercise,
+      page: 13,
+      question: "¿Cómo empiezo?",
+      attempt: ""
+    });
+
+    expect(evidence.map((item) => item.id)).toEqual([
+      "ejercicio-fracciones:revision-4:ejercicio-fracciones-contexto",
+      "ejercicio-fracciones:revision-4:ejercicio-fracciones-pregunta"
+    ]);
+    expect(
+      evidence.map(({ exerciseId, page, sourceId }) => ({
+        exerciseId,
+        page,
+        sourceId
+      }))
+    ).toEqual([
+      { exerciseId: exercise.id, page: 13, sourceId: "S1" },
+      { exerciseId: exercise.id, page: 14, sourceId: "S2" }
+    ]);
+    expect(evidence.every((item) => item.text === exercise.prompt)).toBe(true);
+  });
+
+  it("no relabellea chunks de página si falta el release exacto del ejercicio", async () => {
+    await publishIndex(
+      makeBookIndex([
+        {
+          id: "otro-ejercicio",
+          page: 13,
+          text: "Calcula el perímetro de un cuadrado diferente."
+        }
+      ])
+    );
+    const exercise: PublicExercise = {
+      id: "ejercicio-fracciones",
+      status: "published",
+      unitId: "ficha-1-fracciones",
+      stage: "learn",
+      revision: 4,
+      label: "Problema 1",
+      title: "Compara fracciones",
+      prompt: "Compara ambas fracciones y explica tu estrategia.",
+      regions: [
+        {
+          id: "ejercicio-fracciones-pregunta",
+          page: 13,
+          role: "prompt",
+          order: 1,
+          rect: { x: 0.1, y: 0.4, width: 0.8, height: 0.2 }
+        }
+      ]
+    };
+
+    await expect(
+      retrieveExerciseEvidence({
+        bookId,
+        exercise,
+        page: 13,
+        question: "¿Cómo empiezo?",
+        attempt: ""
+      })
+    ).resolves.toEqual([]);
+  });
+
+  it("no liga un ejercicio vecino por sólo dos palabras coincidentes", async () => {
+    await publishIndex(
+      makeBookIndex([
+        {
+          id: "ejercicio-vecino",
+          page: 13,
+          text: "Compara los lados y explica el perímetro del cuadrado."
+        }
+      ])
+    );
+    await expect(
+      retrieveEvidence({
+        bookId,
+        page: 13,
+        question: "¿Cómo empiezo?",
+        attempt: "",
+        allowedPages: [13],
+        requiredAnchor:
+          "Compara ambas fracciones y explica tu estrategia."
+      })
+    ).resolves.toEqual([]);
+  });
+
+  it("no abre el índice para un ejercicio ligado a una página de evaluación", async () => {
+    await publishIndex({
+      version: 1,
+      bookId,
+      sourceSha256: "legacy",
+      chunks: []
+    });
+    const invalidAssessmentExercise: PublicExercise = {
+      id: "evaluacion-invalida",
+      status: "published",
+      unitId: "ficha-1-fracciones",
+      stage: "learn",
+      revision: 1,
+      label: "Evaluamos",
+      title: "Evaluación",
+      prompt: "Resuelve la evaluación.",
+      regions: [
+        {
+          id: "evaluacion-invalida-pregunta",
+          page: 21,
+          role: "prompt",
+          order: 1,
+          rect: { x: 0.1, y: 0.1, width: 0.8, height: 0.2 }
+        }
+      ]
+    };
+
+    await expect(
+      retrieveExerciseEvidence({
+        bookId,
+        exercise: invalidAssessmentExercise,
+        page: 21,
+        question: "¿Cuál es la respuesta?",
+        attempt: ""
+      })
+    ).resolves.toEqual([]);
   });
 
   it("rechaza de forma cerrada un índice v1", async () => {
