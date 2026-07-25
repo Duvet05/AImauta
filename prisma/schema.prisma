@@ -1,0 +1,71 @@
+// Prisma schema for the school directory (level -> grade -> course -> student/teacher).
+// Unrelated to the book catalog taxonomy in lib/catalog.ts.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Level {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  grades Grade[]
+}
+
+model Grade {
+  id        String   @id @default(cuid())
+  name      String
+  levelId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  level   Level    @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  courses Course[]
+
+  @@unique([levelId, name])
+  @@index([levelId])
+}
+
+model Course {
+  id        String   @id @default(cuid())
+  name      String
+  gradeId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  grade    Grade     @relation(fields: [gradeId], references: [id], onDelete: Cascade)
+  students Student[] @relation("StudentCourses")
+  teachers Teacher[] @relation("TeacherCourses")
+
+  @@unique([gradeId, name])
+  @@index([gradeId])
+}
+
+model Student {
+  id        String   @id @default(cuid())
+  firstName String
+  lastName  String
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  courses Course[] @relation("StudentCourses")
+}
+
+model Teacher {
+  id        String   @id @default(cuid())
+  firstName String
+  lastName  String
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  courses Course[] @relation("TeacherCourses")
+}

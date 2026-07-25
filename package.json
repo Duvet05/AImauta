@@ -17,14 +17,21 @@
     "content:index": "tsx scripts/index-content.ts",
     "exercises:ingest": "tsx scripts/ingest-exercises.ts",
     "exercises:validate": "tsx scripts/validate-exercise-release.ts",
-    "exercises:promote": "tsx scripts/promote-exercise-release.ts"
+    "exercises:promote": "tsx scripts/promote-exercise-release.ts",
+    "postinstall": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
     "@napi-rs/canvas": "1.0.2",
+    "@prisma/adapter-pg": "^7.9.0",
+    "@prisma/client": "^7.9.0",
     "livekit-client": "2.21.0",
     "livekit-server-sdk": "2.17.0",
     "next": "16.2.11",
     "pdfjs-dist": "6.1.200",
+    "pg": "^8.22.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "three": "0.180.0",
@@ -38,6 +45,7 @@
     "eslint": "9.39.5",
     "eslint-config-next": "16.2.11",
     "pdf-parse": "2.4.5",
+    "prisma": "^7.9.0",
     "tsx": "4.23.1",
     "typescript": "6.0.3",
     "vitest": "4.1.10"
