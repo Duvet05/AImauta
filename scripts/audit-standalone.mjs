@@ -19,7 +19,9 @@ const secretKeys = [
   "AIMAUTA_SESSION_SECRET",
   "DATABASE_URL",
   "LIVEKIT_API_KEY",
-  "LIVEKIT_API_SECRET"
+  "LIVEKIT_API_SECRET",
+  "OPENAI_API_KEY",
+  "XAI_API_KEY"
 ];
 
 async function removeCopiedEnvironmentFile(fileName) {

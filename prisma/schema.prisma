@@ -284,3 +284,18 @@ model AssignmentItemProgress {
   @@unique([runId, assignmentItemId])
   @@index([assignmentId, assignmentItemId])
 }
+
+// Aggregate-only UTC usage ledger for the tutor model. Reservations are
+// persisted before each external request so a restart cannot reset or bypass
+// the daily spend guard. No prompts, responses, session IDs or learner data
+// are stored here.
+model LlmUsageDay {
+  day                  String   @id @db.VarChar(10)
+  requestCount         Int      @default(0)
+  inputTokens          Int      @default(0)
+  outputTokens         Int      @default(0)
+  reservedInputTokens  Int      @default(0)
+  reservedOutputTokens Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}

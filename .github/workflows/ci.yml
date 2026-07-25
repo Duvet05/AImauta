@@ -52,6 +52,7 @@ jobs:
       - name: Validate deployment manifests
         run: |
           AIMAUTA_WEB_ENV_FILE="$GITHUB_WORKSPACE/infra/web/web.env.example" \
+          AIMAUTA_MODEL_ENV_FILE="$GITHUB_WORKSPACE/infra/web/model-providers.env.example" \
           AIMAUTA_RUNTIME_DIR="$RUNNER_TEMP/aimauta-runtime" \
             docker compose -f infra/web/compose.yaml config --quiet
           docker run --rm --entrypoint nginx \
@@ -68,7 +69,7 @@ jobs:
       - name: Build voice worker image
         run: docker build --tag aimauta-voice-agent:ci services/voice-agent
 
-      - name: Smoke LiveKit Inference contract
+      - name: Smoke voice inference contract (Deepgram STT + Inworld TTS)
         run: |
           docker run --rm \
             --entrypoint python \

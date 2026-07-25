@@ -150,6 +150,31 @@ export default function PrivacidadPage() {
               No conservamos de manera indefinida conversaciones completas,
               audios, imágenes ni datos de navegación.
             </p>
+            <p>
+              Para producir una pista, AImauta envía temporalmente a OpenAI o,
+              si el servicio principal falla, a xAI el texto acotado de la
+              pregunta, el intento y fragmentos del material curricular. No
+              adjunta el token QR, el token firmado de sesión, notas ni
+              identificadores del directorio escolar. Como el intento es texto
+              libre, podría contener un dato personal que el propio estudiante
+              escriba; se debe evitar incluirlo.
+            </p>
+            <p>
+              Las solicitudes se realizan con almacenamiento de respuesta
+              desactivado. Aun así, las configuraciones estándar de ambos
+              proveedores pueden conservar contenido hasta 30 días para
+              monitoreo de abuso. Un acuerdo o configuración de retención cero
+              debe verificarse por separado antes de un piloto institucional.
+              Consulte los{" "}
+              <a href="https://developers.openai.com/api/docs/guides/your-data">
+                controles de datos de OpenAI
+              </a>{" "}
+              y la{" "}
+              <a href="https://docs.x.ai/developers/faq/security">
+                información de seguridad de xAI
+              </a>
+              .
+            </p>
           </section>
 
           <section>
@@ -161,9 +186,13 @@ export default function PrivacidadPage() {
               </p>
             </div>
             <p>
-              Si en el futuro se contemplara un uso de esta naturaleza,
-              requeriría un mecanismo explícito, informado y jurídicamente
-              adecuado, y nunca operaría de forma predeterminada.
+              Los servicios API configurados declaran que no entrenan sus
+              modelos con entradas o salidas del cliente sin autorización
+              explícita. AImauta no habilita ningún mecanismo de
+              compartición voluntaria para entrenamiento. Si en el futuro se
+              contemplara un uso de esta naturaleza, requeriría un mecanismo
+              explícito, informado y jurídicamente adecuado, y nunca operaría
+              de forma predeterminada.
             </p>
           </section>
 

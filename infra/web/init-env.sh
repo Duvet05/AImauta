@@ -35,6 +35,7 @@ trap cleanup EXIT HUP INT TERM
 
 session_secret=$(openssl rand -hex 32)
 agent_secret=$(openssl rand -hex 32)
+admin_secret=$(openssl rand -hex 32)
 assignment_admin_secret=$(openssl rand -hex 32)
 assignment_token_secret=$(openssl rand -hex 32)
 
@@ -51,8 +52,15 @@ assignment_token_secret=$(openssl rand -hex 32)
     "AIMAUTA_TRUST_PROXY_HEADERS=true" \
     "AIMAUTA_SESSION_SECRET=$session_secret" \
     "AIMAUTA_AGENT_SECRET=$agent_secret" \
+    "AIMAUTA_ADMIN_SECRET=$admin_secret" \
     "AIMAUTA_ASSIGNMENT_ADMIN_SECRET=$assignment_admin_secret" \
     "AIMAUTA_ASSIGNMENT_TOKEN_SECRET=$assignment_token_secret" \
+    "AIMAUTA_LLM_TIMEOUT_MS=12000" \
+    "AIMAUTA_LLM_MAX_CONCURRENCY=2" \
+    "AIMAUTA_LLM_ATTEMPTS_PER_MINUTE=20" \
+    "AIMAUTA_LLM_DAILY_REQUEST_LIMIT=300" \
+    "AIMAUTA_LLM_DAILY_INPUT_TOKEN_LIMIT=150000" \
+    "AIMAUTA_LLM_DAILY_OUTPUT_TOKEN_LIMIT=6000" \
     "OLLAMA_BASE_URL=http://127.0.0.1:11435" \
     "OLLAMA_MODEL=gemma4:e4b-it-qat" \
     "OLLAMA_TIMEOUT_MS=45000" \
@@ -74,3 +82,4 @@ trap - EXIT HUP INT TERM
 
 printf '%s\n' "Entorno web creado con permisos 600: $target"
 printf '%s\n' "Las credenciales no se imprimieron."
+printf '%s\n' "Cree por separado model-providers.env a partir del ejemplo."

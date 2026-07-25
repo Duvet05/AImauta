@@ -48,6 +48,7 @@ services:
     cpus: 2
     env_file:
       - "${AIMAUTA_WEB_ENV_FILE:-/home/hii1sc/aimauta-runtime/web.env}"
+      - "${AIMAUTA_MODEL_ENV_FILE:-/home/hii1sc/aimauta-runtime/model-providers.env}"
     depends_on:
       migrate:
         condition: service_completed_successfully
