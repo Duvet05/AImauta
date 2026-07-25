@@ -380,6 +380,22 @@ incluir ruta, query, fragmento ni credenciales. `DATABASE_URL` apunta al
 PostgreSQL administrado de AImauta; con `network_mode: host`, el contenedor
 alcanza el listener de loopback del host.
 
+Los límites diarios se comparten entre OpenAI y xAI y se reservan en
+PostgreSQL antes de cada llamada. Las variables permiten reducir los máximos
+compilados de 300 intentos, 150 000 tokens de entrada y 6 000 tokens de salida
+por día, nunca aumentarlos. Cada fallback cuenta como un segundo intento; no hay
+reintentos automáticos. Si el registro de presupuesto falla, el tutor usa la
+respuesta determinista y no llama a ningún proveedor.
+
+Todas las peticiones usan `store: false`, pero este parámetro no equivale a
+retención cero. OpenAI documenta que sus datos de API no se usan para entrenar
+por defecto y que el monitoreo de abuso puede conservar contenido hasta 30
+días; xAI documenta el mismo plazo predeterminado para auditoría. Para un piloto
+con menores, verificar y contratar Zero Data Retention o el control equivalente
+en cada proyecto antes de habilitar estas claves. Véanse los controles de datos
+de [OpenAI](https://developers.openai.com/api/docs/guides/your-data) y la
+[guía de seguridad de xAI](https://docs.x.ai/developers/faq/security).
+
 El despliegue público documentado exige que el proxy elimine
 `CF-Connecting-IP`, `X-Real-IP` y `X-Forwarded-For` recibidas del cliente y
 escriba un valor canónico propio; por eso configura

@@ -108,6 +108,13 @@ Una plataforma para menores exige rigor. AImauta lo trae de fábrica:
 - **Publicación _fail-closed_.** Solo el material en estado `published` llega al navegador. Todo material exige tamaño fijado, `SHA-256`, fuente oficial, licencia revisada, taxonomía válida y currículo versionado sin huecos. Cualquier estado desconocido se trata como no disponible.
 - **La ayuda se limita a `learn` y `practice`.** En `assessment` (Evaluamos) no hay RAG, texto ni voz — validado también en el servidor, no solo en la interfaz.
 - **Sesiones anónimas.** Token firmado con `HMAC-SHA-256`, válido 2 horas. Sin cuentas, sin conversaciones persistidas y **sin datos de menores en Git**.
+- **Presupuesto LLM cerrado.** OpenAI `gpt-4.1` es el primario y xAI `grok-4.3`
+  el único fallback. Cada intento reserva en PostgreSQL un presupuesto diario
+  compartido; si el control falla o se agota, se usa la guía determinista.
+- **Tratamiento externo explícito.** AImauta no guarda prompts ni respuestas,
+  pero el intento y evidencia limitada se procesan temporalmente en el
+  proveedor configurado con `store: false`. Este parámetro no sustituye un
+  acuerdo de retención cero para un piloto institucional.
 - **Avatar local y privado.** Personaje 3D sintético (MakeHuman CC0) renderizado con Three.js. No pide cámara, no publica video; la política de permisos HTTP bloquea cámara, captura y geolocalización.
 - **Límites de tasa** por sesión y por cliente, con respaldo conservador cuando el control de borde no está presente.
 
@@ -143,12 +150,15 @@ La importación usa **exclusivamente** la descarga oficial del MINEDU; los metad
 
 ## 🚀 Puesta en marcha
 
-La configuración parte de `.env.example`. En producción son obligatorios cuatro
+La configuración parte de `.env.example`. En producción son obligatorios cinco
 secretos aleatorios e independientes (≥ 32 caracteres):
 `AIMAUTA_SESSION_SECRET`, `AIMAUTA_AGENT_SECRET`,
+`AIMAUTA_ADMIN_SECRET`,
 `AIMAUTA_ASSIGNMENT_ADMIN_SECRET` y `AIMAUTA_ASSIGNMENT_TOKEN_SECRET`. Las
 tareas también requieren `DATABASE_URL` y el origen HTTPS
-`AIMAUTA_PUBLIC_URL`.
+`AIMAUTA_PUBLIC_URL`. Las claves de OpenAI y xAI se guardan fuera de Git en
+`/home/hii1sc/aimauta-runtime/model-providers.env`, separado del entorno web y
+con permisos `0600`.
 
 La validación se ejecuta en PowerEdge desde
 `/home/hii1sc/aimauta-production`:

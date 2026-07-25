@@ -279,13 +279,49 @@ no es todavía un sistema de calificación o prerrequisitos persistentes.
 7. devuelve la nueva sesión, actividad, citas y política.
 
 Las etiquetas permitidas son `OBSERVA`, `REFORMULA`, `COMPARA`, `COMPRUEBA` y
-`DIVIDE`, con un máximo de 12 tokens internos. La salida cruda del proveedor
-nunca se muestra al alumno: una coincidencia exacta selecciona una plantilla
+`DIVIDE`. La petición limita la salida a 16 tokens —el mínimo aceptado por la
+Responses API—, pero el parser solo acepta una etiqueta exacta. La salida cruda
+del proveedor nunca se muestra al alumno: una coincidencia exacta selecciona una plantilla
 determinista del servidor y cualquier otro contenido se descarta. El guard
 formal valida además que la plantilla tenga una sola pregunta y no contenga
 patrones de solución. Toda selección sobre el libro usa la evidencia
 recuperada. El texto del PDF se delimita como información no confiable para que
 sus posibles instrucciones no sustituyan la política.
+
+### Router temporal y presupuesto de inferencia
+
+`lib/llm.ts` admite una sola cadena cerrada: OpenAI `gpt-4.1` como primario y,
+si se configuró, xAI `grok-4.3` como único fallback. Los endpoints y modelos
+están permitidos explícitamente en código; una variable que intente seleccionar
+otro proveedor o modelo no genera tráfico. No hay reintentos: un turno realiza
+como máximo un intento en OpenAI y uno en xAI.
+
+Ambos proveedores reciben la misma petición mínima por Responses API con
+`store: false`. OpenAI recibe como `safety_identifier` únicamente un hash
+unidireccional del UUID efímero de sesión; xAI se invoca sin razonamiento
+extendido. Nunca se envían el token HMAC, el token QR, nombres, notas ni
+identificadores del directorio escolar. Sí se procesan durante el turno el
+texto que el estudiante escribió y fragmentos acotados de la evidencia
+curricular, por lo que la interfaz y la política de privacidad no deben afirmar
+que todo el tratamiento ocurre localmente.
+
+El presupuesto se reserva de forma atómica en PostgreSQL antes de cada intento.
+`LlmUsageDay` conserva solo el día UTC y contadores agregados de solicitudes y
+tokens usados o reservados; no guarda prompts, respuestas, sesiones, proveedor
+ni estudiante. Los máximos compilados son 300 intentos, 150 000 tokens de
+entrada y 6 000 de salida por día; las variables de entorno pueden reducirlos,
+pero nunca aumentarlos. Hay además un máximo de dos solicitudes concurrentes,
+20 intentos por minuto y 15 segundos de timeout. Si PostgreSQL, el presupuesto
+o ambos proveedores no están disponibles, `tutor-service` usa la guía
+determinista sin intentar eludir el límite.
+
+`store: false` evita crear estado de aplicación en la Responses API, pero no
+equivale por sí solo a retención cero. La configuración estándar de
+[OpenAI](https://developers.openai.com/api/docs/guides/your-data) y
+[xAI](https://docs.x.ai/developers/faq/security) puede conservar contenido por
+hasta 30 días para monitoreo de abuso. Antes de un piloto institucional con
+menores se debe contratar y verificar el control de retención apropiado, además
+de los consentimientos y acuerdos aplicables.
 
 El endpoint interno exige
 `Authorization: Bearer <AIMAUTA_AGENT_SECRET>` y compara el secreto en tiempo
@@ -455,9 +491,12 @@ credenciales del proyecto LiveKit Cloud pertenecen exclusivamente a AImauta;
 no se reutilizan las de Nebu u otros servicios y sus secretos de API nunca se
 entregan al navegador.
 
-La aplicación no persiste conversaciones, progreso ni analítica individual. El
-registro anti-replay conserva únicamente el estado mínimo de la sesión en
-memoria y desaparece al reiniciar. LiveKit Cloud procesa el audio necesario
-para transportarlo y LiveKit Inference usa Deepgram para STT e Inworld para
-TTS con retención cero por defecto; antes de un piloto con menores se deben
-definir consentimiento, acuerdos, retención y eliminación aplicables.
+La aplicación no persiste conversaciones ni el texto de los intentos. El flujo
+QR sí conserva en PostgreSQL progreso anónimo y conteos por ejecución; el
+presupuesto LLM conserva únicamente contadores diarios agregados. El registro
+anti-replay mantiene el estado mínimo de la sesión en memoria y desaparece al
+reiniciar. Los proveedores LLM procesan el intento y la evidencia limitada del
+turno bajo sus controles de retención. LiveKit Cloud procesa el audio necesario
+para transportarlo y LiveKit Inference usa Deepgram para STT e Inworld para TTS
+con retención cero por defecto; antes de un piloto con menores se deben definir
+consentimiento, acuerdos, retención y eliminación aplicables.
