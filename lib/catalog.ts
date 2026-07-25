@@ -44,6 +44,9 @@ export const tutorableMaterialTypes = [
 
 export const catalogLanguages = ["es-PE"] as const;
 export const catalogProvenances = ["official-minedu"] as const;
+export const publicationBlockers = [
+  "publication-review-pending"
+] as const;
 export const MAX_INGEST_PDF_BYTES = 50 * 1024 * 1024;
 
 export type EducationLevelId = keyof typeof educationLevels;
@@ -55,10 +58,12 @@ export type TutorableMaterialType =
   (typeof tutorableMaterialTypes)[number];
 export type CatalogLanguage = (typeof catalogLanguages)[number];
 export type CatalogProvenance = (typeof catalogProvenances)[number];
+export type PublicationBlocker = (typeof publicationBlockers)[number];
 
 export type CatalogEntryBase = {
   id: string;
   status: CatalogStatus;
+  publicationBlockers: readonly PublicationBlocker[];
   title: string;
   levelId: EducationLevelId;
   gradeNumber: GradeNumber;
@@ -86,6 +91,7 @@ export type CatalogEntryBase = {
 
 export type PublishedCatalogEntry = CatalogEntryBase & {
   status: "published";
+  publicationBlockers: readonly [];
 };
 
 export type UnpublishedCatalogEntry = CatalogEntryBase & {
@@ -127,6 +133,7 @@ const isoDatePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
 const catalogEntryFields = new Set([
   "id",
   "status",
+  "publicationBlockers",
   "title",
   "levelId",
   "gradeNumber",
@@ -294,6 +301,40 @@ export function validateCatalogEntrySchema(
       `Estado de catálogo no reconocido: ${String(value.status)}.`
     );
   }
+  if (!Array.isArray(value.publicationBlockers)) {
+    report(
+      "catalog.invalid-publication-blockers",
+      "publicationBlockers debe ser un arreglo obligatorio."
+    );
+  } else {
+    const candidateBlockers = Array.from(value.publicationBlockers);
+    const invalidBlockers = candidateBlockers.filter(
+      (blocker) => !isOneOf(publicationBlockers, blocker)
+    );
+    if (invalidBlockers.length > 0) {
+      report(
+        "catalog.invalid-publication-blocker",
+        "publicationBlockers contiene valores fuera de la lista permitida."
+      );
+    }
+    if (
+      new Set(candidateBlockers).size !== candidateBlockers.length
+    ) {
+      report(
+        "catalog.duplicate-publication-blocker",
+        "publicationBlockers no puede contener valores duplicados."
+      );
+    }
+    if (
+      value.status === "published" &&
+      value.publicationBlockers.length > 0
+    ) {
+      report(
+        "catalog.published-has-blockers",
+        "Un material published debe tener publicationBlockers vacío."
+      );
+    }
+  }
 
   if (!isEducationLevelId(value.levelId)) {
     report(
@@ -444,6 +485,21 @@ export function isCatalogEntrySafe(value: unknown): value is CatalogEntry {
   return validateCatalogEntrySchema(value).length === 0;
 }
 
+function freezeCatalogEntry(entry: CatalogEntry): CatalogEntry {
+  if (entry.status === "published") {
+    return Object.freeze({
+      ...entry,
+      publicationBlockers: Object.freeze([] as const)
+    });
+  }
+  return Object.freeze({
+    ...entry,
+    publicationBlockers: Object.freeze([
+      ...entry.publicationBlockers
+    ])
+  });
+}
+
 /**
  * Parse a versioned manifest as one security boundary. If any entry, field,
  * taxonomy value or uniqueness constraint is invalid, no entry is published.
@@ -526,7 +582,7 @@ export function parseCatalogManifest(
 
   const entries = value.entries
     .filter(isCatalogEntrySafe)
-    .map((entry) => Object.freeze(entry));
+    .map(freezeCatalogEntry);
   return {
     entries: Object.freeze(entries),
     issues: Object.freeze([])
@@ -548,7 +604,10 @@ const gradeLabels: Readonly<Record<GradeNumber, string>> = {
 export function isPublishedCatalogEntry(
   entry: CatalogEntry
 ): entry is PublishedCatalogEntry {
-  return entry.status === "published";
+  return (
+    entry.status === "published" &&
+    entry.publicationBlockers.length === 0
+  );
 }
 
 export function isTutorableMaterialType(

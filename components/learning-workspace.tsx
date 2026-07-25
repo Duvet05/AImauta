@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -20,12 +19,7 @@ import {
 import { StageProgress } from "@/components/stage-progress";
 import type { VoiceSessionUpdate } from "@/components/voice-tutor";
 import type { Book } from "@/lib/catalog";
-import {
-  getFirstTutorablePage,
-  getBookUnits,
-  type BookUnit,
-  type PageActivity,
-} from "@/lib/curriculum";
+import type { BookUnit, PageActivity } from "@/lib/curriculum";
 import type { PublicExercise } from "@/lib/exercise-manifest";
 import type { LearningSessionState } from "@/lib/learning-session";
 
@@ -79,6 +73,8 @@ type PageExercisesResponse = {
 
 type LearningWorkspaceProps = {
   book: Book;
+  firstPage: number;
+  units: readonly BookUnit[];
   voiceTutorEnabled: boolean;
 };
 
@@ -107,13 +103,10 @@ function welcomeMessage(activity?: PageActivity): ConversationMessage {
 
 export function LearningWorkspace({
   book,
+  firstPage,
+  units,
   voiceTutorEnabled,
 }: LearningWorkspaceProps) {
-  const units = useMemo(() => getBookUnits(book.id), [book.id]);
-  const firstPage = Math.min(
-    getFirstTutorablePage(book.id) ?? 1,
-    book.pages,
-  );
   const [page, setPage] = useState(firstPage);
   const [attempt, setAttempt] = useState("");
   const [question, setQuestion] = useState("");

@@ -6,6 +6,7 @@
     "dev": "next dev",
     "prebuild": "npm run catalog:validate",
     "build": "next build",
+    "postbuild": "node scripts/audit-client-catalog.mjs",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

@@ -230,6 +230,351 @@
           ]
         }
       ]
+    },
+    {
+      "bookId": "fichas-matematica-3-secundaria",
+      "version": "2024.1",
+      "orientation": {
+        "title": "Preliminares y estrategias de resolución",
+        "startPage": 1,
+        "endPage": 12
+      },
+      "units": [
+        {
+          "id": "ficha-1-planeta-marte",
+          "number": 1,
+          "title": "Conocemos el planeta Marte",
+          "competency": "Resuelve problemas de cantidad",
+          "startPage": 13,
+          "endPage": 22,
+          "sections": [
+            { "stage": "learn", "startPage": 13, "endPage": 16 },
+            { "stage": "practice", "startPage": 17, "endPage": 20 },
+            { "stage": "assessment", "startPage": 21, "endPage": 22 }
+          ]
+        },
+        {
+          "id": "ficha-2-juego-ajedrez",
+          "number": 2,
+          "title": "El juego de ajedrez",
+          "competency": "Resuelve problemas de regularidad, equivalencia y cambio",
+          "startPage": 23,
+          "endPage": 32,
+          "sections": [
+            { "stage": "learn", "startPage": 23, "endPage": 26 },
+            { "stage": "practice", "startPage": 27, "endPage": 30 },
+            { "stage": "assessment", "startPage": 31, "endPage": 32 }
+          ]
+        },
+        {
+          "id": "ficha-3-habitacion",
+          "number": 3,
+          "title": "Ordenamos la habitación",
+          "competency": "Resuelve problemas de forma, movimiento y localización",
+          "startPage": 33,
+          "endPage": 42,
+          "sections": [
+            { "stage": "learn", "startPage": 33, "endPage": 36 },
+            { "stage": "practice", "startPage": 37, "endPage": 39 },
+            { "stage": "assessment", "startPage": 40, "endPage": 42 }
+          ]
+        },
+        {
+          "id": "ficha-4-mejores-atletas",
+          "number": 4,
+          "title": "Elegimos a las mejores atletas",
+          "competency": "Resuelve problemas de gestión de datos e incertidumbre",
+          "startPage": 43,
+          "endPage": 54,
+          "sections": [
+            { "stage": "learn", "startPage": 43, "endPage": 46 },
+            { "stage": "practice", "startPage": 47, "endPage": 50 },
+            { "stage": "assessment", "startPage": 51, "endPage": 54 }
+          ]
+        },
+        {
+          "id": "ficha-5-campana-navidena",
+          "number": 5,
+          "title": "Organizamos la campaña navideña",
+          "competency": "Resuelve problemas de cantidad",
+          "startPage": 55,
+          "endPage": 64,
+          "sections": [
+            { "stage": "learn", "startPage": 55, "endPage": 58 },
+            { "stage": "practice", "startPage": 59, "endPage": 62 },
+            { "stage": "assessment", "startPage": 63, "endPage": 64 }
+          ]
+        },
+        {
+          "id": "ficha-6-condiciones-viaje",
+          "number": 6,
+          "title": "Las líneas aéreas y sus condiciones de viaje",
+          "competency": "Resuelve problemas de regularidad, equivalencia y cambio",
+          "startPage": 65,
+          "endPage": 74,
+          "sections": [
+            { "stage": "learn", "startPage": 65, "endPage": 68 },
+            { "stage": "practice", "startPage": 69, "endPage": 71 },
+            { "stage": "assessment", "startPage": 72, "endPage": 74 }
+          ]
+        },
+        {
+          "id": "ficha-7-figuras",
+          "number": 7,
+          "title": "¿Hay figuras iguales o parecidas?",
+          "competency": "Resuelve problemas de forma, movimiento y localización",
+          "startPage": 75,
+          "endPage": 86,
+          "sections": [
+            { "stage": "learn", "startPage": 75, "endPage": 78 },
+            { "stage": "practice", "startPage": 79, "endPage": 82 },
+            { "stage": "assessment", "startPage": 83, "endPage": 86 }
+          ]
+        },
+        {
+          "id": "ficha-8-visita-museo",
+          "number": 8,
+          "title": "Una visita al museo",
+          "competency": "Resuelve problemas de gestión de datos e incertidumbre",
+          "startPage": 87,
+          "endPage": 100,
+          "sections": [
+            { "stage": "learn", "startPage": 87, "endPage": 89 },
+            { "stage": "practice", "startPage": 90, "endPage": 94 },
+            { "stage": "assessment", "startPage": 95, "endPage": 100 }
+          ]
+        }
+      ]
+    },
+    {
+      "bookId": "fichas-matematica-4-secundaria",
+      "version": "2024.1",
+      "orientation": {
+        "title": "Preliminares y estrategias de resolución",
+        "startPage": 1,
+        "endPage": 12
+      },
+      "units": [
+        {
+          "id": "ficha-1-presion-arterial",
+          "number": 1,
+          "title": "Conozcamos más sobre la presión arterial",
+          "competency": "Resuelve problemas de cantidad",
+          "startPage": 13,
+          "endPage": 22,
+          "sections": [
+            { "stage": "learn", "startPage": 13, "endPage": 16 },
+            { "stage": "practice", "startPage": 17, "endPage": 19 },
+            { "stage": "assessment", "startPage": 20, "endPage": 22 }
+          ]
+        },
+        {
+          "id": "ficha-2-entradas-teatro",
+          "number": 2,
+          "title": "Entradas al teatro",
+          "competency": "Resuelve problemas de regularidad, equivalencia y cambio",
+          "startPage": 23,
+          "endPage": 32,
+          "sections": [
+            { "stage": "learn", "startPage": 23, "endPage": 26 },
+            { "stage": "practice", "startPage": 27, "endPage": 29 },
+            { "stage": "assessment", "startPage": 30, "endPage": 32 }
+          ]
+        },
+        {
+          "id": "ficha-3-areas-verdes",
+          "number": 3,
+          "title": "Las áreas verdes mejoran nuestra vida",
+          "competency": "Resuelve problemas de forma, movimiento y localización",
+          "startPage": 33,
+          "endPage": 42,
+          "sections": [
+            { "stage": "learn", "startPage": 33, "endPage": 36 },
+            { "stage": "practice", "startPage": 37, "endPage": 39 },
+            { "stage": "assessment", "startPage": 40, "endPage": 42 }
+          ]
+        },
+        {
+          "id": "ficha-4-atencion-cliente",
+          "number": 4,
+          "title": "Evaluamos la atención al cliente",
+          "competency": "Resuelve problemas de gestión de datos e incertidumbre",
+          "startPage": 43,
+          "endPage": 54,
+          "sections": [
+            { "stage": "learn", "startPage": 43, "endPage": 46 },
+            { "stage": "practice", "startPage": 47, "endPage": 51 },
+            { "stage": "assessment", "startPage": 52, "endPage": 54 }
+          ]
+        },
+        {
+          "id": "ficha-5-credito-hipotecario",
+          "number": 5,
+          "title": "Elección de un crédito hipotecario",
+          "competency": "Resuelve problemas de cantidad",
+          "startPage": 55,
+          "endPage": 64,
+          "sections": [
+            { "stage": "learn", "startPage": 55, "endPage": 59 },
+            { "stage": "practice", "startPage": 60, "endPage": 62 },
+            { "stage": "assessment", "startPage": 63, "endPage": 64 }
+          ]
+        },
+        {
+          "id": "ficha-6-venta-chocolates",
+          "number": 6,
+          "title": "Mi emprendimiento en la venta de chocolates",
+          "competency": "Resuelve problemas de regularidad, equivalencia y cambio",
+          "startPage": 65,
+          "endPage": 74,
+          "sections": [
+            { "stage": "learn", "startPage": 65, "endPage": 67 },
+            { "stage": "practice", "startPage": 68, "endPage": 71 },
+            { "stage": "assessment", "startPage": 72, "endPage": 74 }
+          ]
+        },
+        {
+          "id": "ficha-7-mandalas",
+          "number": 7,
+          "title": "Mandalas para pensar creativamente",
+          "competency": "Resuelve problemas de forma, movimiento y localización",
+          "startPage": 75,
+          "endPage": 84,
+          "sections": [
+            { "stage": "learn", "startPage": 75, "endPage": 77 },
+            { "stage": "practice", "startPage": 78, "endPage": 80 },
+            { "stage": "assessment", "startPage": 81, "endPage": 84 }
+          ]
+        },
+        {
+          "id": "ficha-8-decisiones",
+          "number": 8,
+          "title": "Tomamos decisiones",
+          "competency": "Resuelve problemas de gestión de datos e incertidumbre",
+          "startPage": 85,
+          "endPage": 100,
+          "sections": [
+            { "stage": "learn", "startPage": 85, "endPage": 89 },
+            { "stage": "practice", "startPage": 90, "endPage": 94 },
+            { "stage": "assessment", "startPage": 95, "endPage": 100 }
+          ]
+        }
+      ]
+    },
+    {
+      "bookId": "fichas-matematica-5-secundaria",
+      "version": "2024.1",
+      "orientation": {
+        "title": "Preliminares y estrategias de resolución",
+        "startPage": 1,
+        "endPage": 12
+      },
+      "units": [
+        {
+          "id": "ficha-1-grandes-ofertas",
+          "number": 1,
+          "title": "Evaluamos las grandes ofertas",
+          "competency": "Resuelve problemas de cantidad",
+          "startPage": 13,
+          "endPage": 22,
+          "sections": [
+            { "stage": "learn", "startPage": 13, "endPage": 16 },
+            { "stage": "practice", "startPage": 17, "endPage": 20 },
+            { "stage": "assessment", "startPage": 21, "endPage": 22 }
+          ]
+        },
+        {
+          "id": "ficha-2-gas-natural",
+          "number": 2,
+          "title": "Abastecemos con gas natural a los vehículos en el Perú",
+          "competency": "Resuelve problemas de regularidad, equivalencia y cambio",
+          "startPage": 23,
+          "endPage": 32,
+          "sections": [
+            { "stage": "learn", "startPage": 23, "endPage": 26 },
+            { "stage": "practice", "startPage": 27, "endPage": 30 },
+            { "stage": "assessment", "startPage": 31, "endPage": 32 }
+          ]
+        },
+        {
+          "id": "ficha-3-senalizacion-vial",
+          "number": 3,
+          "title": "Fabricamos elementos de seguridad para la señalización vial",
+          "competency": "Resuelve problemas de forma, movimiento y localización",
+          "startPage": 33,
+          "endPage": 42,
+          "sections": [
+            { "stage": "learn", "startPage": 33, "endPage": 36 },
+            { "stage": "practice", "startPage": 37, "endPage": 40 },
+            { "stage": "assessment", "startPage": 41, "endPage": 42 }
+          ]
+        },
+        {
+          "id": "ficha-4-prueba-matematica",
+          "number": 4,
+          "title": "Analizamos los resultados de una prueba de Matemática",
+          "competency": "Resuelve problemas de gestión de datos e incertidumbre",
+          "startPage": 43,
+          "endPage": 52,
+          "sections": [
+            { "stage": "learn", "startPage": 43, "endPage": 46 },
+            { "stage": "practice", "startPage": 47, "endPage": 50 },
+            { "stage": "assessment", "startPage": 51, "endPage": 52 }
+          ]
+        },
+        {
+          "id": "ficha-5-compra-departamento",
+          "number": 5,
+          "title": "Analizamos la compra de un departamento",
+          "competency": "Resuelve problemas de cantidad",
+          "startPage": 53,
+          "endPage": 62,
+          "sections": [
+            { "stage": "learn", "startPage": 53, "endPage": 56 },
+            { "stage": "practice", "startPage": 57, "endPage": 60 },
+            { "stage": "assessment", "startPage": 61, "endPage": 62 }
+          ]
+        },
+        {
+          "id": "ficha-6-canaletas",
+          "number": 6,
+          "title": "Construimos canaletas de máximo volumen",
+          "competency": "Resuelve problemas de regularidad, equivalencia y cambio",
+          "startPage": 63,
+          "endPage": 74,
+          "sections": [
+            { "stage": "learn", "startPage": 63, "endPage": 67 },
+            { "stage": "practice", "startPage": 68, "endPage": 72 },
+            { "stage": "assessment", "startPage": 73, "endPage": 74 }
+          ]
+        },
+        {
+          "id": "ficha-7-rampa",
+          "number": 7,
+          "title": "Evaluamos la construcción de una rampa",
+          "competency": "Resuelve problemas de forma, movimiento y localización",
+          "startPage": 75,
+          "endPage": 85,
+          "sections": [
+            { "stage": "learn", "startPage": 75, "endPage": 79 },
+            { "stage": "practice", "startPage": 80, "endPage": 83 },
+            { "stage": "assessment", "startPage": 84, "endPage": 85 }
+          ]
+        },
+        {
+          "id": "ficha-8-probabilidad-medica",
+          "number": 8,
+          "title": "Aplicamos la probabilidad en la investigación médica",
+          "competency": "Resuelve problemas de gestión de datos e incertidumbre",
+          "startPage": 86,
+          "endPage": 100,
+          "sections": [
+            { "stage": "learn", "startPage": 86, "endPage": 90 },
+            { "stage": "practice", "startPage": 91, "endPage": 94 },
+            { "stage": "assessment", "startPage": 95, "endPage": 100 }
+          ]
+        }
+      ]
     }
   ]
 }

@@ -21,9 +21,12 @@ Un permiso de rastreo en `robots.txt` regula el rastreo técnico, no concede
 derechos de uso. AImauta no debe replicar automáticamente el catálogo completo
 ni descargar de forma masiva desde ese sitio.
 
-## Puerta de entrada para cada material
+## Puerta de publicación para cada material
 
-Antes de añadir un libro al catálogo deben cumplirse todos estos pasos:
+Un candidato puede registrarse administrativamente como `draft` o `review`
+después de fijar su identidad, procedencia y checksum. Antes de promoverlo a
+`published`, copiarlo al runtime público o indexarlo deben cumplirse todos estos
+pasos:
 
 1. Registrar la URL donde fue descubierto.
 2. Encontrar el **handle oficial** del Repositorio Institucional del MINEDU.
@@ -41,7 +44,9 @@ Antes de añadir un libro al catálogo deben cumplirse todos estos pasos:
 10. Revisar el reporte de calidad de extracción antes del despliegue.
 
 Si falta la ficha oficial, la licencia es ambigua o la edición descargada no
-coincide, el material no se importa, no se muestra y no se indexa.
+coincide, el material puede conservarse únicamente en el registro
+administrativo y el inbox privado: no se promueve, no se muestra y no se
+indexa.
 
 La ruta local vuelve a verificar tamaño y SHA-256 antes de servir. Solo
 reutiliza ese resultado mientras dispositivo, inodo, tamaño, `mtime` y `ctime`
@@ -67,6 +72,13 @@ por sí sola nunca constituye un currículo publicable y sus páginas nunca
 habilitan tutor ni consultas RAG; la ayuda requiere una sección explícita
 `learn` o `practice`.
 
+`licenseReviewedAt` registra cuándo se examinó la evidencia de licencia; no
+significa que la publicación haya sido aprobada.
+
+Cada entrada declara además `publicationBlockers`. Una entrada `published`
+debe tener la lista vacía; cualquier bloqueo pendiente invalida la promoción
+aunque alguien cambie únicamente el estado.
+
 ## Materiales aprobados
 
 ### Fichas de Matemática 1
@@ -74,7 +86,8 @@ habilitan tutor ni consultas RAG; la ayuda requiere una sección explícita
 - **Entidad:** Ministerio de Educación del Perú.
 - **Ficha oficial:**
   [handle 20.500.12799/10834](https://repositorio.minedu.gob.pe/handle/20.500.12799/10834).
-- **Edición:** primera reimpresión, setiembre de 2024.
+- **Edición:** cuarta edición, octubre de 2023; primera reimpresión, setiembre
+  de 2024.
 - **Tamaño fijado:** 32 895 443 bytes.
 - **SHA-256:** `c220ec82ed676a813977d61afea236e761c5253ef0beb0b0de9afccaf2eeaac0`.
 - **Licencia registrada:**
@@ -89,7 +102,8 @@ habilitan tutor ni consultas RAG; la ayuda requiere una sección explícita
 - **Entidad:** Ministerio de Educación del Perú.
 - **Ficha oficial:**
   [handle 20.500.12799/10835](https://repositorio.minedu.gob.pe/handle/20.500.12799/10835).
-- **Edición:** primera reimpresión, setiembre de 2024.
+- **Edición:** cuarta edición, octubre de 2023; primera reimpresión, setiembre
+  de 2024.
 - **Tamaño fijado:** 31 997 485 bytes.
 - **SHA-256:** `c5c116ed7c6f091630e39d1cbeb0aa6fa2095157734daa33c5eb58ae470089a0`.
 - **Licencia registrada:**
@@ -106,6 +120,25 @@ de licencia también proceden de la ficha oficial. La licencia y la identidad
 se revisan por edición: aprobar un PDF no aprueba automáticamente otros
 materiales del mismo sitio, colección o entidad.
 
+## Materiales en revisión
+
+Las fichas de Matemática de 3.º, 4.º y 5.º de secundaria registradas durante
+la revisión de 2026 están en estado `review`. Los archivos oficiales son la
+cuarta edición de octubre de 2023, primera reimpresión de setiembre de 2024;
+la fecha de una página de descubrimiento no reemplaza la edición impresa.
+
+El Repositorio Institucional del MINEDU declara CC BY 4.0 en sus metadatos,
+pero el aviso interior de los cinco PDF de la serie conserva una reserva
+general de derechos. El catálogo identifica expresamente que la licencia
+procede del metadato oficial; la diferencia requiere una revisión editorial
+separada. Esta incorporación no cambia el estado público preexistente de 1.º y
+2.º.
+
+Aunque la clasificación curricular de 3.º, 4.º y 5.º ya está completa, sus
+entradas conservan `publication-review-pending` y sus PDF permanecen en el
+inbox privado: no aparecen en el catálogo del estudiante y no pueden activar
+PDF público, ejercicios, tutor ni RAG.
+
 ## Almacenamiento
 
 Los siguientes artefactos son operativos y no se incorporan a Git:
@@ -120,10 +153,14 @@ Los siguientes artefactos son operativos y no se incorporan a Git:
 En PowerEdge se almacenan en:
 
 ```text
+/home/hii1sc/aimauta-ingest/inbox
 /home/hii1sc/aimauta-runtime/content
 /home/hii1sc/aimauta-runtime/indexes
 /home/hii1sc/aimauta-runtime/manifests
 ```
+
+El inbox contiene únicamente candidatos privados con permisos restringidos.
+Solo un material que supera la revisión se promueve al runtime público.
 
 Git contiene solamente el catálogo de metadatos revisados, el código y la
 documentación. Los artefactos derivados deben poder reproducirse desde la fuente

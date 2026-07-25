@@ -20,6 +20,7 @@ const checksum = "a".repeat(64);
 const catalogEntry: CatalogEntry = {
   id: "book-one",
   status: "review",
+  publicationBlockers: ["publication-review-pending"],
   title: "Libro uno",
   levelId: "secundaria",
   gradeNumber: 1,
