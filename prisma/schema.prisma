@@ -111,6 +111,18 @@ model Evaluation {
   @@index([enrollmentId])
 }
 
+// Raw, verbatim copy of a versioned JSON file from /config (e.g. catalog.v3,
+// curricula.v3), seeded for querying/auditing from the database. This is not a
+// relational model of the catalog: the app still reads /config directly via
+// lib/catalog.ts and lib/curriculum.ts, matching the Evaluation.unitId note above.
+model ConfigSnapshot {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  data      Json
+  seededAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 enum ProgressStatus {
   EXCELLING
   ON_TRACK
