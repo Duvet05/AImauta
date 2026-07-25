@@ -4,10 +4,29 @@ import { useActionState, useState } from "react";
 
 import { createAssignment, type ActionResult } from "@/app/docente/actions";
 
+type AssignmentScope = "PAGE" | "UNIT" | "EXERCISE";
+
 type AssignmentComposerProps = {
   teacherId: string;
   courseId: string;
-  books: ReadonlyArray<{ id: string; title: string; pages: number }>;
+  books: ReadonlyArray<{
+    id: string;
+    title: string;
+    pages: number;
+    units: ReadonlyArray<{
+      id: string;
+      number: number;
+      title: string;
+      startPage: number;
+      endPage: number;
+    }>;
+    exercises: ReadonlyArray<{
+      id: string;
+      label: string;
+      title: string;
+      pages: readonly number[];
+    }>;
+  }>;
 };
 
 async function submit(
@@ -27,6 +46,7 @@ export function AssignmentComposer({
     null,
   );
   const [bookId, setBookId] = useState(books[0]?.id ?? "");
+  const [scope, setScope] = useState<AssignmentScope>("PAGE");
 
   const selectedBook = books.find((book) => book.id === bookId);
 
@@ -61,7 +81,17 @@ export function AssignmentComposer({
           id="assignment-book"
           name="bookId"
           value={bookId}
-          onChange={(event) => setBookId(event.target.value)}
+          onChange={(event) => {
+            const nextBookId = event.target.value;
+            const nextBook = books.find((book) => book.id === nextBookId);
+            setBookId(nextBookId);
+            if (
+              (scope === "UNIT" && nextBook?.units.length === 0) ||
+              (scope === "EXERCISE" && nextBook?.exercises.length === 0)
+            ) {
+              setScope("PAGE");
+            }
+          }}
         >
           {books.map((book) => (
             <option key={book.id} value={book.id}>
@@ -71,37 +101,95 @@ export function AssignmentComposer({
         </select>
       </div>
 
-      <div className="composer-pages">
-        <div className="composer-row">
-          <label htmlFor="assignment-first">Desde la página</label>
-          <input
-            id="assignment-first"
-            name="firstPage"
-            type="number"
-            min={1}
-            max={selectedBook?.pages ?? 9999}
-            defaultValue={1}
-            required
-          />
-        </div>
-        <div className="composer-row">
-          <label htmlFor="assignment-last">Hasta la página</label>
-          <input
-            id="assignment-last"
-            name="lastPage"
-            type="number"
-            min={1}
-            max={selectedBook?.pages ?? 9999}
-            defaultValue={1}
-            required
-          />
-        </div>
+      <div className="composer-row">
+        <label htmlFor="assignment-scope">Qué quieres asignar</label>
+        <select
+          id="assignment-scope"
+          name="scope"
+          value={scope}
+          onChange={(event) =>
+            setScope(event.target.value as AssignmentScope)
+          }
+        >
+          <option value="PAGE">Un rango de páginas</option>
+          <option value="UNIT" disabled={!selectedBook?.units.length}>
+            Una ficha completa
+          </option>
+          <option
+            value="EXERCISE"
+            disabled={!selectedBook?.exercises.length}
+          >
+            Un ejercicio publicado
+          </option>
+        </select>
       </div>
+
+      {scope === "PAGE" ? (
+        <div className="composer-pages">
+          <div className="composer-row">
+            <label htmlFor="assignment-first">Desde la página</label>
+            <input
+              id="assignment-first"
+              name="firstPage"
+              type="number"
+              min={1}
+              max={selectedBook?.pages ?? 9999}
+              defaultValue={1}
+              required
+            />
+          </div>
+          <div className="composer-row">
+            <label htmlFor="assignment-last">Hasta la página</label>
+            <input
+              id="assignment-last"
+              name="lastPage"
+              type="number"
+              min={1}
+              max={selectedBook?.pages ?? 9999}
+              defaultValue={1}
+              required
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {scope === "UNIT" ? (
+        <div className="composer-row">
+          <label htmlFor="assignment-unit">Ficha</label>
+          <select id="assignment-unit" name="unitId" required>
+            {selectedBook?.units.map((unit) => (
+              <option key={unit.id} value={unit.id}>
+                Ficha {unit.number}: {unit.title} · págs. {unit.startPage}–
+                {unit.endPage}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+
+      {scope === "EXERCISE" ? (
+        <div className="composer-row">
+          <label htmlFor="assignment-exercise">Ejercicio</label>
+          <select id="assignment-exercise" name="exerciseId" required>
+            {selectedBook?.exercises.map((exercise) => (
+              <option key={exercise.id} value={exercise.id}>
+                {exercise.label}: {exercise.title} · pág.
+                {exercise.pages.length === 1 ? "" : "s."}{" "}
+                {exercise.pages.join(", ")}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
 
       {selectedBook ? (
         <p className="composer-hint">
-          Este cuaderno tiene {selectedBook.pages} páginas. Puedes incluir
-          hasta 50 páginas y el enlace vencerá en 30 días.
+          {scope === "PAGE"
+            ? `Este cuaderno tiene ${selectedBook.pages} páginas. Puedes incluir hasta 50 páginas.`
+            : scope === "UNIT"
+              ? "La tarea incluirá todas las páginas de la ficha elegida."
+              : "La tarea quedará vinculada a la revisión publicada del ejercicio."}{" "}
+          El enlace vencerá en 30 días.
         </p>
       ) : null}
 

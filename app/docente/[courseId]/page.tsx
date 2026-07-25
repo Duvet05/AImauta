@@ -9,6 +9,8 @@ import { BrandMark } from "@/components/brand-mark";
 import { ProgressNoteForm } from "@/components/progress-note-form";
 import { assignmentShareForAdmin } from "@/lib/assignment-service";
 import { getBooks } from "@/lib/catalog";
+import { getBookUnits } from "@/lib/curriculum";
+import { loadPublicExerciseManifest } from "@/lib/exercise-store";
 import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = {
@@ -78,6 +80,48 @@ export default async function CursoPage({
     ),
   );
   const books = getBooks();
+  const assignmentBooks = await Promise.all(
+    books.map(async (book) => {
+      let exercises: Array<{
+        id: string;
+        label: string;
+        title: string;
+        pages: number[];
+      }> = [];
+      try {
+        const manifest = await loadPublicExerciseManifest(book.id);
+        exercises = manifest.exercises
+          .filter((exercise) => exercise.status === "published")
+          .map((exercise) => ({
+            id: exercise.id,
+            label: exercise.label,
+            title: exercise.title,
+            pages: [
+              ...new Set(
+                exercise.regions.map((region) => region.page),
+              ),
+            ].sort((left, right) => left - right),
+          }));
+      } catch {
+        // Exercise assignments stay unavailable unless a reviewed manifest
+        // can be loaded; page and unit assignments remain usable.
+      }
+
+      return {
+        id: book.id,
+        title: book.title,
+        pages: book.pages,
+        units: getBookUnits(book.id).map((unit) => ({
+          id: unit.id,
+          number: unit.number,
+          title: unit.title,
+          startPage: unit.startPage,
+          endPage: unit.endPage,
+        })),
+        exercises,
+      };
+    }),
+  );
   const assignments = await Promise.all(
     course.assignments.map(async (assignment) => {
       const canManage = activeTeacher?.id === assignment.teacherId;
@@ -233,11 +277,7 @@ export default async function CursoPage({
             <AssignmentComposer
               teacherId={activeTeacher.id}
               courseId={course.id}
-              books={books.map((book) => ({
-                id: book.id,
-                title: book.title,
-                pages: book.pages,
-              }))}
+              books={assignmentBooks}
             />
           </section>
         ) : null}

@@ -81,28 +81,54 @@ export async function createAssignment(
     return { ok: false, message: "Falta identificar el curso o el docente." };
   }
 
-  const firstPage = readInteger(formData, "firstPage");
-  const lastPage = readInteger(formData, "lastPage");
-  if (
-    firstPage === null ||
-    lastPage === null ||
-    firstPage < 1 ||
-    lastPage < firstPage
-  ) {
-    return { ok: false, message: "Elige un rango de páginas válido." };
-  }
-  if (lastPage - firstPage + 1 > 50) {
-    return {
-      ok: false,
-      message: "Una tarea puede incluir como máximo 50 páginas.",
-    };
-  }
-
   const bookId = readString(formData, "bookId");
   const title = readString(formData, "title");
   const instructions = readString(formData, "instructions");
   if (!bookId || !title) {
     return { ok: false, message: "Elige un cuaderno y escribe un nombre." };
+  }
+
+  const scope = readString(formData, "scope");
+  let items: Array<Record<string, unknown>>;
+  if (scope === "UNIT") {
+    const unitId = readString(formData, "unitId");
+    if (!unitId) {
+      return { ok: false, message: "Elige una ficha válida." };
+    }
+    items = [{ kind: "UNIT", bookId, unitId }];
+  } else if (scope === "EXERCISE") {
+    const exerciseId = readString(formData, "exerciseId");
+    if (!exerciseId) {
+      return { ok: false, message: "Elige un ejercicio publicado." };
+    }
+    items = [{ kind: "EXERCISE", bookId, exerciseId }];
+  } else if (scope === "PAGE") {
+    const firstPage = readInteger(formData, "firstPage");
+    const lastPage = readInteger(formData, "lastPage");
+    if (
+      firstPage === null ||
+      lastPage === null ||
+      firstPage < 1 ||
+      lastPage < firstPage
+    ) {
+      return { ok: false, message: "Elige un rango de páginas válido." };
+    }
+    if (lastPage - firstPage + 1 > 50) {
+      return {
+        ok: false,
+        message: "Una tarea puede incluir como máximo 50 páginas.",
+      };
+    }
+    items = Array.from(
+      { length: lastPage - firstPage + 1 },
+      (_, offset) => ({
+        kind: "PAGE",
+        bookId,
+        page: firstPage + offset,
+      }),
+    );
+  } else {
+    return { ok: false, message: "Elige qué contenido quieres asignar." };
   }
 
   const now = new Date();
@@ -119,15 +145,8 @@ export async function createAssignment(
       expiresAt: expiresAt.toISOString(),
       maxHintLevel: 3,
       minimumTurnsPerItem: 0,
-      requiredItemCount: lastPage - firstPage + 1,
-      items: Array.from(
-        { length: lastPage - firstPage + 1 },
-        (_, offset) => ({
-          kind: "PAGE",
-          bookId,
-          page: firstPage + offset,
-        }),
-      ),
+      requiredItemCount: items.length,
+      items,
     });
 
     await createSecureAssignment(input);
