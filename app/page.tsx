@@ -5,6 +5,29 @@ import { BrandMark } from "@/components/brand-mark";
 import { CatalogLibrary } from "@/components/catalog-library";
 import { getBooks } from "@/lib/catalog";
 
+const learningJourney = [
+  {
+    title: "Intenta",
+    description: "Abre la ficha y explica su razonamiento.",
+    image: "/brand/characters/amauta-thinks.webp",
+  },
+  {
+    title: "Consulta",
+    description: "El tutor recupera evidencia de la página exacta.",
+    image: "/brand/characters/amauta-points.webp",
+  },
+  {
+    title: "Recibe pista",
+    description: "Una pregunta o pista breve, con su fuente.",
+    image: "/brand/characters/amauta-hint.webp",
+  },
+  {
+    title: "Resuelve",
+    description: "Llega a la respuesta por sí mismo.",
+    image: "/brand/characters/amauta-celebrates.webp",
+  },
+] as const;
+
 export default async function CatalogPage() {
   const books = await getBooks();
 
@@ -127,34 +150,56 @@ export default async function CatalogPage() {
         </div>
       </section>
 
-      <section className="learning-principles shell" aria-label="Cómo funciona">
-        <article>
-          <span className="principle-number">01</span>
-          <div>
-            <h2>Lee el ejercicio</h2>
-            <p>El cuaderno se abre completo, con el ejercicio a la vista.</p>
-          </div>
-        </article>
-        <article>
-          <span className="principle-number">02</span>
-          <div>
-            <h2>Cuenta qué intentaste</h2>
+      <section
+        className="learning-journey-section"
+        aria-labelledby="como-funciona"
+      >
+        <div className="learning-journey-shell shell">
+          <div className="learning-journey-heading">
+            <div>
+              <p className="eyebrow">Cómo funciona</p>
+              <h2 id="como-funciona">
+                El estudiante piensa.
+                <span> AImauta acompaña.</span>
+              </h2>
+            </div>
             <p>
-              Explica tu estrategia o dónde te trabaste. No necesitas tenerlo
-              resuelto.
+              El acompañamiento sigue el ritmo natural del estudiante: parte de
+              su intento, recupera evidencia y ofrece solo la ayuda necesaria
+              para avanzar.
             </p>
           </div>
-        </article>
-        <article>
-          <span className="principle-number">03</span>
-          <div>
-            <h2>Avanza con una pista</h2>
-            <p>
-              Recibes una pregunta que te acerca, y la página exacta que la
-              respalda.
-            </p>
-          </div>
-        </article>
+
+          <ol className="learning-journey-list" role="list">
+            {learningJourney.map((step, index) => (
+              <li className="learning-step" key={step.title}>
+                <article className="learning-step-card">
+                  <div className="learning-step-visual">
+                    <span className="learning-step-number">
+                      Paso {index + 1}
+                    </span>
+                    <Image
+                      src={step.image}
+                      alt=""
+                      fill
+                      sizes="(max-width: 680px) 112px, (max-width: 980px) 42vw, 250px"
+                    />
+                  </div>
+                  <div className="learning-step-copy">
+                    <h3>{step.title}</h3>
+                    <p>{step.description}</p>
+                  </div>
+                </article>
+              </li>
+            ))}
+          </ol>
+
+          <p className="learning-journey-promise">
+            <span aria-hidden="true">✦</span>
+            AImauta acompaña el proceso. La respuesta final sigue siendo del
+            estudiante.
+          </p>
+        </div>
       </section>
 
       <section className="commitment-section shell" aria-labelledby="compromisos">
