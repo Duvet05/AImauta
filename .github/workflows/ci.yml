@@ -69,7 +69,7 @@ jobs:
       - name: Build voice worker image
         run: docker build --tag aimauta-voice-agent:ci services/voice-agent
 
-      - name: Smoke LiveKit Inference contract
+      - name: Smoke voice inference contract (Deepgram STT + Inworld TTS)
         run: |
           docker run --rm \
             --entrypoint python \

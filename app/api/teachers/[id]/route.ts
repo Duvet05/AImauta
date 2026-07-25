@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import {
   ApiError,
+  cascadeBlockedResponse,
+  cascadeRequested,
   errorResponse,
   jsonResponse,
   optionalEmail,
@@ -79,11 +81,19 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: RouteContext
 ): Promise<Response> {
   try {
     const { id } = await context.params;
+    if (!cascadeRequested(request)) {
+      const notes = await prisma.progressNote.count({
+        where: { teacherId: id }
+      });
+      if (notes > 0) {
+        return cascadeBlockedResponse("notas de progreso", notes);
+      }
+    }
     await prisma.teacher.delete({ where: { id } });
     return new Response(null, { status: 204 });
   } catch (error) {

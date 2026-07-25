@@ -154,8 +154,10 @@ export default function PrivacidadPage() {
               Para producir una pista, AImauta envía temporalmente a OpenAI o,
               si el servicio principal falla, a xAI el texto acotado de la
               pregunta, el intento y fragmentos del material curricular. No
-              envía el token QR, el token firmado de sesión, nombres, notas ni
-              identificadores del directorio escolar.
+              adjunta el token QR, el token firmado de sesión, notas ni
+              identificadores del directorio escolar. Como el intento es texto
+              libre, podría contener un dato personal que el propio estudiante
+              escriba; se debe evitar incluirlo.
             </p>
             <p>
               Las solicitudes se realizan con almacenamiento de respuesta

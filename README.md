@@ -111,10 +111,10 @@ Una plataforma para menores exige rigor. AImauta lo trae de fábrica:
 - **Presupuesto LLM cerrado.** OpenAI `gpt-4.1` es el primario y xAI `grok-4.3`
   el único fallback. Cada intento reserva en PostgreSQL un presupuesto diario
   compartido; si el control falla o se agota, se usa la guía determinista.
-- **Tratamiento externo explícito.** AImauta no guarda prompts ni respuestas,
-  pero el intento y evidencia limitada se procesan temporalmente en el
-  proveedor configurado con `store: false`. Este parámetro no sustituye un
-  acuerdo de retención cero para un piloto institucional.
+- **Tratamiento externo explícito.** AImauta no persiste prompts ni respuestas
+  en su base de datos, pero el intento y evidencia limitada se procesan
+  temporalmente en el proveedor configurado con `store: false`. Este parámetro
+  no sustituye un acuerdo de retención cero para un piloto institucional.
 - **Avatar local y privado.** Personaje 3D sintético (MakeHuman CC0) renderizado con Three.js. No pide cámara, no publica video; la política de permisos HTTP bloquea cámara, captura y geolocalización.
 - **Límites de tasa** por sesión y por cliente, con respaldo conservador cuando el control de borde no está presente.
 

@@ -184,3 +184,25 @@ export function paginatedResponse<T>(
     }
   });
 }
+
+// A destructive DELETE that would cascade to child rows must be acknowledged
+// explicitly with ?cascade=true. This turns an accidental one-request wipe of
+// an academic subtree into a deliberate, informed action.
+export function cascadeRequested(request: Request): boolean {
+  return new URL(request.url).searchParams.get("cascade") === "true";
+}
+
+export function cascadeBlockedResponse(
+  childLabel: string,
+  count: number
+): Response {
+  return jsonResponse(
+    {
+      error:
+        `Este registro tiene ${count} ${childLabel} vinculados; borrarlo los ` +
+        `eliminaría en cascada. Reenvía la solicitud con ?cascade=true para ` +
+        `confirmar el borrado en cascada.`
+    },
+    409
+  );
+}

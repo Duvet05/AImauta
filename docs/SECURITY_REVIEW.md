@@ -23,7 +23,7 @@ Además, el `docs/ARCHITECTURE.md` ya no describe el sistema real: omite la capa
 | ID | Severidad | Área | Estado |
 | --- | --- | --- | --- |
 | CRIT-1 | 🔴 Crítico | CRUD del directorio sin autenticación (25/25 métodos) | ✅ Mitigado (gate admin) |
-| CRIT-2 | 🔴 Crítico | Borrado en cascada anónimo y destructivo | ◐ Parcial (ya no anónimo) |
+| CRIT-2 | 🔴 Crítico | Borrado en cascada anónimo y destructivo | ✅ Mitigado (gate + confirmación cascada) |
 | HIGH-1 | 🟠 Alto | Exfiltración/enumeración de PII de menores | ✅ Mitigado (gate admin) |
 | MED-1 | 🟡 Medio | Egress de contenido a Google Cloud no documentado | Abierto |
 | MED-2 | 🟡 Medio | Estado single-instance (anti-replay y rate-limit en memoria) | Conocido/documentado |
@@ -44,8 +44,9 @@ Además, el `docs/ARCHITECTURE.md` ya no describe el sistema real: omite la capa
 Este cambio incluye la primera corrección (P0):
 
 - **`middleware.ts`** — gate de autenticación sobre `/api/{students,teachers,courses,grades,levels}/*`. Exige `Authorization: Bearer <AIMAUTA_ADMIN_SECRET>`, compara en tiempo constante (HMAC doble, apto para Edge y Node) y **falla cerrado**: sin secreto o secreto `<32` chars → `503`; sin bearer o inválido → `401`. Punto único de enforcement, cubre rutas futuras del directorio.
-- Cierra **CRIT-1** y **HIGH-1** (ya no hay acceso anónimo a PII de menores) y de-anonimiza **CRIT-2** (los `DELETE` en cascada quedan detrás del gate; falta añadir confirmación/soft-delete).
-- **Interino:** es un bearer de admin único, no roles por usuario. El siguiente paso es autenticación por usuario con rol docente/admin.
+- Cierra **CRIT-1** y **HIGH-1** (ya no hay acceso anónimo a PII de menores).
+- **Confirmación de cascada (CRIT-2 completo)** — los `DELETE` del directorio cuentan sus hijos y devuelven `409` si existen, salvo que la solicitud incluya `?cascade=true`. Un borrado que arrasaría grados/cursos/matrículas/notas ahora exige reconocimiento explícito (`lib/http.ts`: `cascadeRequested`/`cascadeBlockedResponse`; aplicado en los 5 `*/[id]/route.ts`).
+- **Interino:** es un bearer de admin único, no roles por usuario. El siguiente paso es autenticación por usuario con rol docente/admin; y un *soft-delete* daría además reversibilidad.
 - Requiere fijar `AIMAUTA_ADMIN_SECRET` (32+ chars) en el entorno de despliegue; el cliente admin debe enviar el bearer.
 
 ---
