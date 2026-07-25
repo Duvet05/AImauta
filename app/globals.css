@@ -2331,110 +2331,63 @@ svg {
     var(--paper);
 }
 
-.guide-quickstart {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.7rem;
-  align-items: start;
-  margin-bottom: 0.85rem;
-  padding: 0.75rem;
-  border: 1px solid rgba(23, 79, 70, 0.15);
-  border-radius: 0.7rem;
-  background: rgba(219, 236, 227, 0.56);
+.page-tutor-status {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.7rem 0 0.85rem;
+  color: #63746e;
 }
 
-.guide-quickstart > span {
-  padding: 0.3rem 0.45rem;
-  border-radius: 0.35rem;
-  color: white;
-  background: var(--forest);
-  font-size: 0.58rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-
-.guide-quickstart strong {
-  display: block;
-  font-family: var(--font-display);
-  font-size: 0.84rem;
-}
-
-.guide-quickstart p {
-  margin: 0.2rem 0 0;
-  color: var(--ink-soft);
-  font-size: 0.7rem;
-  line-height: 1.45;
-}
-
-.exercise-focus {
-  display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr);
-  gap: 0.65rem;
-  align-items: start;
-  margin-bottom: 0.85rem;
-  padding: 0.72rem;
-  border: 1px solid rgba(23, 79, 70, 0.16);
-  border-radius: 0.7rem;
-  background: rgba(219, 236, 227, 0.3);
-}
-
-.exercise-focus > span {
+.page-tutor-status > span {
   display: inline-flex;
-  width: 2rem;
-  height: 2rem;
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  border: 2px solid rgba(23, 79, 70, 0.35);
   border-radius: 999px;
-  color: var(--forest);
-  background: white;
+  color: white;
+  background: #8b9994;
+  font-size: 0.67rem;
   font-weight: 900;
 }
 
-.exercise-focus strong {
-  display: block;
-  font-family: var(--font-display);
-  font-size: 0.84rem;
+.page-tutor-status p {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1rem 0.45rem;
+  margin: 0;
+  font-size: 0.67rem;
+  line-height: 1.4;
 }
 
-.exercise-focus p {
-  margin: 0.2rem 0 0;
-  color: var(--ink-soft);
+.page-tutor-status strong {
+  color: var(--ink);
   font-size: 0.7rem;
-  line-height: 1.45;
 }
 
-.exercise-focus-selectable {
-  border-style: dashed;
-  border-color: rgba(169, 31, 31, 0.42);
-  background: rgba(217, 54, 54, 0.045);
+.page-tutor-status small {
+  color: inherit;
+  font-size: inherit;
 }
 
-.exercise-focus-selectable > span {
-  border-color: #c92d2d;
-  color: #a71f1f;
+.page-tutor-status-active > span {
+  background: var(--forest);
 }
 
-.exercise-focus-warning {
-  border-color: rgba(183, 102, 78, 0.34);
-  background: rgba(255, 240, 232, 0.72);
+.page-tutor-status-selectable > span {
+  background: #b52b2b;
 }
 
-.exercise-focus-warning > span {
-  border-color: #b7664e;
+.page-tutor-status-warning {
   color: #834633;
 }
 
-.exercise-focus-active {
-  border-style: solid;
-  border-color: rgba(23, 79, 70, 0.25);
-  background: rgba(219, 236, 227, 0.62);
-}
-
-.exercise-focus-active > span {
-  border-color: var(--forest);
-  color: white;
-  background: var(--forest);
+.page-tutor-status-warning > span {
+  background: #a75842;
 }
 
 .unit-selector-row {
@@ -2731,6 +2684,147 @@ svg {
   border: 1px solid rgba(23, 79, 70, 0.13);
   border-radius: 0.75rem;
   background: white;
+}
+
+.voice-tutor-featured {
+  position: relative;
+  overflow: hidden;
+  margin-top: 0;
+  padding: 0.9rem;
+  border-color: rgba(23, 79, 70, 0.2);
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 8% 8%, rgba(217, 237, 141, 0.58), transparent 29%),
+    radial-gradient(circle at 94% 45%, rgba(238, 128, 104, 0.14), transparent 34%),
+    linear-gradient(145deg, #fffef9 0%, #f0f7eb 100%);
+  box-shadow: 0 16px 36px rgba(23, 45, 42, 0.13);
+}
+
+.voice-tutor-featured::before {
+  position: absolute;
+  top: -4.5rem;
+  right: -4rem;
+  width: 9rem;
+  height: 9rem;
+  border: 1px solid rgba(23, 79, 70, 0.1);
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+}
+
+.voice-tutor-featured > * {
+  position: relative;
+  z-index: 1;
+}
+
+.voice-tutor-featured .voice-heading {
+  gap: 0.7rem;
+}
+
+.voice-tutor-featured .voice-heading-icon {
+  width: 2.6rem;
+  height: 2.6rem;
+  color: white;
+  background: var(--forest);
+  box-shadow: 0 7px 16px rgba(23, 79, 70, 0.2);
+}
+
+.voice-tutor-featured .voice-heading h2 {
+  margin-top: 0.08rem;
+  font-size: 1.14rem;
+}
+
+.voice-tutor-featured .voice-heading p {
+  color: var(--forest);
+}
+
+.voice-tutor-featured .voice-presence {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  min-height: 0;
+  margin-top: 0.8rem;
+  padding: 0.9rem;
+  border-color: rgba(23, 79, 70, 0.13);
+  border-radius: 0.9rem;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(217, 237, 141, 0.3), transparent 40%),
+    rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(5px);
+}
+
+.voice-tutor-featured .voice-presence-copy {
+  width: 100%;
+  max-width: 29rem;
+}
+
+.voice-tutor-featured .voice-status,
+.voice-tutor-featured .voice-disabled-message {
+  justify-content: center;
+  font-size: 0.75rem;
+}
+
+.voice-tutor-featured .voice-avatar-privacy {
+  margin-top: 0.22rem;
+  font-size: 0.61rem;
+}
+
+.voice-tutor-featured .tutor-avatar:not(.tutor-avatar-remote) {
+  width: 11.5rem;
+  height: 11.5rem;
+}
+
+.voice-tutor-featured
+  .tutor-avatar:not(.tutor-avatar-remote)
+  .tutor-avatar-portrait {
+  width: 10rem;
+  height: 10rem;
+}
+
+.voice-tutor-featured
+  .tutor-avatar:not(.tutor-avatar-remote)
+  .tutor-avatar-brand-portrait {
+  width: 10.75rem;
+  height: 10.75rem;
+}
+
+.voice-tutor-featured .tutor-avatar-remote {
+  width: min(100%, 30rem);
+  height: auto;
+  aspect-ratio: 16 / 9;
+}
+
+.voice-tutor-featured .tutor-avatar-remote .tutor-avatar-orbit {
+  inset: 0;
+  border-radius: 0.9rem;
+  box-shadow: 0 10px 24px rgba(23, 45, 42, 0.14);
+}
+
+.voice-tutor-featured .tutor-avatar-remote .tutor-avatar-video {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 0.86rem;
+  object-position: center 24%;
+}
+
+.voice-tutor-featured
+  .tutor-avatar-remote
+  .tutor-avatar-brand-portrait,
+.voice-tutor-featured .tutor-avatar-remote .tutor-avatar-portrait {
+  position: absolute;
+  width: 8.5rem;
+  height: 8.5rem;
+}
+
+.voice-tutor-featured .tutor-avatar-remote .tutor-avatar-state {
+  top: 0.55rem;
+  right: 0.55rem;
+}
+
+.voice-tutor-featured .tutor-avatar-remote .tutor-avatar-audio-bars {
+  right: 0.5rem;
+  bottom: 0.5rem;
 }
 
 .voice-heading {

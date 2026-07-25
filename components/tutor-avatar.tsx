@@ -42,7 +42,9 @@ export function TutorAvatar({
 
   return (
     <div
-      className={`tutor-avatar tutor-avatar-${state}`}
+      className={`tutor-avatar tutor-avatar-${state}${
+        videoTrack ? " tutor-avatar-remote" : ""
+      }`}
       role="img"
       aria-label={`Avatar de AImauta: ${description}.`}
     >

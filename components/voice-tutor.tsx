@@ -512,14 +512,17 @@ export function VoiceTutor({
   });
 
   return (
-    <section className="voice-tutor" aria-labelledby="voice-tutor-title">
+    <section
+      className="voice-tutor voice-tutor-featured"
+      aria-labelledby="voice-tutor-title"
+    >
       <div className="voice-heading">
         <div className="voice-heading-icon" aria-hidden="true">
           <WaveIcon />
         </div>
         <div>
-          <p>Canal opcional</p>
-          <h2 id="voice-tutor-title">Tutor por voz</h2>
+          <p>AImauta en vivo</p>
+          <h2 id="voice-tutor-title">Tu profesor virtual</h2>
         </div>
         <span
           className={`voice-state-dot voice-state-${connection}`}
