@@ -51,6 +51,24 @@ export default async function DocentePage() {
           </p>
         </header>
 
+        <aside
+          className="material-coming-soon"
+          aria-label="Próximamente: agrega tu material"
+        >
+          <span className="material-coming-soon-icon" aria-hidden="true">
+            +
+          </span>
+          <div>
+            <span className="material-coming-soon-eyebrow">Próximamente</span>
+            <h2>¡Agrega tu material!</h2>
+            <p>
+              Muy pronto podrás incorporar tus propias fichas y recursos a
+              AImauta.
+            </p>
+          </div>
+          <span className="material-coming-soon-badge">Disponible pronto</span>
+        </aside>
+
         {withCourses.length === 0 ? (
           <div className="panel-empty">
             <h2>Todavía no hay cursos asignados</h2>
