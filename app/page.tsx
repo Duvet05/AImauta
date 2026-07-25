@@ -69,7 +69,9 @@ export default async function CatalogPage() {
 
         <div className="hero-content shell">
           <div className="hero-copy">
-            <p className="eyebrow">Tutoría guiada · Matemática de secundaria</p>
+            <p className="eyebrow">
+              Tutoría guiada · Aprendizaje con materiales oficiales
+            </p>
             <h1>
               No hace tu tarea.
               <span> Te ayuda a entenderla.</span>
