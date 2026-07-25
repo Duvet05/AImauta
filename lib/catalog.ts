@@ -14,6 +14,12 @@ export const educationLevels = {
 export const courses = {
   matematica: {
     label: "Matemática"
+  },
+  "personal-social": {
+    label: "Personal Social"
+  },
+  "ciencia-tecnologia": {
+    label: "Ciencia y Tecnología"
   }
 } as const;
 
@@ -47,7 +53,7 @@ export const catalogProvenances = ["official-minedu"] as const;
 export const publicationBlockers = [
   "publication-review-pending"
 ] as const;
-export const MAX_INGEST_PDF_BYTES = 50 * 1024 * 1024;
+export const MAX_INGEST_PDF_BYTES = 128 * 1024 * 1024;
 
 export type EducationLevelId = keyof typeof educationLevels;
 export type CourseId = keyof typeof courses;
@@ -470,7 +476,7 @@ export function validateCatalogEntrySchema(
   ) {
     report(
       "catalog.invalid-bytes",
-      "expectedBytes debe ser un entero positivo de hasta 50 MiB."
+      "expectedBytes debe ser un entero positivo de hasta 128 MiB."
     );
   }
   if (

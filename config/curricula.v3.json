@@ -575,6 +575,351 @@
           ]
         }
       ]
+    },
+    {
+      "bookId": "personal-social-3-primaria",
+      "version": "2021.1",
+      "orientation": {
+        "title": "Presentación e índice",
+        "startPage": 1,
+        "endPage": 7
+      },
+      "units": [
+        {
+          "id": "unidad-1-siembra-cosecha",
+          "number": 1,
+          "title": "Vamos a sembrar y cosechar con nuestras familias",
+          "competency": "Construye su identidad y convive democráticamente",
+          "startPage": 8,
+          "endPage": 29,
+          "sections": [
+            { "stage": "learn", "startPage": 8, "endPage": 19 },
+            { "stage": "practice", "startPage": 20, "endPage": 27 },
+            { "stage": "assessment", "startPage": 28, "endPage": 29 }
+          ]
+        },
+        {
+          "id": "unidad-2-ganaderia",
+          "number": 2,
+          "title": "Conocemos la ganadería de nuestras comunidades",
+          "competency": "Construye su identidad y convive democráticamente",
+          "startPage": 30,
+          "endPage": 51,
+          "sections": [
+            { "stage": "learn", "startPage": 30, "endPage": 41 },
+            { "stage": "practice", "startPage": 42, "endPage": 49 },
+            { "stage": "assessment", "startPage": 50, "endPage": 51 }
+          ]
+        },
+        {
+          "id": "unidad-3-pesca",
+          "number": 3,
+          "title": "Conocemos la pesca en nuestras comunidades",
+          "competency": "Participa en asuntos públicos para promover el bien común",
+          "startPage": 52,
+          "endPage": 73,
+          "sections": [
+            { "stage": "learn", "startPage": 52, "endPage": 63 },
+            { "stage": "practice", "startPage": 64, "endPage": 71 },
+            { "stage": "assessment", "startPage": 72, "endPage": 73 }
+          ]
+        },
+        {
+          "id": "unidad-4-arte-creatividad",
+          "number": 4,
+          "title": "Vivimos el arte y la creatividad de nuestros pueblos",
+          "competency": "Convive y participa democráticamente en la búsqueda del bien común",
+          "startPage": 74,
+          "endPage": 97,
+          "sections": [
+            { "stage": "learn", "startPage": 74, "endPage": 87 },
+            { "stage": "practice", "startPage": 88, "endPage": 95 },
+            { "stage": "assessment", "startPage": 96, "endPage": 97 }
+          ]
+        },
+        {
+          "id": "unidad-5-industrias",
+          "number": 5,
+          "title": "Conocemos las industrias de nuestras comunidades",
+          "competency": "Gestiona responsablemente el espacio y el ambiente",
+          "startPage": 98,
+          "endPage": 117,
+          "sections": [
+            { "stage": "learn", "startPage": 98, "endPage": 107 },
+            { "stage": "practice", "startPage": 108, "endPage": 115 },
+            { "stage": "assessment", "startPage": 116, "endPage": 117 }
+          ]
+        },
+        {
+          "id": "unidad-6-mercado",
+          "number": 6,
+          "title": "Conocemos el gran mercado",
+          "competency": "Gestiona responsablemente los recursos económicos",
+          "startPage": 118,
+          "endPage": 139,
+          "sections": [
+            { "stage": "learn", "startPage": 118, "endPage": 129 },
+            { "stage": "practice", "startPage": 130, "endPage": 137 },
+            { "stage": "assessment", "startPage": 138, "endPage": 139 }
+          ]
+        },
+        {
+          "id": "unidad-7-ambiente",
+          "number": 7,
+          "title": "Cuidamos el lugar donde vivimos",
+          "competency": "Gestiona responsablemente el espacio y el ambiente",
+          "startPage": 140,
+          "endPage": 161,
+          "sections": [
+            { "stage": "learn", "startPage": 140, "endPage": 151 },
+            { "stage": "practice", "startPage": 152, "endPage": 159 },
+            { "stage": "assessment", "startPage": 160, "endPage": 161 }
+          ]
+        },
+        {
+          "id": "unidad-8-viajamos-peru",
+          "number": 8,
+          "title": "Viajamos por el Perú",
+          "competency": "Construye interpretaciones históricas",
+          "startPage": 162,
+          "endPage": 216,
+          "sections": [
+            { "stage": "learn", "startPage": 162, "endPage": 175 },
+            { "stage": "practice", "startPage": 176, "endPage": 182 },
+            { "stage": "assessment", "startPage": 183, "endPage": 216 }
+          ]
+        }
+      ]
+    },
+    {
+      "bookId": "matematica-3-primaria",
+      "version": "2021.1",
+      "orientation": {
+        "title": "Presentación e índice",
+        "startPage": 1,
+        "endPage": 7
+      },
+      "units": [
+        {
+          "id": "unidad-1-siembra-cosecha",
+          "number": 1,
+          "title": "Vamos a sembrar y cosechar con nuestras familias",
+          "competency": "Resuelve problemas de cantidad y localización",
+          "startPage": 8,
+          "endPage": 41,
+          "sections": [
+            { "stage": "learn", "startPage": 8, "endPage": 27 },
+            { "stage": "practice", "startPage": 28, "endPage": 38 },
+            { "stage": "assessment", "startPage": 39, "endPage": 41 }
+          ]
+        },
+        {
+          "id": "unidad-2-ganaderia",
+          "number": 2,
+          "title": "Conocemos la ganadería de nuestras comunidades",
+          "competency": "Resuelve problemas de regularidad y cantidad",
+          "startPage": 42,
+          "endPage": 73,
+          "sections": [
+            { "stage": "learn", "startPage": 42, "endPage": 59 },
+            { "stage": "practice", "startPage": 60, "endPage": 70 },
+            { "stage": "assessment", "startPage": 71, "endPage": 73 }
+          ]
+        },
+        {
+          "id": "unidad-3-pesca",
+          "number": 3,
+          "title": "Conocemos la pesca de nuestras comunidades",
+          "competency": "Resuelve problemas de cantidad, forma y datos",
+          "startPage": 74,
+          "endPage": 105,
+          "sections": [
+            { "stage": "learn", "startPage": 74, "endPage": 91 },
+            { "stage": "practice", "startPage": 92, "endPage": 102 },
+            { "stage": "assessment", "startPage": 103, "endPage": 105 }
+          ]
+        },
+        {
+          "id": "unidad-4-arte-creatividad",
+          "number": 4,
+          "title": "Vivimos el arte y la creatividad de nuestros pueblos",
+          "competency": "Resuelve problemas de forma, movimiento y localización",
+          "startPage": 106,
+          "endPage": 139,
+          "sections": [
+            { "stage": "learn", "startPage": 106, "endPage": 125 },
+            { "stage": "practice", "startPage": 126, "endPage": 136 },
+            { "stage": "assessment", "startPage": 137, "endPage": 139 }
+          ]
+        },
+        {
+          "id": "unidad-5-industrias",
+          "number": 5,
+          "title": "Conocemos las industrias de nuestras comunidades",
+          "competency": "Resuelve problemas de cantidad y gestión de datos",
+          "startPage": 140,
+          "endPage": 165,
+          "sections": [
+            { "stage": "learn", "startPage": 140, "endPage": 153 },
+            { "stage": "practice", "startPage": 154, "endPage": 162 },
+            { "stage": "assessment", "startPage": 163, "endPage": 165 }
+          ]
+        },
+        {
+          "id": "unidad-6-mercado",
+          "number": 6,
+          "title": "Conocemos el gran mercado",
+          "competency": "Resuelve problemas de cantidad y regularidad",
+          "startPage": 166,
+          "endPage": 199,
+          "sections": [
+            { "stage": "learn", "startPage": 166, "endPage": 185 },
+            { "stage": "practice", "startPage": 186, "endPage": 196 },
+            { "stage": "assessment", "startPage": 197, "endPage": 199 }
+          ]
+        },
+        {
+          "id": "unidad-7-ambiente",
+          "number": 7,
+          "title": "Cuidamos el lugar donde vivimos",
+          "competency": "Resuelve problemas de forma y gestión de datos",
+          "startPage": 200,
+          "endPage": 235,
+          "sections": [
+            { "stage": "learn", "startPage": 200, "endPage": 220 },
+            { "stage": "practice", "startPage": 221, "endPage": 232 },
+            { "stage": "assessment", "startPage": 233, "endPage": 235 }
+          ]
+        },
+        {
+          "id": "unidad-8-viajamos-peru",
+          "number": 8,
+          "title": "Viajamos por el Perú",
+          "competency": "Resuelve problemas de cantidad, forma y regularidad",
+          "startPage": 236,
+          "endPage": 309,
+          "sections": [
+            { "stage": "learn", "startPage": 236, "endPage": 255 },
+            { "stage": "practice", "startPage": 256, "endPage": 266 },
+            { "stage": "assessment", "startPage": 267, "endPage": 309 }
+          ]
+        }
+      ]
+    },
+    {
+      "bookId": "ciencia-tecnologia-3-primaria",
+      "version": "2019.1",
+      "orientation": {
+        "title": "Presentación e índice",
+        "startPage": 1,
+        "endPage": 9
+      },
+      "units": [
+        {
+          "id": "unidad-1-siembra-cosecha",
+          "number": 1,
+          "title": "Vamos a sembrar y cosechar con nuestras familias",
+          "competency": "Indaga mediante métodos científicos para construir conocimientos",
+          "startPage": 10,
+          "endPage": 33,
+          "sections": [
+            { "stage": "learn", "startPage": 10, "endPage": 23 },
+            { "stage": "practice", "startPage": 24, "endPage": 31 },
+            { "stage": "assessment", "startPage": 32, "endPage": 33 }
+          ]
+        },
+        {
+          "id": "unidad-2-ganaderia",
+          "number": 2,
+          "title": "Conocemos la ganadería de nuestras comunidades",
+          "competency": "Explica el mundo físico basándose en conocimientos científicos",
+          "startPage": 34,
+          "endPage": 53,
+          "sections": [
+            { "stage": "learn", "startPage": 34, "endPage": 43 },
+            { "stage": "practice", "startPage": 44, "endPage": 51 },
+            { "stage": "assessment", "startPage": 52, "endPage": 53 }
+          ]
+        },
+        {
+          "id": "unidad-3-pesca",
+          "number": 3,
+          "title": "Conocemos la pesca de nuestras comunidades",
+          "competency": "Explica el mundo físico basándose en conocimientos científicos",
+          "startPage": 54,
+          "endPage": 73,
+          "sections": [
+            { "stage": "learn", "startPage": 54, "endPage": 63 },
+            { "stage": "practice", "startPage": 64, "endPage": 71 },
+            { "stage": "assessment", "startPage": 72, "endPage": 73 }
+          ]
+        },
+        {
+          "id": "unidad-4-arte-creatividad",
+          "number": 4,
+          "title": "Vivimos el arte y la creatividad de nuestros pueblos",
+          "competency": "Diseña y construye soluciones tecnológicas para resolver problemas",
+          "startPage": 74,
+          "endPage": 95,
+          "sections": [
+            { "stage": "learn", "startPage": 74, "endPage": 85 },
+            { "stage": "practice", "startPage": 86, "endPage": 93 },
+            { "stage": "assessment", "startPage": 94, "endPage": 95 }
+          ]
+        },
+        {
+          "id": "unidad-5-industrias",
+          "number": 5,
+          "title": "Conocemos las industrias de nuestras comunidades",
+          "competency": "Explica el mundo físico basándose en conocimientos científicos",
+          "startPage": 96,
+          "endPage": 118,
+          "sections": [
+            { "stage": "learn", "startPage": 96, "endPage": 107 },
+            { "stage": "practice", "startPage": 108, "endPage": 116 },
+            { "stage": "assessment", "startPage": 117, "endPage": 118 }
+          ]
+        },
+        {
+          "id": "unidad-6-mercado",
+          "number": 6,
+          "title": "Conocemos el gran mercado",
+          "competency": "Indaga y explica relaciones entre fuerza y movimiento",
+          "startPage": 119,
+          "endPage": 137,
+          "sections": [
+            { "stage": "learn", "startPage": 119, "endPage": 128 },
+            { "stage": "practice", "startPage": 129, "endPage": 135 },
+            { "stage": "assessment", "startPage": 136, "endPage": 137 }
+          ]
+        },
+        {
+          "id": "unidad-7-ambiente",
+          "number": 7,
+          "title": "Cuidamos el lugar donde vivimos",
+          "competency": "Indaga y explica fenómenos de la Tierra y el ambiente",
+          "startPage": 138,
+          "endPage": 161,
+          "sections": [
+            { "stage": "learn", "startPage": 138, "endPage": 151 },
+            { "stage": "practice", "startPage": 152, "endPage": 159 },
+            { "stage": "assessment", "startPage": 160, "endPage": 161 }
+          ]
+        },
+        {
+          "id": "unidad-8-viajamos-peru",
+          "number": 8,
+          "title": "Viajamos por el Perú",
+          "competency": "Explica el mundo físico y diseña soluciones tecnológicas",
+          "startPage": 162,
+          "endPage": 227,
+          "sections": [
+            { "stage": "learn", "startPage": 162, "endPage": 173 },
+            { "stage": "practice", "startPage": 174, "endPage": 180 },
+            { "stage": "assessment", "startPage": 181, "endPage": 227 }
+          ]
+        }
+      ]
     }
   ]
 }

@@ -13,6 +13,8 @@ const subjectSymbols: Record<string, string> = {
   comunicación: "Aa",
   ciencia: "⌬",
   ciencias: "⌬",
+  "ciencia y tecnología": "⌬",
+  "personal social": "◎",
   inglés: "Hi",
   historia: "⌛",
 };
