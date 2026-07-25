@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./node_modules/.bin/tsx .probe-tmp/probe2.ts /tmp/with.png)",
+      "Bash(DISABLE_SYSTEM_FONTS_LOAD=1 ./node_modules/.bin/tsx .probe-tmp/probe2.ts /tmp/without.png)",
+      "Bash(awk -F: '$1>3860 && $1<4300')",
+      "Bash(python3 -m json.tool)",
+      "Bash(python3 -c ' *)",
+      "Bash(grep -rnoE \"\\(GET|POST|PATCH|DELETE|PUT\\) +\\\\`?/[a-zA-Z0-9/_:\\\\[\\\\]{}-]+|\\\\`/[a-zA-Z0-9/_:\\\\[\\\\]{}-]+\\\\`|/api/[a-zA-Z0-9/_:\\\\[\\\\]{}-]+\" docs/ README.md infra/)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(NODE_PATH=/Users/duvet05/AImauta/node_modules ./node_modules/.bin/tsx /private/tmp/claude-501/-Users-duvet05-AImauta/1acc2208-8a46-4ef4-9ba6-f179fcf3200a/scratchpad/glyphs.ts)",
+      "Bash(node -e \"console.log\\(require\\('/Users/duvet05/AImauta/node_modules/@napi-rs/canvas/package.json'\\).version\\)\")",
+      "Bash(node -e \"console.log\\(require.resolve\\('@napi-rs/canvas'\\)\\)\")",
+      "Bash(echo \"exit=$? \\(no output above = none found\\)\")",
+      "Bash(node /private/tmp/claude-501/-Users-duvet05-AImauta/1acc2208-8a46-4ef4-9ba6-f179fcf3200a/scratchpad/bench2.mjs)",
+      "Bash(NODE_PATH=/Users/duvet05/AImauta/node_modules ./node_modules/.bin/tsx /private/tmp/claude-501/-Users-duvet05-AImauta/1acc2208-8a46-4ef4-9ba6-f179fcf3200a/scratchpad/emoji.ts)",
+      "Bash(git ls-tree *)"
+    ]
+  }
+}

@@ -105,6 +105,24 @@ svg {
   mask-image: linear-gradient(to right, transparent, black 50%, black);
 }
 
+.hero-quipu {
+  position: absolute;
+  z-index: 0;
+  top: 2.5rem;
+  right: clamp(-8rem, -4vw, -2.5rem);
+  width: clamp(250px, 29vw, 420px);
+  aspect-ratio: 743.2 / 922.74;
+  opacity: 0.15;
+  pointer-events: none;
+  filter: drop-shadow(0 18px 30px rgba(4, 29, 25, 0.18));
+  transform: rotate(4deg);
+}
+
+.hero-quipu img {
+  object-fit: contain;
+  object-position: center top;
+}
+
 .topbar {
   position: relative;
   z-index: 2;
@@ -280,8 +298,9 @@ svg {
   height: 345px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 48% 48% 1.5rem 1.5rem;
+  background: rgba(255, 253, 247, 0.05);
   box-shadow: 0 28px 64px rgba(4, 29, 25, 0.2);
-  opacity: 0.32;
+  opacity: 0.46;
   transform: rotate(2.5deg);
 }
 
@@ -297,8 +316,9 @@ svg {
 }
 
 .hero-editorial-figure img {
-  object-fit: cover;
-  object-position: 50% 42%;
+  padding: 1rem 0.4rem 0;
+  object-fit: contain;
+  object-position: center bottom;
 }
 
 .hero-amauta-guide {
@@ -472,45 +492,205 @@ svg {
   transform: rotate(3deg);
 }
 
-.learning-principles {
+.learning-journey-section {
   position: relative;
-  z-index: 4;
+  overflow: hidden;
+  margin-top: 5.5rem;
+  padding-block: 6.5rem 6rem;
+  color: var(--paper);
+  background:
+    radial-gradient(
+      circle at 5% 0,
+      rgba(238, 128, 104, 0.2),
+      transparent 28rem
+    ),
+    radial-gradient(
+      circle at 95% 100%,
+      rgba(217, 237, 141, 0.14),
+      transparent 32rem
+    ),
+    var(--forest-dark);
+  isolation: isolate;
+}
+
+.learning-journey-section::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  content: "";
+  opacity: 0.055;
+  background: url("/brand/amauta-pattern.svg") center / 145px auto repeat;
+  mask-image: linear-gradient(to bottom, black, transparent 92%);
+}
+
+.learning-journey-heading {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  margin-top: -2.5rem;
-  border-radius: 1rem;
-  background: white;
-  box-shadow: var(--shadow);
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+  gap: 4rem;
+  align-items: end;
+  margin-bottom: 3.25rem;
 }
 
-.learning-principles article {
-  display: flex;
-  gap: 1rem;
-  min-height: 128px;
-  padding: 1.8rem 1.6rem;
+.learning-journey-heading .eyebrow {
+  color: var(--lime);
 }
 
-.learning-principles article + article {
-  border-left: 1px solid var(--line);
-}
-
-.principle-number {
-  color: var(--coral);
+.learning-journey-heading h2 {
+  max-width: 13ch;
+  margin: 0;
   font-family: var(--font-display);
+  font-size: clamp(2.65rem, 4.7vw, 4.35rem);
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.learning-journey-heading h2 span {
+  color: var(--lime);
+  font-style: italic;
+}
+
+.learning-journey-heading > p {
+  max-width: 43ch;
+  margin: 0 0 0.35rem;
+  color: rgba(255, 255, 255, 0.72);
   font-size: 1rem;
+  line-height: 1.72;
 }
 
-.learning-principles h2 {
-  margin: 0 0 0.45rem;
+.learning-journey-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.learning-step {
+  position: relative;
+  min-width: 0;
+}
+
+.learning-step:not(:last-child)::after {
+  position: absolute;
+  z-index: 3;
+  top: 8.5rem;
+  right: -0.86rem;
+  display: grid;
+  width: 1.7rem;
+  height: 1.7rem;
+  place-items: center;
+  border: 2px solid var(--forest-dark);
+  border-radius: 50%;
+  color: var(--forest-dark);
+  background: var(--lime);
+  content: "→";
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.learning-step-card {
+  overflow: hidden;
+  height: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 1.2rem;
+  color: var(--ink);
+  background: var(--paper);
+  box-shadow: 0 24px 48px rgba(3, 25, 22, 0.22);
+}
+
+.learning-step-visual {
+  position: relative;
+  height: 17.5rem;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(23, 45, 42, 0.1);
+  background: #f5ddd3;
+}
+
+.learning-step:nth-child(2) .learning-step-visual {
+  background: #dbece3;
+}
+
+.learning-step:nth-child(3) .learning-step-visual {
+  background: #f5e8bc;
+}
+
+.learning-step:nth-child(4) .learning-step-visual {
+  background: var(--lime);
+}
+
+.learning-step-visual::before {
+  position: absolute;
+  right: -2.5rem;
+  bottom: -3.5rem;
+  width: 13rem;
+  height: 13rem;
+  border: 1px solid rgba(23, 45, 42, 0.12);
+  border-radius: 50%;
+  content: "";
+}
+
+.learning-step-visual img {
+  z-index: 1;
+  padding: 1.15rem 1.25rem 0;
+  object-fit: contain;
+  object-position: center bottom;
+}
+
+.learning-step-number {
+  position: absolute;
+  z-index: 2;
+  top: 1rem;
+  left: 1rem;
+  padding: 0.38rem 0.65rem;
+  border: 1px solid rgba(23, 45, 42, 0.12);
+  border-radius: 2rem;
+  color: var(--forest-dark);
+  background: rgba(255, 253, 247, 0.9);
+  box-shadow: 0 6px 15px rgba(23, 45, 42, 0.08);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.learning-step-copy {
+  padding: 1.45rem 1.4rem 1.6rem;
+}
+
+.learning-step-copy h3 {
+  margin: 0 0 0.55rem;
   font-family: var(--font-display);
-  font-size: 1.05rem;
+  font-size: 1.55rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
 }
 
-.learning-principles p {
+.learning-step-copy p {
   margin: 0;
   color: var(--ink-soft);
-  font-size: 0.82rem;
-  line-height: 1.55;
+  font-size: 0.88rem;
+  line-height: 1.62;
+}
+
+.learning-journey-promise {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  margin: 2.5rem 0 0;
+  color: rgba(255, 255, 255, 0.76);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-style: italic;
+  text-align: center;
+}
+
+.learning-journey-promise span {
+  color: var(--lime);
+  font-style: normal;
 }
 
 .library-section {
@@ -717,6 +897,7 @@ svg {
   line-height: 1.55;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .book-card-footer {
@@ -1737,6 +1918,21 @@ svg {
   outline-offset: 3px;
 }
 
+@media (max-width: 1100px) {
+  .learning-journey-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.25rem;
+  }
+
+  .learning-step:not(:last-child)::after {
+    display: none;
+  }
+
+  .learning-step-visual {
+    height: 17rem;
+  }
+}
+
 @media (max-width: 980px) {
   .hero-content {
     grid-template-columns: 1fr;
@@ -1752,8 +1948,11 @@ svg {
     min-height: auto;
   }
 
-  .learning-principles {
-    margin-top: -1.5rem;
+  .hero-quipu {
+    top: 4.5rem;
+    right: -6rem;
+    width: 280px;
+    opacity: 0.1;
   }
 
   .problem-section,
@@ -1768,6 +1967,26 @@ svg {
 
   .problem-copy h2 {
     max-width: none;
+  }
+
+  .learning-journey-section {
+    margin-top: 4.5rem;
+    padding-block: 5rem;
+  }
+
+  .learning-journey-heading {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    align-items: start;
+    margin-bottom: 2.5rem;
+  }
+
+  .learning-journey-heading h2 {
+    max-width: 14ch;
+  }
+
+  .learning-journey-heading > p {
+    max-width: 58ch;
   }
 
   .commitment-section {
@@ -1823,18 +2042,89 @@ svg {
     font-size: 0.95rem;
   }
 
-  .learning-principles {
+  .hero-quipu {
+    top: 4rem;
+    right: -5.5rem;
+    width: 240px;
+    opacity: 0.085;
+    transform: rotate(6deg);
+  }
+
+  .learning-journey-section {
+    margin-top: 3.75rem;
+    padding-block: 4.25rem;
+  }
+
+  .learning-journey-heading {
+    gap: 1.25rem;
+    margin-bottom: 2rem;
+  }
+
+  .learning-journey-heading h2 {
+    font-size: clamp(2.4rem, 12vw, 3.2rem);
+  }
+
+  .learning-journey-heading > p {
+    font-size: 0.92rem;
+    line-height: 1.65;
+  }
+
+  .learning-journey-list {
     grid-template-columns: 1fr;
+    gap: 0.9rem;
   }
 
-  .learning-principles article {
-    min-height: auto;
-    padding: 1.25rem;
+  .learning-step-card {
+    display: grid;
+    grid-template-columns: clamp(6.5rem, 31vw, 11rem) minmax(0, 1fr);
+    min-height: 12.5rem;
   }
 
-  .learning-principles article + article {
-    border-top: 1px solid var(--line);
-    border-left: 0;
+  .learning-step-visual {
+    height: auto;
+    min-height: 100%;
+    border-right: 1px solid rgba(23, 45, 42, 0.1);
+    border-bottom: 0;
+  }
+
+  .learning-step-visual::before {
+    right: -5rem;
+    bottom: -2rem;
+    width: 10rem;
+    height: 10rem;
+  }
+
+  .learning-step-visual img {
+    padding: 2.8rem 0.25rem 0;
+  }
+
+  .learning-step-number {
+    top: 0.75rem;
+    left: 0.65rem;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.6rem;
+  }
+
+  .learning-step-copy {
+    align-self: center;
+    padding: 1.25rem 1.1rem;
+  }
+
+  .learning-step-copy h3 {
+    font-size: 1.35rem;
+  }
+
+  .learning-step-copy p {
+    font-size: 0.85rem;
+    line-height: 1.55;
+  }
+
+  .learning-journey-promise {
+    align-items: flex-start;
+    margin-top: 2rem;
+    font-size: 0.92rem;
+    line-height: 1.5;
+    text-align: left;
   }
 
   .commitment-grid {

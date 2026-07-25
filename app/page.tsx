@@ -5,12 +5,49 @@ import { BrandMark } from "@/components/brand-mark";
 import { CatalogLibrary } from "@/components/catalog-library";
 import { getBooks } from "@/lib/catalog";
 
+const learningJourney = [
+  {
+    title: "Intenta",
+    description:
+      "Abre la ficha y explica qué entendiste o dónde te trabaste.",
+    image: "/svg/amauta-thinks.svg",
+  },
+  {
+    title: "Consulta",
+    description:
+      "AImauta recupera evidencia de la página exacta del cuaderno.",
+    image: "/svg/amauta-points.svg",
+  },
+  {
+    title: "Recibe una pista",
+    description:
+      "Obtienes una pregunta breve y gradual, siempre con su fuente.",
+    image: "/svg/amauta-hint.svg",
+  },
+  {
+    title: "Resuelve",
+    description:
+      "Vuelves al ejercicio y llegas a la respuesta por tu cuenta.",
+    image: "/svg/amauta-celebrates.svg",
+  },
+] as const;
+
 export default async function CatalogPage() {
   const books = await getBooks();
 
   return (
     <main id="contenido-principal">
       <section className="catalog-hero">
+        <div className="hero-quipu" aria-hidden="true">
+          <Image
+            src="/svg/quipu.svg"
+            alt=""
+            fill
+            sizes="(max-width: 680px) 250px, 30vw"
+            unoptimized
+          />
+        </div>
+
         <nav className="topbar shell" aria-label="Navegación principal">
           <Link className="brand" href="/" aria-label="AImauta, inicio">
             <BrandMark />
@@ -47,7 +84,7 @@ export default async function CatalogPage() {
           <div className="hero-demo" aria-label="Ejemplo de una pista con fuente">
             <div className="hero-editorial-figure" aria-hidden="true">
               <Image
-                src="/brand/amauta-editorial.webp"
+                src="/svg/amauta-thinks.svg"
                 alt=""
                 fill
                 priority
@@ -80,7 +117,7 @@ export default async function CatalogPage() {
             </div>
             <div className="hero-amauta-guide" aria-hidden="true">
               <Image
-                src="/brand/characters/amauta-points.webp"
+                src="/svg/amauta-points.svg"
                 alt=""
                 fill
                 sizes="(max-width: 980px) 0px, 220px"
@@ -127,34 +164,57 @@ export default async function CatalogPage() {
         </div>
       </section>
 
-      <section className="learning-principles shell" aria-label="Cómo funciona">
-        <article>
-          <span className="principle-number">01</span>
-          <div>
-            <h2>Lee el ejercicio</h2>
-            <p>El cuaderno se abre completo, con el ejercicio a la vista.</p>
-          </div>
-        </article>
-        <article>
-          <span className="principle-number">02</span>
-          <div>
-            <h2>Cuenta qué intentaste</h2>
+      <section
+        className="learning-journey-section"
+        aria-labelledby="como-funciona"
+      >
+        <div className="learning-journey-shell shell">
+          <div className="learning-journey-heading">
+            <div>
+              <p className="eyebrow">Cómo funciona</p>
+              <h2 id="como-funciona">
+                El estudiante piensa.
+                <span> AImauta acompaña.</span>
+              </h2>
+            </div>
             <p>
-              Explica tu estrategia o dónde te trabaste. No necesitas tenerlo
-              resuelto.
+              El acompañamiento sigue el ritmo natural del estudiante: parte de
+              su intento, recupera evidencia y ofrece solo la ayuda necesaria
+              para avanzar.
             </p>
           </div>
-        </article>
-        <article>
-          <span className="principle-number">03</span>
-          <div>
-            <h2>Avanza con una pista</h2>
-            <p>
-              Recibes una pregunta que te acerca, y la página exacta que la
-              respalda.
-            </p>
-          </div>
-        </article>
+
+          <ol className="learning-journey-list">
+            {learningJourney.map((step, index) => (
+              <li className="learning-step" key={step.title}>
+                <article className="learning-step-card">
+                  <div className="learning-step-visual">
+                    <span className="learning-step-number">
+                      Paso {index + 1}
+                    </span>
+                    <Image
+                      src={step.image}
+                      alt=""
+                      fill
+                      sizes="(max-width: 680px) 112px, (max-width: 1100px) 42vw, 250px"
+                      unoptimized
+                    />
+                  </div>
+                  <div className="learning-step-copy">
+                    <h3>{step.title}</h3>
+                    <p>{step.description}</p>
+                  </div>
+                </article>
+              </li>
+            ))}
+          </ol>
+
+          <p className="learning-journey-promise">
+            <span aria-hidden="true">✦</span>
+            AImauta acompaña el proceso. La respuesta final sigue siendo del
+            estudiante.
+          </p>
+        </div>
       </section>
 
       <section className="commitment-section shell" aria-labelledby="compromisos">
@@ -189,8 +249,8 @@ export default async function CatalogPage() {
           <article>
             <h3>Genera evidencia útil</h3>
             <p>
-              Registra intentos, pistas usadas y autonomía alcanzada: no solo
-              si la respuesta fue correcta.
+              Registra intentos, pistas usadas y avance por objetivo: no solo
+              si la actividad fue completada.
             </p>
           </article>
         </div>
