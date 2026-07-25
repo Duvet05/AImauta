@@ -8,6 +8,7 @@ import {
   requiredString
 } from "@/lib/http";
 import type { Prisma } from "@/lib/generated/prisma/client";
+import { presentCourseWithStudentCount } from "@/lib/school-directory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +27,7 @@ export async function GET(request: Request): Promise<Response> {
       ...(q ? { name: { contains: q, mode: "insensitive" } } : {}),
       ...(gradeId ? { gradeId } : {}),
       ...(levelId ? { grade: { levelId } } : {}),
-      ...(studentId ? { students: { some: { id: studentId } } } : {}),
+      ...(studentId ? { enrollments: { some: { studentId } } } : {}),
       ...(teacherId ? { teachers: { some: { id: teacherId } } } : {})
     };
 
@@ -38,13 +39,17 @@ export async function GET(request: Request): Promise<Response> {
         take: pagination.take,
         include: {
           grade: { include: { level: true } },
-          _count: { select: { students: true, teachers: true } }
+          _count: { select: { enrollments: true, teachers: true } }
         }
       }),
       prisma.course.count({ where })
     ]);
 
-    return paginatedResponse(items, total, pagination);
+    return paginatedResponse(
+      items.map(presentCourseWithStudentCount),
+      total,
+      pagination
+    );
   } catch (error) {
     return errorResponse(error);
   }

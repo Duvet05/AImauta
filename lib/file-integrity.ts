@@ -5,6 +5,7 @@ type FileIdentity = {
   device: bigint;
   inode: bigint;
   size: bigint;
+  mode: bigint;
   modifiedAt: bigint;
   changedAt: bigint;
 };
@@ -42,9 +43,14 @@ function sameIdentity(left: FileIdentity, right: FileIdentity): boolean {
     left.device === right.device &&
     left.inode === right.inode &&
     left.size === right.size &&
+    left.mode === right.mode &&
     left.modifiedAt === right.modifiedAt &&
     left.changedAt === right.changedAt
   );
+}
+
+function isReadOnly(identity: FileIdentity): boolean {
+  return (identity.mode & 0o222n) === 0n;
 }
 
 async function identity(handle: FileHandle): Promise<FileIdentity | null> {
@@ -56,6 +62,7 @@ async function identity(handle: FileHandle): Promise<FileIdentity | null> {
     device: metadata.dev,
     inode: metadata.ino,
     size: metadata.size,
+    mode: metadata.mode,
     modifiedAt: metadata.mtimeNs,
     changedAt: metadata.ctimeNs
   };
@@ -76,6 +83,7 @@ async function verifyUncached(
   if (
     cached &&
     cached.digest === expectedSha256 &&
+    isReadOnly(openedIdentity) &&
     sameIdentity(cached.identity, openedIdentity)
   ) {
     return true;
@@ -100,14 +108,24 @@ async function verifyUncached(
     return false;
   }
 
-  verifiedFiles.set(filePath, { identity: after, digest });
+  if (isReadOnly(after)) {
+    verifiedFiles.set(filePath, { identity: after, digest });
+  } else {
+    /*
+     * Some filesystems expose timestamps at a coarse resolution. Re-hash
+     * writable files so a same-size rewrite within one timestamp tick cannot
+     * reuse a stale successful checksum.
+     */
+    verifiedFiles.delete(filePath);
+  }
   return true;
 }
 
 /**
  * Verifies the already-open descriptor that the caller will stream. The
- * successful digest is cached only for the exact device/inode/size/mtime/ctime
- * identity; replacing or editing a same-sized file invalidates the cache.
+ * successful digest is cached only for read-only files and their exact
+ * device/inode/size/mode/mtime/ctime identity. Writable files are always
+ * re-hashed because timestamp granularity is filesystem-dependent.
  */
 export async function verifyOpenedPinnedFile(
   filePath: string,
@@ -119,10 +137,20 @@ export async function verifyOpenedPinnedFile(
   if (!openedIdentity || openedIdentity.size !== BigInt(expectedBytes)) {
     return false;
   }
+  if (!isReadOnly(openedIdentity)) {
+    return verifyUncached(
+      filePath,
+      handle,
+      openedIdentity,
+      expectedBytes,
+      expectedSha256
+    );
+  }
   const identityKey = [
     openedIdentity.device,
     openedIdentity.inode,
     openedIdentity.size,
+    openedIdentity.mode,
     openedIdentity.modifiedAt,
     openedIdentity.changedAt
   ].join(":");

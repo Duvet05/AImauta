@@ -10,6 +10,10 @@ import {
   requiredString
 } from "@/lib/http";
 import type { Prisma } from "@/lib/generated/prisma/client";
+import {
+  presentStudentWithCourses,
+  uniqueRelationIds
+} from "@/lib/school-directory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,11 +41,13 @@ export async function GET(request: Request): Promise<Response> {
         : {}),
       ...(courseId || gradeId || levelId
         ? {
-            courses: {
+            enrollments: {
               some: {
-                ...(courseId ? { id: courseId } : {}),
-                ...(gradeId ? { gradeId } : {}),
-                ...(levelId ? { grade: { levelId } } : {})
+                course: {
+                  ...(courseId ? { id: courseId } : {}),
+                  ...(gradeId ? { gradeId } : {}),
+                  ...(levelId ? { grade: { levelId } } : {})
+                }
               }
             }
           }
@@ -55,13 +61,21 @@ export async function GET(request: Request): Promise<Response> {
         skip: pagination.skip,
         take: pagination.take,
         include: {
-          courses: { include: { grade: { include: { level: true } } } }
+          enrollments: {
+            include: {
+              course: { include: { grade: { include: { level: true } } } }
+            }
+          }
         }
       }),
       prisma.student.count({ where })
     ]);
 
-    return paginatedResponse(items, total, pagination);
+    return paginatedResponse(
+      items.map(presentStudentWithCourses),
+      total,
+      pagination
+    );
   } catch (error) {
     return errorResponse(error);
   }
@@ -77,20 +91,30 @@ export async function POST(request: Request): Promise<Response> {
       maxLength: 100
     });
     const email = requiredEmail(body.email, "email");
-    const courseIds = optionalStringArray(body.courseIds, "courseIds");
+    const courseIds = uniqueRelationIds(
+      optionalStringArray(body.courseIds, "courseIds") ?? []
+    );
 
     const student = await prisma.student.create({
       data: {
         firstName,
         lastName,
         email,
-        ...(courseIds
-          ? { courses: { connect: courseIds.map((id) => ({ id })) } }
+        ...(courseIds.length > 0
+          ? {
+              enrollments: {
+                create: courseIds.map((courseId) => ({
+                  course: { connect: { id: courseId } }
+                }))
+              }
+            }
           : {})
       },
-      include: { courses: true }
+      include: {
+        enrollments: { include: { course: true } }
+      }
     });
-    return jsonResponse(student, 201);
+    return jsonResponse(presentStudentWithCourses(student), 201);
   } catch (error) {
     return errorResponse(error);
   }

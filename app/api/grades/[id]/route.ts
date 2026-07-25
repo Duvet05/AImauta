@@ -6,6 +6,7 @@ import {
   optionalString,
   readJsonBody
 } from "@/lib/http";
+import { presentCourseWithStudentCount } from "@/lib/school-directory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,7 +28,7 @@ export async function GET(
         courses: {
           orderBy: { name: "asc" },
           include: {
-            _count: { select: { students: true, teachers: true } }
+            _count: { select: { enrollments: true, teachers: true } }
           }
         }
       }
@@ -35,7 +36,10 @@ export async function GET(
     if (!grade) {
       throw new ApiError("Grado no encontrado.", 404);
     }
-    return jsonResponse(grade);
+    return jsonResponse({
+      ...grade,
+      courses: grade.courses.map(presentCourseWithStudentCount)
+    });
   } catch (error) {
     return errorResponse(error);
   }

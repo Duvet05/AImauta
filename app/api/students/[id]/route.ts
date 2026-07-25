@@ -8,6 +8,10 @@ import {
   optionalStringArray,
   readJsonBody
 } from "@/lib/http";
+import {
+  presentStudentWithCourses,
+  uniqueRelationIds
+} from "@/lib/school-directory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,12 +28,18 @@ export async function GET(
     const { id } = await context.params;
     const student = await prisma.student.findUnique({
       where: { id },
-      include: { courses: { include: { grade: { include: { level: true } } } } }
+      include: {
+        enrollments: {
+          include: {
+            course: { include: { grade: { include: { level: true } } } }
+          }
+        }
+      }
     });
     if (!student) {
       throw new ApiError("Estudiante no encontrado.", 404);
     }
-    return jsonResponse(student);
+    return jsonResponse(presentStudentWithCourses(student));
   } catch (error) {
     return errorResponse(error);
   }
@@ -49,7 +59,14 @@ export async function PATCH(
       maxLength: 100
     });
     const email = optionalEmail(body.email, "email");
-    const courseIds = optionalStringArray(body.courseIds, "courseIds");
+    const requestedCourseIds = optionalStringArray(
+      body.courseIds,
+      "courseIds"
+    );
+    const courseIds =
+      requestedCourseIds === undefined
+        ? undefined
+        : uniqueRelationIds(requestedCourseIds);
 
     if (
       firstName === undefined &&
@@ -67,12 +84,32 @@ export async function PATCH(
         ...(lastName !== undefined ? { lastName } : {}),
         ...(email !== undefined ? { email } : {}),
         ...(courseIds !== undefined
-          ? { courses: { set: courseIds.map((courseId) => ({ id: courseId })) } }
+          ? {
+              enrollments: {
+                deleteMany:
+                  courseIds.length > 0
+                    ? { courseId: { notIn: courseIds } }
+                    : {},
+                connectOrCreate: courseIds.map((courseId) => ({
+                  where: {
+                    studentId_courseId: {
+                      studentId: id,
+                      courseId
+                    }
+                  },
+                  create: {
+                    course: { connect: { id: courseId } }
+                  }
+                }))
+              }
+            }
           : {})
       },
-      include: { courses: true }
+      include: {
+        enrollments: { include: { course: true } }
+      }
     });
-    return jsonResponse(student);
+    return jsonResponse(presentStudentWithCourses(student));
   } catch (error) {
     return errorResponse(error);
   }

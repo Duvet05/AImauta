@@ -7,6 +7,10 @@ import {
   optionalStringArray,
   readJsonBody
 } from "@/lib/http";
+import {
+  presentCourseWithStudents,
+  uniqueRelationIds
+} from "@/lib/school-directory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,14 +29,17 @@ export async function GET(
       where: { id },
       include: {
         grade: { include: { level: true } },
-        students: { orderBy: { lastName: "asc" } },
+        enrollments: {
+          orderBy: { student: { lastName: "asc" } },
+          include: { student: true }
+        },
         teachers: { orderBy: { lastName: "asc" } }
       }
     });
     if (!course) {
       throw new ApiError("Curso no encontrado.", 404);
     }
-    return jsonResponse(course);
+    return jsonResponse(presentCourseWithStudents(course));
   } catch (error) {
     return errorResponse(error);
   }
@@ -47,7 +54,14 @@ export async function PATCH(
     const body = await readJsonBody(request);
     const name = optionalString(body.name, "name", { maxLength: 100 });
     const gradeId = optionalString(body.gradeId, "gradeId", { maxLength: 100 });
-    const studentIds = optionalStringArray(body.studentIds, "studentIds");
+    const requestedStudentIds = optionalStringArray(
+      body.studentIds,
+      "studentIds"
+    );
+    const studentIds =
+      requestedStudentIds === undefined
+        ? undefined
+        : uniqueRelationIds(requestedStudentIds);
     const teacherIds = optionalStringArray(body.teacherIds, "teacherIds");
 
     if (
@@ -65,7 +79,25 @@ export async function PATCH(
         ...(name !== undefined ? { name } : {}),
         ...(gradeId !== undefined ? { gradeId } : {}),
         ...(studentIds !== undefined
-          ? { students: { set: studentIds.map((studentId) => ({ id: studentId })) } }
+          ? {
+              enrollments: {
+                deleteMany:
+                  studentIds.length > 0
+                    ? { studentId: { notIn: studentIds } }
+                    : {},
+                connectOrCreate: studentIds.map((studentId) => ({
+                  where: {
+                    studentId_courseId: {
+                      studentId,
+                      courseId: id
+                    }
+                  },
+                  create: {
+                    student: { connect: { id: studentId } }
+                  }
+                }))
+              }
+            }
           : {}),
         ...(teacherIds !== undefined
           ? { teachers: { set: teacherIds.map((teacherId) => ({ id: teacherId })) } }
@@ -73,11 +105,11 @@ export async function PATCH(
       },
       include: {
         grade: { include: { level: true } },
-        students: true,
+        enrollments: { include: { student: true } },
         teachers: true
       }
     });
-    return jsonResponse(course);
+    return jsonResponse(presentCourseWithStudents(course));
   } catch (error) {
     return errorResponse(error);
   }
