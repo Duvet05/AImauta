@@ -30,6 +30,7 @@ const avatarDescriptions: Record<TutorAvatarState, string> = {
 export function TutorAvatar({ state, audioTrack }: TutorAvatarProps) {
   const description = avatarDescriptions[state];
   const [threeDimensionalReady, setThreeDimensionalReady] = useState(false);
+  const [brandPortraitReady, setBrandPortraitReady] = useState(false);
 
   return (
     <div
@@ -45,19 +46,23 @@ export function TutorAvatar({ state, audioTrack }: TutorAvatarProps) {
       />
       <Image
         className={`tutor-avatar-brand-portrait${
-          threeDimensionalReady ? " tutor-avatar-portrait-hidden" : ""
+          threeDimensionalReady || !brandPortraitReady
+            ? " tutor-avatar-portrait-hidden"
+            : ""
         }`}
         src="/brand/characters/amauta-hint.webp"
         alt=""
         aria-hidden="true"
         width={223}
         height={360}
+        onLoad={() => setBrandPortraitReady(true)}
+        onError={() => setBrandPortraitReady(false)}
         unoptimized
         priority
       />
       <svg
         className={`tutor-avatar-portrait${
-          threeDimensionalReady
+          threeDimensionalReady || brandPortraitReady
             ? " tutor-avatar-portrait-hidden"
             : " tutor-avatar-vector-fallback"
         }`}

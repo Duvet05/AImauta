@@ -292,6 +292,7 @@ export function TutorAvatar3D({
         -center.y * scale,
         -center.z * scale,
       );
+      const baseAvatarY = avatar.position.y;
 
       const meshes: MorphMesh[] = [];
       avatar.traverse((object) => {
@@ -347,10 +348,12 @@ export function TutorAvatar3D({
         setMorph(meshes, "mouthSmileRight", speaking ? 0.03 : 0.08);
         setMorph(meshes, "eyeBlinkLeft", blink);
         setMorph(meshes, "eyeBlinkRight", blink);
-        avatar.rotation.y = Math.sin(seconds * 0.7) * 0.018;
-        avatar.rotation.x = Math.sin(seconds * 0.43) * 0.006;
+        avatar.position.y =
+          baseAvatarY + Math.sin(seconds * 1.05) * 0.028;
+        avatar.rotation.y = Math.sin(seconds * 0.7) * 0.036;
+        avatar.rotation.x = Math.sin(seconds * 0.43) * 0.012;
         if (runtime?.head) {
-          runtime.head.rotation.z = Math.sin(seconds * 0.55) * 0.012;
+          runtime.head.rotation.z = Math.sin(seconds * 0.55) * 0.024;
         }
         createdRenderer.render(scene, camera);
       };
