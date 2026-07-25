@@ -101,7 +101,7 @@ beforeEach(() => {
   dependencies.getReviewedExerciseSolution.mockResolvedValue(
     reviewedSolution,
   );
-  dependencies.retrieveExerciseEvidence.mockReturnValue([
+  dependencies.retrieveExerciseEvidence.mockResolvedValue([
     {
       id: "page-13",
       exerciseId: exercise.id,
@@ -164,11 +164,17 @@ describe("tutor vinculado a ejercicio revisado", () => {
     expect(result.message).toContain("Pista 1 de 3");
     expect(result.message).not.toContain(reviewedSolution.finalAnswer);
     expect(result.citations).toEqual([
-      { sourceId: "S1", page: 13 },
-      { sourceId: "S2", page: 14 },
+      { sourceId: "S1", page: 13, chunkId: "page-13" },
+      { sourceId: "S2", page: 14, chunkId: "page-14" },
     ]);
     expect(dependencies.retrieveExerciseEvidence).toHaveBeenCalledWith(
-      exercise,
+      {
+        bookId,
+        exercise,
+        question: "¿Cómo las comparo?",
+        attempt: "Compararía numeradores y denominadores.",
+        page: 13,
+      },
     );
     expect(
       dependencies.getReviewedExerciseSolution,
@@ -184,6 +190,7 @@ describe("tutor vinculado a ejercicio revisado", () => {
       content: "COMPRUEBA",
       provider: "openai",
     });
+
     const issued = issueLearningSession({
       bookId,
       page: 13,
@@ -202,6 +209,33 @@ describe("tutor vinculado a ejercicio revisado", () => {
         "¿Qué parte de tu procedimiento puedes comprobar",
       ),
     });
+  });
+
+  it("falla cerrado sin evidencia indexada y no abre la solución ni el modelo", async () => {
+    dependencies.retrieveExerciseEvidence.mockResolvedValue([]);
+    const issued = issueLearningSession({
+      bookId,
+      page: 13,
+      exercise: binding,
+    });
+
+    const result = await guideLearningTurn({
+      sessionToken: issued.token,
+      message: "¿Cómo las comparo?",
+      attempt: "Compararía los valores.",
+    });
+
+    expect(result).toMatchObject({
+      mode: "exercise-locked",
+      citations: [],
+      session: { attemptCount: 0, turnCount: 0, hintLevel: 0 },
+      policy: { hintLevel: 0, canRevealSolution: false },
+    });
+    expect(result.message).not.toContain(reviewedSolution.finalAnswer);
+    expect(
+      dependencies.getReviewedExerciseSolution,
+    ).not.toHaveBeenCalled();
+    expect(dependencies.askTutorModel).not.toHaveBeenCalled();
   });
 
   it("muestra la respuesta revisada sólo tras tres pistas y varios intentos", async () => {

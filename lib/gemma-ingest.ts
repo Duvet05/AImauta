@@ -687,6 +687,22 @@ function detectionArguments(
     });
   }
 
+  const candidatesPerPage = new Map<number, number>();
+  for (const exercise of exercises) {
+    for (const page of new Set(exercise.regions.map((region) => region.page))) {
+      candidatesPerPage.set(page, (candidatesPerPage.get(page) ?? 0) + 1);
+    }
+  }
+  for (const reviewedPage of pagesReviewed) {
+    const candidateCount = candidatesPerPage.get(reviewedPage.page) ?? 0;
+    if (
+      (reviewedPage.status === "no_exercise" && candidateCount !== 0) ||
+      (reviewedPage.status === "exercise_found" && candidateCount < 1)
+    ) {
+      invalidResponse();
+    }
+  }
+
   return { pagesReviewed, exercises };
 }
 
@@ -907,6 +923,71 @@ const solutionFunctionDeclaration = {
   }
 };
 
+function cloneFunctionDeclaration(
+  declaration: JsonRecord
+): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(declaration)) as Record<string, unknown>;
+}
+
+export function getGemmaDetectionToolContract(): {
+  functionName: string;
+  declaration: Record<string, unknown>;
+} {
+  return {
+    functionName: DETECTION_FUNCTION,
+    declaration: cloneFunctionDeclaration(detectionFunctionDeclaration)
+  };
+}
+
+export function getGemmaSolutionToolContract(): {
+  functionName: string;
+  declaration: Record<string, unknown>;
+} {
+  return {
+    functionName: SOLUTION_FUNCTION,
+    declaration: cloneFunctionDeclaration(solutionFunctionDeclaration)
+  };
+}
+
+export function validateGemmaDetectionImages(
+  images: readonly GemmaIngestImage[]
+): void {
+  validateImages(images, MAX_DETECTION_IMAGES);
+}
+
+export function validateGemmaSolutionInput(input: {
+  exerciseId: string;
+  context: string;
+  images: readonly GemmaIngestImage[];
+}): void {
+  validateImages(input.images, MAX_SOLUTION_IMAGES);
+  if (
+    !safeIdentifierPattern.test(input.exerciseId) ||
+    !boundedString(input.context, 1, 50_000)
+  ) {
+    invalidInput();
+  }
+}
+
+export function parseGemmaDetectionToolArguments(
+  value: unknown,
+  expectedPages: readonly number[]
+): ExerciseDetectionResult {
+  if (!isRecord(value)) {
+    invalidResponse();
+  }
+  return detectionArguments(value, expectedPages);
+}
+
+export function parseGemmaSolutionToolArguments(
+  value: unknown
+): ExerciseSolution {
+  if (!isRecord(value)) {
+    invalidResponse();
+  }
+  return solutionArguments(value);
+}
+
 function imageParts(images: readonly GemmaIngestImage[]): JsonRecord[] {
   return images.map((image) => ({
     inlineData: {
@@ -955,7 +1036,7 @@ function requestBody(input: {
 export async function detectExerciseWindowWithGemma(
   input: DetectExerciseWindowInput
 ): Promise<ExerciseDetectionResult> {
-  validateImages(input.images, MAX_DETECTION_IMAGES);
+  validateGemmaDetectionImages(input.images);
   const config = providerConfig(input);
   const pages = input.images.map((image) => image.page);
   const body = requestBody({
@@ -983,13 +1064,7 @@ export async function detectExerciseWindowWithGemma(
 export async function solveExerciseWithGemma(
   input: SolveExerciseInput
 ): Promise<ExerciseSolution> {
-  validateImages(input.images, MAX_SOLUTION_IMAGES);
-  if (
-    !safeIdentifierPattern.test(input.exerciseId) ||
-    !boundedString(input.context, 1, 50_000)
-  ) {
-    invalidInput();
-  }
+  validateGemmaSolutionInput(input);
 
   const config = providerConfig(input);
   const pages = input.images.map((image) => image.page);

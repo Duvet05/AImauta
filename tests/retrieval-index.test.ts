@@ -5,8 +5,10 @@ import path from "node:path";
 
 import {
   BookIndexError,
-  retrieveEvidence
+  retrieveEvidence,
+  retrieveExerciseEvidence
 } from "@/lib/retrieval";
+import type { PublicExercise } from "@/lib/exercise-manifest";
 import { makeBookIndex } from "./book-index-fixture";
 
 const bookId = "fichas-matematica-1-secundaria";
@@ -78,6 +80,217 @@ describe("contrato del índice RAG v2", () => {
       id: "attempt-match",
       sourceId: "S1"
     });
+  });
+
+  it("vincula el ejercicio multipágina sólo a fragmentos reales y anclados", async () => {
+    await publishIndex(
+      makeBookIndex([
+        {
+          id: "real-page-13",
+          page: 13,
+          text: "Compara ambas fracciones y explica tu estrategia con los datos de la situación."
+        },
+        {
+          id: "unrelated-page-13",
+          page: 13,
+          text: "Calcula el perímetro de un cuadrado diferente."
+        },
+        {
+          id: "teacher-page-13",
+          page: 13,
+          text: "Compara ambas fracciones. La respuesta final es tres cuartos.",
+          teacherOnly: true
+        },
+        {
+          id: "real-page-14",
+          page: 14,
+          text: "Explica tu estrategia para comparar las fracciones representadas."
+        },
+        {
+          id: "outside-exercise",
+          page: 15,
+          text: "Compara ambas fracciones y explica tu estrategia."
+        }
+      ])
+    );
+    const exercise: PublicExercise = {
+      id: "ejercicio-fracciones",
+      status: "published",
+      unitId: "ficha-1-fracciones",
+      stage: "learn",
+      revision: 4,
+      label: "Problema 1",
+      title: "Compara fracciones",
+      prompt: "Compara ambas fracciones y explica tu estrategia.",
+      regions: [
+        {
+          id: "ejercicio-fracciones-contexto",
+          page: 13,
+          role: "context",
+          order: 1,
+          rect: { x: 0.1, y: 0.1, width: 0.8, height: 0.2 }
+        },
+        {
+          id: "ejercicio-fracciones-pregunta",
+          page: 14,
+          role: "prompt",
+          order: 2,
+          rect: { x: 0.1, y: 0.4, width: 0.8, height: 0.2 }
+        }
+      ]
+    };
+
+    const evidence = await retrieveExerciseEvidence({
+      bookId,
+      exercise,
+      page: 13,
+      question: "¿Cómo empiezo?",
+      attempt: ""
+    });
+
+    expect(evidence.map((item) => item.id)).toEqual([
+      "real-page-13",
+      "real-page-14"
+    ]);
+    expect(
+      evidence.map(({ exerciseId, page, sourceId }) => ({
+        exerciseId,
+        page,
+        sourceId
+      }))
+    ).toEqual([
+      { exerciseId: exercise.id, page: 13, sourceId: "S1" },
+      { exerciseId: exercise.id, page: 14, sourceId: "S2" }
+    ]);
+    expect(evidence.map((item) => item.id)).not.toContain(
+      "teacher-page-13"
+    );
+    expect(evidence.map((item) => item.id)).not.toContain(
+      "unrelated-page-13"
+    );
+    expect(evidence.map((item) => item.id)).not.toContain(
+      "outside-exercise"
+    );
+  });
+
+  it("falla cerrado cuando el índice no contiene un ancla del ejercicio", async () => {
+    await publishIndex(
+      makeBookIndex([
+        {
+          id: "otro-ejercicio",
+          page: 13,
+          text: "Calcula el perímetro de un cuadrado diferente."
+        }
+      ])
+    );
+    const exercise: PublicExercise = {
+      id: "ejercicio-fracciones",
+      status: "published",
+      unitId: "ficha-1-fracciones",
+      stage: "learn",
+      revision: 4,
+      label: "Problema 1",
+      title: "Compara fracciones",
+      prompt: "Compara ambas fracciones y explica tu estrategia.",
+      regions: [
+        {
+          id: "ejercicio-fracciones-pregunta",
+          page: 13,
+          role: "prompt",
+          order: 1,
+          rect: { x: 0.1, y: 0.4, width: 0.8, height: 0.2 }
+        }
+      ]
+    };
+
+    await expect(
+      retrieveExerciseEvidence({
+        bookId,
+        exercise,
+        page: 13,
+        question: "¿Cómo empiezo?",
+        attempt: ""
+      })
+    ).resolves.toEqual([]);
+  });
+
+  it("no liga un ejercicio vecino por sólo dos palabras coincidentes", async () => {
+    await publishIndex(
+      makeBookIndex([
+        {
+          id: "ejercicio-vecino",
+          page: 13,
+          text: "Compara los lados y explica el perímetro del cuadrado."
+        }
+      ])
+    );
+    const exercise: PublicExercise = {
+      id: "ejercicio-fracciones",
+      status: "published",
+      unitId: "ficha-1-fracciones",
+      stage: "learn",
+      revision: 4,
+      label: "Problema 1",
+      title: "Compara fracciones",
+      prompt: "Compara ambas fracciones y explica tu estrategia.",
+      regions: [
+        {
+          id: "ejercicio-fracciones-pregunta",
+          page: 13,
+          role: "prompt",
+          order: 1,
+          rect: { x: 0.1, y: 0.4, width: 0.8, height: 0.2 }
+        }
+      ]
+    };
+
+    await expect(
+      retrieveExerciseEvidence({
+        bookId,
+        exercise,
+        page: 13,
+        question: "¿Cómo empiezo?",
+        attempt: ""
+      })
+    ).resolves.toEqual([]);
+  });
+
+  it("no abre el índice para un ejercicio ligado a una página de evaluación", async () => {
+    await publishIndex({
+      version: 1,
+      bookId,
+      sourceSha256: "legacy",
+      chunks: []
+    });
+    const invalidAssessmentExercise: PublicExercise = {
+      id: "evaluacion-invalida",
+      status: "published",
+      unitId: "ficha-1-fracciones",
+      stage: "learn",
+      revision: 1,
+      label: "Evaluamos",
+      title: "Evaluación",
+      prompt: "Resuelve la evaluación.",
+      regions: [
+        {
+          id: "evaluacion-invalida-pregunta",
+          page: 21,
+          role: "prompt",
+          order: 1,
+          rect: { x: 0.1, y: 0.1, width: 0.8, height: 0.2 }
+        }
+      ]
+    };
+
+    await expect(
+      retrieveExerciseEvidence({
+        bookId,
+        exercise: invalidAssessmentExercise,
+        page: 21,
+        question: "¿Cuál es la respuesta?",
+        attempt: ""
+      })
+    ).resolves.toEqual([]);
   });
 
   it("rechaza de forma cerrada un índice v1", async () => {

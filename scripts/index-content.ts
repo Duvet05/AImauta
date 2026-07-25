@@ -4,10 +4,14 @@ import path from "node:path";
 
 import { PDFParse } from "pdf-parse";
 
-import { getBook, getBooks, type Book } from "../lib/catalog";
+import {
+  getAuthoringCatalogEntry,
+  getBooks,
+  type AuthoringCatalogEntry
+} from "../lib/catalog";
 import {
   getBookCurriculum,
-  getPageActivity,
+  getAuthoringPageActivity,
   type LearningStage
 } from "../lib/curriculum";
 import {
@@ -35,15 +39,17 @@ type ExtractedPage = {
   chunks: IndexedChunk[];
 };
 
-function selectedBooks(): readonly Book[] {
+function selectedBooks(): readonly AuthoringCatalogEntry[] {
   const index = process.argv.indexOf("--book");
   if (index === -1) {
     return getBooks();
   }
   const id = process.argv[index + 1];
-  const book = id ? getBook(id) : undefined;
+  const book = id ? getAuthoringCatalogEntry(id) : undefined;
   if (!book) {
-    throw new Error(`Libro desconocido o no publicado: ${id ?? "(vacío)"}`);
+    throw new Error(
+      `Libro desconocido, no tutorable o deshabilitado: ${id ?? "(vacío)"}`
+    );
   }
   return [book];
 }
@@ -203,10 +209,10 @@ function formatPageSummary(pages: readonly number[]): string {
     : preview;
 }
 
-async function indexBook(book: Book): Promise<void> {
+async function indexBook(book: AuthoringCatalogEntry): Promise<void> {
   const curriculum = getBookCurriculum(book.id);
   if (!curriculum) {
-    throw new Error(`${book.id}: no tiene currículo publicado; no se indexará`);
+    throw new Error(`${book.id}: no tiene currículo válido; no se indexará`);
   }
 
   const pdfPath = path.join(contentDir, book.storageFile);
@@ -244,7 +250,7 @@ async function indexBook(book: Book): Promise<void> {
       { length: book.pages },
       (_, index) => index + 1
     ).map((page) => {
-      const activity = getPageActivity(book.id, page);
+      const activity = getAuthoringPageActivity(book.id, page);
       if (activity.stage === "assessment" && activity.unitId === null) {
         throw new Error(
           `${book.id}: la página ${page} no tiene clasificación curricular`

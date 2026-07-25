@@ -35,6 +35,7 @@ import {
 } from "@/lib/retrieval";
 import {
   promoteExerciseRelease,
+  validateExerciseIngestionReport,
   validateReviewedExerciseRelease,
   verifyRuntimeBookArtifacts,
   type RuntimeBookArtifactVerification,
@@ -127,6 +128,35 @@ function privateManifest(
   };
 }
 
+function ingestionReport(): Record<string, unknown> {
+  return {
+    schemaVersion: 2,
+    bookId: catalogEntry.id,
+    sourceSha256: catalogEntry.expectedSha256,
+    model: "gemma-release-test",
+    generatedAt: "2026-07-25T00:00:00.000Z",
+    exerciseCount: 1,
+    reviewRequired: true,
+    coverage: {
+      pageCount: catalogEntry.pages,
+      pagesReviewed: Array.from(
+        { length: catalogEntry.pages },
+        (_, index) => {
+          const page = index + 1;
+          return {
+            page,
+            status:
+              page === 13 ? "exercise_found" : "no_exercise",
+            candidateCount: page === 13 ? 1 : 0,
+          };
+        },
+      ),
+      blockers: [],
+    },
+    issues: [],
+  };
+}
+
 async function secureDirectory(
   directory: string,
   mode: number,
@@ -180,14 +210,22 @@ async function writeReviewedPair(
     jobDirectory,
     `${catalogEntry.id}.private.reviewed.json`,
   );
+  const reportPath = path.join(
+    jobDirectory,
+    `${catalogEntry.id}.ingestion-report.json`,
+  );
   await writeFile(publicPath, JSON.stringify(publicManifest(revision)), {
     mode: 0o600,
   });
   await writeFile(privatePath, JSON.stringify(privateManifest(revision)), {
     mode: 0o600,
   });
+  await writeFile(reportPath, JSON.stringify(ingestionReport()), {
+    mode: 0o600,
+  });
   await chmod(publicPath, 0o600);
   await chmod(privatePath, 0o600);
+  await chmod(reportPath, 0o600);
 }
 
 function onePagePdf(): Buffer {
@@ -275,9 +313,9 @@ async function writeRuntimeArtifacts(
     "indexes",
     `${book.id}.json`,
   );
-  await writeFile(pdfPath, pdf, { mode: 0o640 });
+  await writeFile(pdfPath, pdf, { mode: 0o444 });
   await writeFile(indexPath, JSON.stringify(index), { mode: 0o640 });
-  await chmod(pdfPath, 0o640);
+  await chmod(pdfPath, 0o444);
   await chmod(indexPath, 0o640);
 }
 
@@ -319,6 +357,71 @@ describe("validación y rutas de promoción", () => {
         catalogEntry.id,
       ),
     ).toThrow(/exercise\.none-published/u);
+  });
+
+  it("exige cobertura completa, única y coherente antes de promover", () => {
+    const manifest = publicManifest();
+    expect(
+      validateExerciseIngestionReport(ingestionReport(), manifest),
+    ).toMatchObject({
+      pageCount: catalogEntry.pages,
+      reviewedPages: catalogEntry.pages,
+    });
+
+    const duplicate = ingestionReport();
+    const duplicateCoverage = duplicate.coverage as {
+      pagesReviewed: Array<Record<string, unknown>>;
+    };
+    duplicateCoverage.pagesReviewed[1] = {
+      ...duplicateCoverage.pagesReviewed[1],
+      page: 1,
+    };
+    expect(() =>
+      validateExerciseIngestionReport(duplicate, manifest),
+    ).toThrow(/coverage\.(?:duplicate-page|missing-page)/u);
+
+    const contradictory = ingestionReport();
+    const contradictoryCoverage = contradictory.coverage as {
+      pagesReviewed: Array<Record<string, unknown>>;
+    };
+    contradictoryCoverage.pagesReviewed[12] = {
+      page: 13,
+      status: "no_exercise",
+      candidateCount: 1,
+    };
+    expect(() =>
+      validateExerciseIngestionReport(contradictory, manifest),
+    ).toThrow(/coverage\.no-exercise-has-candidates/u);
+
+    const emptyFound = ingestionReport();
+    const emptyFoundCoverage = emptyFound.coverage as {
+      pagesReviewed: Array<Record<string, unknown>>;
+    };
+    emptyFoundCoverage.pagesReviewed[12] = {
+      page: 13,
+      status: "exercise_found",
+      candidateCount: 0,
+    };
+    expect(() =>
+      validateExerciseIngestionReport(emptyFound, manifest),
+    ).toThrow(/coverage\.exercise-found-empty/u);
+
+    const uncertain = ingestionReport();
+    const uncertainCoverage = uncertain.coverage as {
+      pagesReviewed: Array<Record<string, unknown>>;
+      blockers: Array<Record<string, unknown>>;
+    };
+    uncertainCoverage.pagesReviewed[12] = {
+      page: 13,
+      status: "uncertain",
+      candidateCount: 1,
+    };
+    uncertainCoverage.blockers = [
+      { code: "page-uncertain", page: 13 },
+    ];
+    expect(() =>
+      validateExerciseIngestionReport(uncertain, manifest),
+    ).toThrow(/coverage\.(?:uncertain-page|blocker)/u);
   });
 });
 
@@ -531,6 +634,15 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
       readFile(
         path.join(
           snapshotRoot,
+          "new",
+          `${catalogEntry.id}.ingestion-report.json`,
+        ),
+      ),
+    ).resolves.toBeInstanceOf(Buffer);
+    await expect(
+      readFile(
+        path.join(
+          snapshotRoot,
           "previous",
           `${catalogEntry.id}.private.json`,
         ),
@@ -545,7 +657,47 @@ describe.skipIf(operatorUid <= 0)("promoción atómica de ejercicios", () => {
     expect(releaseMetadata).toMatchObject({
       status: "published",
       runtimeArtifacts: fixtureRuntimeArtifacts,
+      coverageReport: {
+        pageCount: catalogEntry.pages,
+        reviewedPages: catalogEntry.pages,
+      },
     });
+  });
+
+  it("rechaza la promoción si falta el reporte de cobertura", async () => {
+    const layout = await testLayout("job-without-coverage");
+    await writeReviewedPair(layout.jobDirectory, 1);
+    await rm(
+      path.join(
+        layout.jobDirectory,
+        `${catalogEntry.id}.ingestion-report.json`,
+      ),
+    );
+
+    await expect(
+      promoteExerciseRelease({
+        jobId: "job-without-coverage",
+        bookId: catalogEntry.id,
+        ingestRoot: layout.ingestRoot,
+        runtimeRoot: layout.runtimeRoot,
+        releaseId: "release-without-coverage",
+        currentUid: operatorUid,
+        hooks: {
+          verifyRuntimeArtifacts: verifiedFixtureRuntime,
+        },
+      }),
+    ).rejects.toThrow(/reporte de cobertura/u);
+
+    await expect(
+      lstat(
+        path.join(
+          layout.runtimeRoot,
+          "manifests",
+          "exercises",
+          `${catalogEntry.id}.public.json`,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("restaura el privado anterior si falla la activación pública", async () => {

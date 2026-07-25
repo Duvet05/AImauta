@@ -120,8 +120,28 @@ npm run exercises:ingest -- \
   --book fichas-matematica-1-secundaria \
   --pdf /home/hii1sc/aimauta-runtime/content/fichas-matematica-1-secundaria.pdf \
   --output "$job_dir" \
+  --provider google \
   --model gemma-4-26b-a4b-it
 ```
+
+Para mantener las páginas en infraestructura propia, el mismo contrato puede
+usar Gemma 4 en el Ollama privado de Aule a través del túnel loopback de
+PowerEdge. Este modo no lee ni requiere el archivo de clave:
+
+```bash
+AIMAUTA_OLLAMA_INGEST_URL=http://127.0.0.1:11435 \
+npm run exercises:ingest -- \
+  --book fichas-matematica-1-secundaria \
+  --pdf /home/hii1sc/aimauta-runtime/content/fichas-matematica-1-secundaria.pdf \
+  --output "$job_dir" \
+  --provider ollama \
+  --model gemma4:e4b-it-qat
+```
+
+El adaptador Ollama sólo admite destinos loopback, bloquea redirecciones y
+exige exactamente una llamada a la herramienta estructurada esperada. Una
+respuesta libre, una herramienta distinta o argumentos inválidos fallan
+cerrado.
 
 `AIMAUTA_INGEST_ROOT` usa
 `/home/hii1sc/aimauta-ingest` de forma predeterminada. El comando rechaza root,
@@ -139,7 +159,14 @@ tres páginas. Produce únicamente:
 - `<bookId>.private.draft.json`;
 - `<bookId>.ingestion-report.json`.
 
-El endpoint predeterminado es el host oficial
+El reporte usa `schemaVersion: 2` y conserva una entrada única por página con
+su estado (`no_exercise`, `exercise_found` o `uncertain`) y cantidad de
+candidatos. La ingesta rechaza contradicciones entre estado y candidatos. Una
+página incierta, estados discrepantes entre ventanas, huecos o duplicados son
+bloqueantes: el par revisado no podrá promoverse hasta repetir o corregir la
+ingesta y producir un reporte sin `coverage.blockers`.
+
+En modo `google`, el endpoint predeterminado es el host oficial
 `generativelanguage.googleapis.com`, sin redirecciones. Un endpoint distinto
 se rechaza salvo que el operador configure simultáneamente
 `AIMAUTA_GEMINI_ENDPOINT` y el opt-in exacto
@@ -166,7 +193,13 @@ promoción:
 ```text
 jobs/<job_id>/<bookId>.public.reviewed.json   0600
 jobs/<job_id>/<bookId>.private.reviewed.json  0600
+jobs/<job_id>/<bookId>.ingestion-report.json  0600
 ```
+
+La promoción vuelve a validar y vincular el reporte con `bookId`, checksum,
+modelo, fecha, páginas y número de ejercicios del manifiesto revisado. Si el
+reporte falta, no cubre cada página exactamente una vez o conserva cualquier
+bloqueante, la publicación falla cerrada.
 
 ## Ejecución aislada
 

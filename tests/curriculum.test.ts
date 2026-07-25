@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { getBook } from "@/lib/catalog";
 import {
+  getAuthoringPageActivity,
   getBookCurriculum,
   getBookUnits,
   getFirstTutorablePage,
@@ -212,6 +213,25 @@ describe("currículo por página", () => {
         stage: "assessment",
         stageLabel: "No disponible",
         tutorAvailable: false
+      });
+    }
+  );
+
+  it.each([
+    ["fichas-matematica-3-secundaria", 13, "learn"],
+    ["fichas-matematica-4-secundaria", 17, "practice"],
+    ["fichas-matematica-5-secundaria", 21, "assessment"]
+  ])(
+    "clasifica %s página %i solo para preparación editorial",
+    (candidateBookId, page, stage) => {
+      expect(getAuthoringPageActivity(candidateBookId, page)).toMatchObject({
+        stage,
+        tutorAvailable: stage !== "assessment"
+      });
+      expect(getPageActivity(candidateBookId, page)).toMatchObject({
+        stage: "assessment",
+        tutorAvailable: false,
+        unitId: null
       });
     }
   );

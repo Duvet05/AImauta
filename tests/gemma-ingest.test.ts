@@ -252,6 +252,47 @@ describe("proveedor Gemma 4 para ingesta", () => {
     );
   });
 
+  it("rechaza estados de cobertura que contradicen las regiones detectadas", async () => {
+    const candidateOnEmptyPage = validDetection();
+    candidateOnEmptyPage.pagesReviewed[0] = {
+      page: 13,
+      status: "no_exercise"
+    };
+    const firstFetch = vi.fn().mockResolvedValue(
+      providerResponse(
+        "submit_exercise_detection",
+        candidateOnEmptyPage
+      )
+    );
+    await expect(
+      detectExerciseWindowWithGemma({
+        apiKey: "test-api-key",
+        images: [page(13), page(14)],
+        fetchImpl: firstFetch
+      })
+    ).rejects.toSatisfy(
+      (error: unknown) => errorCode(error) === "INVALID_RESPONSE"
+    );
+
+    const exerciseFoundWithoutCandidate = validDetection();
+    exerciseFoundWithoutCandidate.exercises = [];
+    const secondFetch = vi.fn().mockResolvedValue(
+      providerResponse(
+        "submit_exercise_detection",
+        exerciseFoundWithoutCandidate
+      )
+    );
+    await expect(
+      detectExerciseWindowWithGemma({
+        apiKey: "test-api-key",
+        images: [page(13), page(14)],
+        fetchImpl: secondFetch
+      })
+    ).rejects.toSatisfy(
+      (error: unknown) => errorCode(error) === "INVALID_RESPONSE"
+    );
+  });
+
   it("ignora texto pero rechaza una función ausente o distinta", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       new Response(

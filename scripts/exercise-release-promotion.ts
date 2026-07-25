@@ -11,10 +11,13 @@ import {
 import { createHash, randomBytes } from "node:crypto";
 import path from "node:path";
 
-import { getBook, type Book } from "@/lib/catalog";
 import {
+  getAuthoringCatalogEntry,
+  type AuthoringCatalogEntry,
+} from "@/lib/catalog";
+import {
+  getAuthoringPageActivity,
   getBookCurriculum,
-  getPageActivity,
   type LearningStage,
 } from "@/lib/curriculum";
 import {
@@ -70,6 +73,12 @@ export type ValidatedExerciseRelease = {
   privateBytes: Buffer;
 };
 
+export type ValidatedExerciseIngestionReport = {
+  bytes: Buffer;
+  pageCount: number;
+  reviewedPages: number;
+};
+
 export type ExerciseReleasePromotionInput = {
   jobId: string;
   bookId: string;
@@ -101,7 +110,7 @@ export type ExerciseReleasePromotionResult = {
 
 export type RuntimeBookArtifactVerificationInput = {
   runtimeRoot: string;
-  book: Book;
+  book: AuthoringCatalogEntry;
   expectedUid: number;
 };
 
@@ -154,7 +163,7 @@ function sameStringRecord(
 
 function validateRuntimeBookIndex(
   value: unknown,
-  book: Book,
+  book: AuthoringCatalogEntry,
 ): number {
   if (!isRecord(value)) {
     artifactFailure("el índice RAG no es un objeto JSON");
@@ -252,7 +261,7 @@ function validateRuntimeBookIndex(
       artifactFailure("un fragmento del índice RAG es inválido");
     }
 
-    const activity = getPageActivity(book.id, chunk.page);
+    const activity = getAuthoringPageActivity(book.id, chunk.page);
     if (
       (activity.stage === "assessment" &&
         activity.unitId === null) ||
@@ -376,7 +385,7 @@ export async function verifyRuntimeBookArtifacts(
     readStableOwnedFile(pdfPath, {
       expectedUid: input.expectedUid,
       maximumBytes: input.book.expectedBytes,
-      expectedMode: 0o640,
+      expectedMode: 0o444,
     }),
     readStableOwnedFile(indexPath, {
       expectedUid: input.expectedUid,
@@ -431,6 +440,146 @@ function validationFailure(details: readonly string[]): never {
       .map((entry) => `- ${entry}`)
       .join("\n")}`,
   );
+}
+
+export function validateExerciseIngestionReport(
+  input: unknown,
+  publicManifest: PublicExerciseManifest,
+): ValidatedExerciseIngestionReport {
+  let value = input;
+  if (typeof input === "string") {
+    try {
+      value = JSON.parse(input) as unknown;
+    } catch {
+      validationFailure(["coverage.invalid-json $.coverage"]);
+    }
+  }
+
+  const details: string[] = [];
+  if (!isRecord(value)) {
+    validationFailure(["coverage.invalid-report $"]);
+  }
+  if (value.schemaVersion !== 2) {
+    details.push("coverage.invalid-schema-version $.schemaVersion");
+  }
+  if (value.bookId !== publicManifest.bookId) {
+    details.push("coverage.book-mismatch $.bookId");
+  }
+  if (value.sourceSha256 !== publicManifest.sourceSha256) {
+    details.push("coverage.source-mismatch $.sourceSha256");
+  }
+  if (value.model !== publicManifest.model) {
+    details.push("coverage.model-mismatch $.model");
+  }
+  if (value.generatedAt !== publicManifest.generatedAt) {
+    details.push("coverage.generation-mismatch $.generatedAt");
+  }
+  if (value.exerciseCount !== publicManifest.exercises.length) {
+    details.push("coverage.exercise-count-mismatch $.exerciseCount");
+  }
+  if (value.reviewRequired !== true) {
+    details.push("coverage.review-required $.reviewRequired");
+  }
+  if (!Array.isArray(value.issues)) {
+    details.push("coverage.invalid-issues $.issues");
+  }
+
+  const coverage = value.coverage;
+  if (!isRecord(coverage)) {
+    details.push("coverage.missing $.coverage");
+    validationFailure(details);
+  }
+  if (coverage.pageCount !== publicManifest.pageCount) {
+    details.push("coverage.page-count-mismatch $.coverage.pageCount");
+  }
+
+  const pagesReviewed = coverage.pagesReviewed;
+  const seenPages = new Set<number>();
+  if (
+    !Array.isArray(pagesReviewed) ||
+    pagesReviewed.length !== publicManifest.pageCount
+  ) {
+    details.push("coverage.incomplete $.coverage.pagesReviewed");
+  }
+  if (Array.isArray(pagesReviewed)) {
+    pagesReviewed.forEach((entry, index) => {
+      const entryPath = `$.coverage.pagesReviewed[${index}]`;
+      if (
+        !isRecord(entry) ||
+        !Number.isSafeInteger(entry.page) ||
+        Number(entry.page) < 1 ||
+        Number(entry.page) > publicManifest.pageCount ||
+        (entry.status !== "no_exercise" &&
+          entry.status !== "exercise_found" &&
+          entry.status !== "uncertain") ||
+        !Number.isSafeInteger(entry.candidateCount) ||
+        Number(entry.candidateCount) < 0
+      ) {
+        details.push(`coverage.invalid-page ${entryPath}`);
+        return;
+      }
+
+      const page = Number(entry.page);
+      const candidateCount = Number(entry.candidateCount);
+      if (seenPages.has(page)) {
+        details.push(`coverage.duplicate-page ${entryPath}.page`);
+      }
+      seenPages.add(page);
+      if (page !== index + 1) {
+        details.push(`coverage.noncontiguous ${entryPath}.page`);
+      }
+      if (entry.status === "no_exercise" && candidateCount !== 0) {
+        details.push(
+          `coverage.no-exercise-has-candidates ${entryPath}.candidateCount`,
+        );
+      }
+      if (entry.status === "exercise_found" && candidateCount < 1) {
+        details.push(
+          `coverage.exercise-found-empty ${entryPath}.candidateCount`,
+        );
+      }
+      if (entry.status === "uncertain") {
+        details.push(`coverage.uncertain-page ${entryPath}.status`);
+      }
+    });
+  }
+  for (let page = 1; page <= publicManifest.pageCount; page += 1) {
+    if (!seenPages.has(page)) {
+      details.push(`coverage.missing-page $.coverage.pagesReviewed.${page}`);
+    }
+  }
+
+  const blockers = coverage.blockers;
+  if (!Array.isArray(blockers)) {
+    details.push("coverage.invalid-blockers $.coverage.blockers");
+  } else {
+    blockers.forEach((blocker, index) => {
+      const blockerPath = `$.coverage.blockers[${index}]`;
+      if (
+        !isRecord(blocker) ||
+        typeof blocker.code !== "string" ||
+        blocker.code.length < 1 ||
+        !Number.isSafeInteger(blocker.page) ||
+        Number(blocker.page) < 1 ||
+        Number(blocker.page) > publicManifest.pageCount
+      ) {
+        details.push(`coverage.invalid-blocker ${blockerPath}`);
+        return;
+      }
+      details.push(
+        `coverage.blocker ${blockerPath}:${blocker.code}:page-${blocker.page}`,
+      );
+    });
+  }
+
+  if (details.length > 0) {
+    validationFailure(details);
+  }
+  return {
+    bytes: canonicalBytes(value),
+    pageCount: publicManifest.pageCount,
+    reviewedPages: seenPages.size,
+  };
 }
 
 export function validateReviewedExerciseRelease(
@@ -788,10 +937,10 @@ export async function promoteExerciseRelease(
   await assertOwnedDirectory(contentDirectory, expectedUid, 0o750);
   await assertOwnedDirectory(indexesDirectory, expectedUid, 0o750);
 
-  const book = getBook(input.bookId);
+  const book = getAuthoringCatalogEntry(input.bookId);
   if (!book) {
     throw new ExerciseReleasePromotionError(
-      "El libro no está publicado o no admite tutor/RAG.",
+      "El libro no admite preparación editorial o está deshabilitado.",
     );
   }
 
@@ -803,23 +952,50 @@ export async function promoteExerciseRelease(
     jobDirectory,
     path.join(jobDirectory, `${input.bookId}.private.reviewed.json`),
   );
-  const [reviewedPublic, reviewedPrivate] = await Promise.all([
-    readStableOwnedFile(reviewedPublicPath, {
-      expectedUid,
-      maximumBytes: MAX_MANIFEST_BYTES,
-      expectedMode: 0o600,
-    }),
-    readStableOwnedFile(reviewedPrivatePath, {
-      expectedUid,
-      maximumBytes: MAX_MANIFEST_BYTES,
-      expectedMode: 0o600,
-    }),
-  ]);
+  const ingestionReportPath = directChildPath(
+    jobDirectory,
+    path.join(jobDirectory, `${input.bookId}.ingestion-report.json`),
+  );
+  let reviewedPublic: Buffer;
+  let reviewedPrivate: Buffer;
+  let ingestionReport: Buffer;
+  try {
+    [reviewedPublic, reviewedPrivate, ingestionReport] = await Promise.all([
+      readStableOwnedFile(reviewedPublicPath, {
+        expectedUid,
+        maximumBytes: MAX_MANIFEST_BYTES,
+        expectedMode: 0o600,
+      }),
+      readStableOwnedFile(reviewedPrivatePath, {
+        expectedUid,
+        maximumBytes: MAX_MANIFEST_BYTES,
+        expectedMode: 0o600,
+      }),
+      readStableOwnedFile(ingestionReportPath, {
+        expectedUid,
+        maximumBytes: MAX_MANIFEST_BYTES,
+        expectedMode: 0o600,
+      }),
+    ]);
+  } catch {
+    throw new ExerciseReleasePromotionError(
+      "El job no contiene manifests revisados y reporte de cobertura seguros.",
+    );
+  }
   const validated = validateReviewedExerciseRelease(
     reviewedPublic.toString("utf8"),
     reviewedPrivate.toString("utf8"),
     input.bookId,
   );
+  const validatedCoverage = validateExerciseIngestionReport(
+    ingestionReport.toString("utf8"),
+    validated.publicManifest,
+  );
+  const coverageReportMetadata = {
+    sha256: sha256(validatedCoverage.bytes),
+    pageCount: validatedCoverage.pageCount,
+    reviewedPages: validatedCoverage.reviewedPages,
+  };
 
   const releaseId =
     input.releaseId ?? generatedReleaseId((input.now ?? (() => new Date()))());
@@ -831,6 +1007,7 @@ export async function promoteExerciseRelease(
 
   const publicName = `${input.bookId}.public.json`;
   const privateName = `${input.bookId}.private.json`;
+  const coverageName = `${input.bookId}.ingestion-report.json`;
   const publicDestination = directChildPath(
     publicDirectory,
     path.join(publicDirectory, publicName),
@@ -895,6 +1072,11 @@ export async function promoteExerciseRelease(
       privateName,
       validated.privateBytes,
     );
+    await writeSnapshotFile(
+      snapshot.next,
+      coverageName,
+      validatedCoverage.bytes,
+    );
     if (previousPublic && previousPrivate) {
       await writeSnapshotFile(
         snapshot.previous,
@@ -920,6 +1102,7 @@ export async function promoteExerciseRelease(
         status: "prepared",
         hadPrevious: Boolean(previousPublic),
         runtimeArtifacts,
+        coverageReport: coverageReportMetadata,
       },
       releaseId,
     );
@@ -961,6 +1144,7 @@ export async function promoteExerciseRelease(
         status: "published",
         hadPrevious: Boolean(previousPublic),
         runtimeArtifacts,
+        coverageReport: coverageReportMetadata,
       },
       `${releaseId}-published`,
     );

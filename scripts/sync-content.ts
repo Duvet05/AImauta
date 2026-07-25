@@ -10,8 +10,8 @@ import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
 
 import {
-  type Book,
-  getBook,
+  type AuthoringCatalogEntry,
+  getAuthoringCatalogEntry,
   getBooks,
   isAllowedOfficialSource
 } from "../lib/catalog";
@@ -37,7 +37,9 @@ const manifestDir =
   path.join(contentDir, ".manifests");
 const downloadTimeoutMs = 120_000;
 
-function assertPinnedBook(book: Book): asserts book is Book & {
+function assertPinnedBook(
+  book: AuthoringCatalogEntry
+): asserts book is AuthoringCatalogEntry & {
   expectedBytes: number;
   expectedSha256: string;
 } {
@@ -60,7 +62,10 @@ async function sha256(filePath: string): Promise<string> {
   return hash.digest("hex");
 }
 
-async function assertPdf(filePath: string, book: Book): Promise<number> {
+async function assertPdf(
+  filePath: string,
+  book: AuthoringCatalogEntry
+): Promise<number> {
   const handle = await fs.open(filePath, "r");
   const signature = Buffer.alloc(5);
   try {
@@ -82,7 +87,10 @@ async function assertPdf(filePath: string, book: Book): Promise<number> {
   return size;
 }
 
-async function syncBook(book: Book, force: boolean): Promise<ContentRecord> {
+async function syncBook(
+  book: AuthoringCatalogEntry,
+  force: boolean
+): Promise<ContentRecord> {
   assertPinnedBook(book);
   const source = new URL(book.sourcePdfUrl);
   if (!isAllowedOfficialSource(source)) {
@@ -264,16 +272,18 @@ async function writeManifest(records: readonly ContentRecord[]): Promise<void> {
   }
 }
 
-function selectedBooks(): readonly Book[] {
+function selectedBooks(): readonly AuthoringCatalogEntry[] {
   const bookFlagIndex = process.argv.indexOf("--book");
   if (bookFlagIndex === -1) {
     return getBooks();
   }
 
   const id = process.argv[bookFlagIndex + 1];
-  const book = id ? getBook(id) : undefined;
+  const book = id ? getAuthoringCatalogEntry(id) : undefined;
   if (!book) {
-    throw new Error(`Libro desconocido: ${id ?? "(vacío)"}`);
+    throw new Error(
+      `Libro desconocido, no tutorable o deshabilitado: ${id ?? "(vacío)"}`
+    );
   }
   return [book];
 }

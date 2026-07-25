@@ -26,6 +26,27 @@ const allowedStages = new Set<LearningStage>([
   "practice",
   "assessment"
 ]);
+const exerciseAnchorStopWords = new Set([
+  "como",
+  "con",
+  "del",
+  "desde",
+  "ejercicio",
+  "esta",
+  "este",
+  "estos",
+  "estas",
+  "las",
+  "los",
+  "para",
+  "por",
+  "problema",
+  "que",
+  "una",
+  "uno",
+  "unos",
+  "unas"
+]);
 const sha256Pattern = /^[a-f0-9]{64}$/;
 
 export type IndexedChunk = {
@@ -114,32 +135,61 @@ function tokens(value: string): Set<string> {
   );
 }
 
+function exerciseAnchorTokens(value: string): Set<string> {
+  return new Set(
+    [...tokens(value)].filter(
+      (token) => !exerciseAnchorStopWords.has(token)
+    )
+  );
+}
+
+function lexicalMatchCount(
+  queryTokens: ReadonlySet<string>,
+  text: string
+): number {
+  const chunkTokens = tokens(text);
+  let matches = 0;
+  for (const token of queryTokens) {
+    if (chunkTokens.has(token)) {
+      matches += 1;
+    }
+  }
+  return matches;
+}
+
 export function rankChunks(input: {
   chunks: readonly IndexedChunk[];
   query: string;
   page: number;
+  focusPages?: readonly number[];
   limit?: number;
 }): Evidence[] {
   const queryTokens = tokens(input.query);
   const limit = Math.max(1, Math.min(input.limit ?? 3, 5));
+  const focusPages =
+    input.focusPages && input.focusPages.length > 0
+      ? input.focusPages
+      : [input.page];
 
   return input.chunks
-    .filter(
-      (chunk) =>
+    .filter((chunk) => {
+      const distance = Math.min(
+        ...focusPages.map((page) => Math.abs(chunk.page - page))
+      );
+      return (
         !chunk.teacherOnly &&
         chunk.stage !== "assessment" &&
-        Math.abs(chunk.page - input.page) <= 2
-    )
+        distance <= 2
+      );
+    })
     .map((chunk) => {
-      const chunkTokens = tokens(chunk.text);
-      let lexicalMatches = 0;
-      for (const token of queryTokens) {
-        if (chunkTokens.has(token)) {
-          lexicalMatches += 1;
-        }
-      }
-
-      const distance = Math.abs(chunk.page - input.page);
+      const lexicalMatches = lexicalMatchCount(
+        queryTokens,
+        chunk.text
+      );
+      const distance = Math.min(
+        ...focusPages.map((page) => Math.abs(chunk.page - page))
+      );
       const pageScore =
         distance === 0 ? 5 : distance === 1 ? 2.5 : distance === 2 ? 1 : 0;
       const lexicalScore =
@@ -166,46 +216,71 @@ export function rankChunks(input: {
 }
 
 /**
- * Builds retrieval evidence only from the exact, revisioned exercise selected
- * by the student. Page-level book chunks cannot safely distinguish two
- * exercises that share a PDF page, so the exercise tutor never uses them as a
- * substitute for this binding.
+ * Retrieves validated index chunks for the exact, revisioned exercise selected
+ * by the student. The current index has page-level chunks, so a public exercise
+ * anchor is required in addition to the page and curriculum binding. Ambiguous
+ * or unanchored chunks fail closed instead of becoming tutor context.
  */
-export function retrieveExerciseEvidence(
-  exercise: PublicExercise
-): Evidence[] {
+export async function retrieveExerciseEvidence(input: {
+  bookId: string;
+  exercise: PublicExercise;
+  question: string;
+  attempt: string;
+  page: number;
+}): Promise<Evidence[]> {
+  const { exercise } = input;
   const pages = [
     ...new Set(exercise.regions.map((region) => region.page))
   ].sort((left, right) => left - right);
+  const anchor = [exercise.title.trim(), exercise.prompt.trim()]
+    .filter(Boolean)
+    .join("\n");
   if (
+    exercise.status !== "published" ||
     !exercise.id ||
-    !exercise.prompt.trim() ||
+    exerciseAnchorTokens(anchor).size < 3 ||
     pages.length === 0 ||
+    !pages.includes(input.page) ||
     (exercise.stage !== "learn" && exercise.stage !== "practice")
   ) {
     return [];
   }
 
-  const sourceText = [
-    exercise.label.trim(),
-    exercise.title.trim(),
-    exercise.prompt.trim()
-  ]
-    .filter(Boolean)
-    .join("\n");
+  if (
+    pages.some((page) => {
+      const activity = getPageActivity(input.bookId, page);
+      return (
+        !activity.tutorAvailable ||
+        activity.stage !== exercise.stage ||
+        activity.unitId !== exercise.unitId
+      );
+    })
+  ) {
+    return [];
+  }
 
-  return pages.map((page, index) => ({
-    id: `${exercise.id}:r${exercise.revision}:p${page}`,
-    exerciseId: exercise.id,
-    page,
-    text: sourceText,
-    kind: "exercise",
-    teacherOnly: false,
-    stage: exercise.stage,
-    unitId: exercise.unitId,
-    score: pages.length - index,
-    sourceId: `S${index + 1}`
-  }));
+  const evidence = await retrieveEvidence({
+    bookId: input.bookId,
+    question: [anchor, input.question.trim()].filter(Boolean).join("\n"),
+    attempt: input.attempt,
+    page: input.page,
+    allowedPages: pages,
+    requiredAnchor: anchor
+  });
+
+  return evidence
+    .filter(
+      (item) =>
+        !item.teacherOnly &&
+        item.stage === exercise.stage &&
+        item.unitId === exercise.unitId &&
+        pages.includes(item.page)
+    )
+    .map((item, index) => ({
+      ...item,
+      exerciseId: exercise.id,
+      sourceId: `S${index + 1}`
+    }));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -525,6 +600,7 @@ export async function retrieveEvidence(input: {
   attempt: string;
   page: number;
   allowedPages?: readonly number[];
+  requiredAnchor?: string;
 }): Promise<Evidence[]> {
   if (path.basename(input.bookId) !== input.bookId) {
     return [];
@@ -565,6 +641,23 @@ export async function retrieveEvidence(input: {
   ) {
     return [];
   }
+  const requiredAnchorTokens =
+    input.requiredAnchor === undefined
+      ? null
+      : exerciseAnchorTokens(input.requiredAnchor);
+  if (
+    requiredAnchorTokens !== null &&
+    requiredAnchorTokens.size < 3
+  ) {
+    return [];
+  }
+  const minimumAnchorMatches =
+    requiredAnchorTokens === null
+      ? 0
+      : Math.min(
+          8,
+          Math.max(3, Math.ceil(requiredAnchorTokens.size * 0.6))
+        );
 
   const indexDir =
     process.env.AIMAUTA_INDEX_DIR ??
@@ -583,10 +676,15 @@ export async function retrieveEvidence(input: {
       chunks: index.chunks.filter(
         (chunk) =>
           chunk.unitId === activity.unitId &&
-          (allowedPages === null || allowedPages.has(chunk.page))
+          (allowedPages === null || allowedPages.has(chunk.page)) &&
+          (requiredAnchorTokens === null ||
+            lexicalMatchCount(requiredAnchorTokens, chunk.text) >=
+              minimumAnchorMatches)
       ),
       query,
-      page: input.page
+      page: input.page,
+      focusPages:
+        allowedPages === null ? undefined : [...allowedPages]
     });
   } catch (error) {
     if (

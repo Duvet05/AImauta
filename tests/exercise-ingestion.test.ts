@@ -111,9 +111,9 @@ function denseDetection(
   count: number
 ): ExerciseDetectionResult {
   return {
-    pagesReviewed: pages.map((page) => ({
+    pagesReviewed: pages.map((page, index) => ({
       page,
-      status: "exercise_found"
+      status: index === 0 ? "exercise_found" : "no_exercise"
     })),
     exercises: Array.from({ length: count }, (_, offset) => {
       const index = firstIndex + offset;
@@ -273,6 +273,17 @@ describe("coordinador privado de ingesta", () => {
     expect(solve).toHaveBeenCalledTimes(1);
 
     expect(result.publicManifest.exercises).toHaveLength(1);
+    expect(result.coverage).toEqual({
+      pageCount: 5,
+      pagesReviewed: [
+        { page: 1, status: "no_exercise", candidateCount: 0 },
+        { page: 2, status: "exercise_found", candidateCount: 1 },
+        { page: 3, status: "exercise_found", candidateCount: 1 },
+        { page: 4, status: "exercise_found", candidateCount: 1 },
+        { page: 5, status: "no_exercise", candidateCount: 0 }
+      ],
+      blockers: []
+    });
     const exercise = result.publicManifest.exercises[0]!;
     expect(exercise).toMatchObject({
       status: "draft",
@@ -337,6 +348,10 @@ describe("coordinador privado de ingesta", () => {
       first.exercises = reverse
         ? [first.exercises[0]!, extra]
         : [extra, first.exercises[0]!];
+      first.pagesReviewed[0] = {
+        page: 1,
+        status: "exercise_found"
+      };
       const detect = vi
         .fn()
         .mockResolvedValueOnce(first)
@@ -697,5 +712,96 @@ describe("coordinador privado de ingesta", () => {
       })
     ).rejects.toMatchObject({ code: "INVALID_DETECTION" });
     expect(fixture.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("rechaza estados de página que contradicen los candidatos detectados", async () => {
+    const fixture = rendererFixture();
+    const candidateOnNoExercisePage = firstWindowDetection();
+    candidateOnNoExercisePage.pagesReviewed[1] = {
+      page: 2,
+      status: "no_exercise"
+    };
+
+    await expect(
+      ingestExercisesFromPdf({
+        catalogEntry,
+        pdfPath: "/private/book-one.pdf",
+        model: "gemma-4-26b-a4b-it",
+        detect: vi.fn().mockResolvedValue(candidateOnNoExercisePage),
+        solve: vi.fn(),
+        pageActivity: (_bookId, page) => activity(page),
+        openRenderer: vi.fn().mockResolvedValue(fixture.renderer)
+      })
+    ).rejects.toMatchObject({ code: "INVALID_DETECTION" });
+
+    const secondFixture = rendererFixture();
+    const exerciseFoundWithoutCandidate = emptyDetection([1, 2, 3]);
+    exerciseFoundWithoutCandidate.pagesReviewed[0] = {
+      page: 1,
+      status: "exercise_found"
+    };
+    await expect(
+      ingestExercisesFromPdf({
+        catalogEntry,
+        pdfPath: "/private/book-one.pdf",
+        model: "gemma-4-26b-a4b-it",
+        detect: vi.fn().mockResolvedValue(exerciseFoundWithoutCandidate),
+        solve: vi.fn(),
+        pageActivity: (_bookId, page) => activity(page),
+        openRenderer: vi.fn().mockResolvedValue(secondFixture.renderer)
+      })
+    ).rejects.toMatchObject({ code: "INVALID_DETECTION" });
+  });
+
+  it("consolida el solape en una página única y bloquea incertidumbre o conflicto", async () => {
+    const uncertainFixture = rendererFixture();
+    const uncertain = emptyDetection([1, 2, 3]);
+    uncertain.pagesReviewed[1] = { page: 2, status: "uncertain" };
+    const uncertainResult = await ingestExercisesFromPdf({
+      catalogEntry,
+      pdfPath: "/private/book-one.pdf",
+      model: "gemma-4-26b-a4b-it",
+      detect: vi
+        .fn()
+        .mockResolvedValueOnce(uncertain)
+        .mockResolvedValueOnce(emptyDetection([3, 4, 5])),
+      solve: vi.fn(),
+      pageActivity: (_bookId, page) => activity(page),
+      openRenderer: vi.fn().mockResolvedValue(uncertainFixture.renderer)
+    });
+    expect(uncertainResult.coverage.pagesReviewed).toHaveLength(5);
+    expect(uncertainResult.coverage.pagesReviewed[1]).toEqual({
+      page: 2,
+      status: "uncertain",
+      candidateCount: 0
+    });
+    expect(uncertainResult.coverage.blockers).toEqual([
+      { code: "page-uncertain", page: 2 }
+    ]);
+
+    const conflictFixture = rendererFixture();
+    const first = emptyDetection([1, 2, 3]);
+    const second = emptyDetection([3, 4, 5]);
+    second.pagesReviewed[0] = { page: 3, status: "uncertain" };
+    const conflictResult = await ingestExercisesFromPdf({
+      catalogEntry,
+      pdfPath: "/private/book-one.pdf",
+      model: "gemma-4-26b-a4b-it",
+      detect: vi
+        .fn()
+        .mockResolvedValueOnce(first)
+        .mockResolvedValueOnce(second),
+      solve: vi.fn(),
+      pageActivity: (_bookId, page) => activity(page),
+      openRenderer: vi.fn().mockResolvedValue(conflictFixture.renderer)
+    });
+    expect(conflictResult.coverage.pagesReviewed[2]).toEqual({
+      page: 3,
+      status: "uncertain",
+      candidateCount: 0
+    });
+    expect(conflictResult.coverage.blockers).toEqual([
+      { code: "page-status-conflict", page: 3 }
+    ]);
   });
 });
