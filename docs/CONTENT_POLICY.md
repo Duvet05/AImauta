@@ -205,7 +205,8 @@ AImauta está dirigido a menores de edad y aplica minimización de datos:
   autorizado.
 
 Estas medidas no eliminan el tratamiento necesario para la voz: LiveKit Cloud
-procesa el transporte y LiveKit Inference usa Deepgram para STT/TTS. La
+procesa el transporte y LiveKit Inference usa Deepgram para STT e Inworld para
+TTS. La
 inferencia aplica retención cero por defecto, pero antes de habilitar el canal
 para menores se deben documentar consentimiento aplicable, acuerdos de
 tratamiento, ubicación y subencargados, retención, eliminación y mecanismo para
