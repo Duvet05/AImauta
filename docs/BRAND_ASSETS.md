@@ -1,12 +1,12 @@
 # Sistema visual de AImauta
 
-Los assets de `public/brand` derivan de la ilustración editorial `amauta.jpg`
-entregada para este proyecto. La interfaz combina dos lenguajes:
+Los assets de marca viven en `public/brand` y las ilustraciones del personaje
+en `public/svg`. La interfaz combina dos lenguajes:
 
 - **Vector funcional:** marcas e iconos SVG con pocos trazos y sin raster
   embebido.
-- **Grabado editorial:** WebP con textura para el hero y estados expresivos del
-  personaje.
+- **Ilustración editorial:** SVG del Amauta y del quipu para el hero y los
+  estados expresivos del personaje.
 
 ## Paleta
 
@@ -30,18 +30,18 @@ ejercicios detectados.
 | `amauta-mark-mono.svg` | impresión o contextos de una tinta |
 | `amauta-pattern.svg` | textura geométrica sutil |
 | `amauta-divider.svg` | separadores editoriales |
-| `amauta-editorial.webp` | hero y piezas de archivo |
 | `paper-texture.webp` | textura de fondo con opacidad baja |
-| `characters/amauta-points.webp` | señalar una pista o ejercicio |
-| `characters/amauta-thinks.webp` | espera o razonamiento del estudiante |
-| `characters/amauta-hint.webp` | entrega de una pista |
-| `characters/amauta-celebrates.webp` | confirmación positiva |
+| `../svg/quipu.svg` | adorno editorial de gran formato |
+| `../svg/amauta-points.svg` | señalar una pista o ejercicio |
+| `../svg/amauta-thinks.svg` | espera o razonamiento del estudiante |
+| `../svg/amauta-hint.svg` | entrega de una pista |
+| `../svg/amauta-celebrates.svg` | confirmación positiva |
 
 ## Reglas de uso
 
 - No usar el SVG detallado por debajo de 64 px; usar `amauta-icon.svg`.
 - Mantener margen libre equivalente al ancho de un ojo alrededor de la marca.
-- Las poses WebP son decorativas salvo que comuniquen un estado no expresado
+- Las poses SVG son decorativas salvo que comuniquen un estado no expresado
   por texto. En ese caso deben recibir una descripción accesible.
 - No animar continuamente el personaje. Respetar
   `prefers-reduced-motion`.
@@ -50,5 +50,4 @@ ejercicios detectados.
 ## Procedencia
 
 Antes de un despliegue público definitivo debe documentarse la procedencia y
-licencia de la ilustración fuente. Esta revisión no debe inferirse únicamente
-por la antigüedad aparente del material.
+licencia de las ilustraciones fuente.

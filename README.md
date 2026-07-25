@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="public/brand/amauta-editorial.webp" alt="Amauta, el tutor de AImauta — grabado andino en coral y tinta" width="200" />
+<img src="public/svg/amauta-thinks.svg" alt="Amauta, el tutor de AImauta, pensando" width="200" />
 
 # AImauta
 
@@ -52,7 +52,7 @@ Ayudar a que **cada estudiante tenga acceso a acompañamiento educativo** cuando
 <table>
 <tr>
 <td width="140" align="center" valign="top">
-<img src="public/brand/characters/amauta-points.webp" alt="Amauta señalando una pista" width="120" />
+<img src="public/svg/amauta-points.svg" alt="Amauta señalando una pista" width="120" />
 </td>
 <td valign="middle">
 
@@ -77,10 +77,10 @@ El acompañamiento sigue el ritmo natural del estudiante:
 
 <table align="center">
 <tr>
-<td align="center" width="25%"><img src="public/brand/characters/amauta-thinks.webp" width="90" alt="Amauta pensando" /><br /><b>1. Intenta</b><br /><sub>Abre la ficha y explica su razonamiento</sub></td>
-<td align="center" width="25%"><img src="public/brand/characters/amauta-points.webp" width="90" alt="Amauta señalando" /><br /><b>2. Consulta</b><br /><sub>El tutor recupera evidencia de la página exacta</sub></td>
-<td align="center" width="25%"><img src="public/brand/characters/amauta-hint.webp" width="90" alt="Amauta dando una pista" /><br /><b>3. Recibe pista</b><br /><sub>Una pregunta o pista breve, con su fuente</sub></td>
-<td align="center" width="25%"><img src="public/brand/characters/amauta-celebrates.webp" width="90" alt="Amauta celebrando" /><br /><b>4. Resuelve</b><br /><sub>Llega a la respuesta por sí mismo</sub></td>
+<td align="center" width="25%"><img src="public/svg/amauta-thinks.svg" width="90" alt="Amauta pensando" /><br /><b>1. Intenta</b><br /><sub>Abre la ficha y explica su razonamiento</sub></td>
+<td align="center" width="25%"><img src="public/svg/amauta-points.svg" width="90" alt="Amauta señalando" /><br /><b>2. Consulta</b><br /><sub>El tutor recupera evidencia de la página exacta</sub></td>
+<td align="center" width="25%"><img src="public/svg/amauta-hint.svg" width="90" alt="Amauta dando una pista" /><br /><b>3. Recibe pista</b><br /><sub>Una pregunta o pista breve, con su fuente</sub></td>
+<td align="center" width="25%"><img src="public/svg/amauta-celebrates.svg" width="90" alt="Amauta celebrando" /><br /><b>4. Resuelve</b><br /><sub>Llega a la respuesta por sí mismo</sub></td>
 </tr>
 </table>
 

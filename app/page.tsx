@@ -8,23 +8,27 @@ import { getBooks } from "@/lib/catalog";
 const learningJourney = [
   {
     title: "Intenta",
-    description: "Abre la ficha y explica su razonamiento.",
-    image: "/brand/characters/amauta-thinks.webp",
+    description:
+      "Abre la ficha y explica qué entendiste o dónde te trabaste.",
+    image: "/svg/amauta-thinks.svg",
   },
   {
     title: "Consulta",
-    description: "El tutor recupera evidencia de la página exacta.",
-    image: "/brand/characters/amauta-points.webp",
+    description:
+      "AImauta recupera evidencia de la página exacta del cuaderno.",
+    image: "/svg/amauta-points.svg",
   },
   {
-    title: "Recibe pista",
-    description: "Una pregunta o pista breve, con su fuente.",
-    image: "/brand/characters/amauta-hint.webp",
+    title: "Recibe una pista",
+    description:
+      "Obtienes una pregunta breve y gradual, siempre con su fuente.",
+    image: "/svg/amauta-hint.svg",
   },
   {
     title: "Resuelve",
-    description: "Llega a la respuesta por sí mismo.",
-    image: "/brand/characters/amauta-celebrates.webp",
+    description:
+      "Vuelves al ejercicio y llegas a la respuesta por tu cuenta.",
+    image: "/svg/amauta-celebrates.svg",
   },
 ] as const;
 
@@ -34,6 +38,16 @@ export default async function CatalogPage() {
   return (
     <main id="contenido-principal">
       <section className="catalog-hero">
+        <div className="hero-quipu" aria-hidden="true">
+          <Image
+            src="/svg/quipu.svg"
+            alt=""
+            fill
+            sizes="(max-width: 680px) 250px, 30vw"
+            unoptimized
+          />
+        </div>
+
         <nav className="topbar shell" aria-label="Navegación principal">
           <Link className="brand" href="/" aria-label="AImauta, inicio">
             <BrandMark />
@@ -70,7 +84,7 @@ export default async function CatalogPage() {
           <div className="hero-demo" aria-label="Ejemplo de una pista con fuente">
             <div className="hero-editorial-figure" aria-hidden="true">
               <Image
-                src="/brand/amauta-editorial.webp"
+                src="/svg/amauta-thinks.svg"
                 alt=""
                 fill
                 priority
@@ -103,7 +117,7 @@ export default async function CatalogPage() {
             </div>
             <div className="hero-amauta-guide" aria-hidden="true">
               <Image
-                src="/brand/characters/amauta-points.webp"
+                src="/svg/amauta-points.svg"
                 alt=""
                 fill
                 sizes="(max-width: 980px) 0px, 220px"
@@ -170,7 +184,7 @@ export default async function CatalogPage() {
             </p>
           </div>
 
-          <ol className="learning-journey-list" role="list">
+          <ol className="learning-journey-list">
             {learningJourney.map((step, index) => (
               <li className="learning-step" key={step.title}>
                 <article className="learning-step-card">
@@ -182,7 +196,8 @@ export default async function CatalogPage() {
                       src={step.image}
                       alt=""
                       fill
-                      sizes="(max-width: 680px) 112px, (max-width: 980px) 42vw, 250px"
+                      sizes="(max-width: 680px) 112px, (max-width: 1100px) 42vw, 250px"
+                      unoptimized
                     />
                   </div>
                   <div className="learning-step-copy">
@@ -234,8 +249,8 @@ export default async function CatalogPage() {
           <article>
             <h3>Genera evidencia útil</h3>
             <p>
-              Registra intentos, pistas usadas y autonomía alcanzada: no solo
-              si la respuesta fue correcta.
+              Registra intentos, pistas usadas y avance por objetivo: no solo
+              si la actividad fue completada.
             </p>
           </article>
         </div>
