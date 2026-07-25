@@ -7,6 +7,8 @@ import { RateLimitError } from "@/lib/rate-limit";
 import { ExerciseSolutionUnavailableError } from "@/lib/exercise-solution-store";
 import { ExerciseManifestUnavailableError } from "@/lib/exercise-store";
 import { guideLearningTurn } from "@/lib/tutor-service";
+import { ApiError } from "@/lib/http";
+import { DatabaseUnavailableError } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,6 +64,12 @@ export async function POST(request: Request): Promise<Response> {
   } catch (error) {
     if (error instanceof LearningSessionError) {
       return json({ error: error.message }, learningSessionErrorStatus(error));
+    }
+    if (error instanceof ApiError) {
+      return json({ error: error.message }, error.status);
+    }
+    if (error instanceof DatabaseUnavailableError) {
+      return json({ error: error.message }, 503);
     }
     if (error instanceof RateLimitError) {
       return json(

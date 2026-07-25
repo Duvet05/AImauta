@@ -149,11 +149,11 @@ página de evaluación no acredita por sí mismo que la ficha fue completada.
 ## Sesiones anónimas controladas por el servidor
 
 Una sesión no identifica a una persona y no toca la base de datos. Su estado se
-serializa en un token versionado firmado con **HMAC-SHA-256** usando
+serializa en un token versionado (esquema v5) firmado con **HMAC-SHA-256** usando
 `AIMAUTA_SESSION_SECRET` (`lib/learning-session.ts`), con vigencia de dos horas.
 El token lleva: UUID de sesión, libro, página, ficha y etapa; conteo de intentos
 distintos y turnos; nivel de pista (0–3); revisión monotónica; instantes de
-creación/expiración; y un resumen HMAC del último intento (nunca el texto).
+creación/expiración; y hasta doce resúmenes HMAC de intentos sustantivos (nunca el texto).
 
 En cada verificación el servidor comprueba estructura, firma, versión y
 expiración; valida libro y límites de página contra el catálogo; recalcula ficha
@@ -165,7 +165,9 @@ El estado vigente se mantiene en un **registro efímero en memoria**: cada
 mutación consume la revisión actual y emite la siguiente, serializando cambios
 de página y turnos concurrentes (máx. 40 turnos/sesión). Es **single-instance**
 por diseño: al reiniciar el proceso se pierde el registro y varias réplicas no
-coordinan revisiones sin un almacén compartido. No hay progreso durable todavía.
+coordinan revisiones sin un almacén compartido. El aprendizaje anónimo no tiene
+progreso durable; las **tareas QR** (ver abajo) sí conservan estado y agregados
+anónimos en PostgreSQL.
 
 ### Límites de admisión
 
@@ -177,12 +179,55 @@ Ventanas en memoria (`lib/rate-limit.ts`) antes de trabajo costoso:
 | accesos de `/api/livekit/token` | sesión | 6/min |
 | navegación de `/api/session` | sesión | 60/min |
 | sesiones nuevas de `/api/session` | fingerprint del cliente | 12/min |
+| apertura de enlace QR | fingerprint + tarea | 120/min |
+| ejecuciones QR nuevas | fingerprint + tarea | 60/min |
+| reanudación QR | token de ejecución | 120/min |
+| sesión/finalización de objetivo QR | token de ejecución | 30/min |
 
 El fingerprint usa la dirección aportada por un proxy confiable.
 `AIMAUTA_TRUST_PROXY_HEADERS=true` solo es seguro tras un proxy que elimine
 `CF-Connecting-IP`/`X-Real-IP`/`X-Forwarded-For` del cliente y escriba su valor
 canónico. Sin esa integración todas las altas comparten un bucket conservador.
 Estos límites son single-instance; no sustituyen el control en el borde.
+
+## Tareas QR durables y anónimas
+
+Un docente puede empaquetar contenido en una **tarea** compartible por QR o
+enlace, que el estudiante abre sin cuenta. Contratos:
+
+| Ruta | Consumidor | Responsabilidad |
+| --- | --- | --- |
+| `POST /api/assignments` | integración docente | crear una tarea con snapshot del contenido |
+| `GET /api/assignments/:id/qr` | integración docente | descargar el QR (SVG, PNG o PDF) |
+| `POST /api/assignments/public/:token/runs` | navegador | iniciar una ejecución anónima |
+| `POST /api/assignment-runs/current/items/:id/session` | navegador | abrir una sesión limitada al objetivo |
+| `POST /api/assignment-runs/current/items/:id/complete` | navegador | finalizar un objetivo y emitir comprobante |
+
+`Assignment` fija docente, curso o etiqueta de grupo, disponibilidad,
+vencimiento, nivel máximo de ayuda y criterio de finalización. Sus
+`AssignmentItem` son **snapshots inmutables** de una ficha, página o ejercicio
+(checksum del PDF, versión curricular, revisión del ejercicio); una incoherencia
+posterior con el contenido publicado invalida el acceso de forma cerrada.
+
+El QR lleva un token público aleatorio de **256 bits**. PostgreSQL guarda su
+hash para resolverlo y una copia AES-256-GCM para re-renderizarlo desde una ruta
+administrativa. Crear una ejecución emite otro token aleatorio que el navegador
+presenta por **Bearer, nunca por URL**. Las ejecuciones y sus objetivos no
+contienen identidad del estudiante.
+
+Al emitir una sesión pedagógica desde una tarea, el payload HMAC incorpora ID de
+tarea/ejecución/objetivo, el conjunto exacto de páginas permitidas, el ejercicio
+y revisión (si el docente fijó uno) y el nivel máximo de ayuda (0–3).
+`moveLearningSession` reverifica esas restricciones en cada navegación.
+`tutor-service` escribe tras cada turno **solo** conteos y pista máxima en
+`AssignmentItemProgress`; el intento y la conversación siguen siendo efímeros.
+Completar los objetivos requeridos emite un tercer token opaco para un
+comprobante anónimo.
+
+Las rutas de gestión exigen, de forma interina,
+`AIMAUTA_ASSIGNMENT_ADMIN_SECRET` (credencial de integración server-to-server,
+no autenticación personal de docentes). El contrato y los límites del piloto se
+detallan en [`QR_ASSIGNMENTS.md`](QR_ASSIGNMENTS.md).
 
 ## Un solo tutor para texto y voz
 

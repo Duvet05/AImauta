@@ -28,7 +28,10 @@ El estudiante abre una ficha, intenta resolver un ejercicio y explica qué ha co
 
 Los docentes pueden seleccionar ejercicios, crear tareas y compartirlas mediante enlaces o códigos QR. Los estudiantes acceden desde cualquier navegador, **sin instalar ninguna aplicación**, y desarrollan la actividad con el acompañamiento de un tutor virtual.
 
-AImauta registra el progreso, los intentos, las pistas utilizadas y el nivel de autonomía alcanzado. Esto permite que docentes y familias identifiquen no solo si una respuesta fue correcta, sino también qué dificultades encontró el estudiante y cuánto apoyo necesitó para resolverla.
+En las tareas QR, AImauta registra de forma anónima los conteos de progreso,
+intentos, turnos y pistas utilizadas. No persiste el texto del intento ni la
+conversación. Esto permite observar cuánto apoyo requirió una actividad sin
+incorporar nombres, notas o respuestas del estudiante al QR.
 
 > El nombre viene de **amauta**: en el mundo andino, el maestro y sabio encargado de enseñar. AImauta es esa figura, ahora al alcance de cualquier estudiante.
 
@@ -59,8 +62,8 @@ Ayudar a que **cada estudiante tenga acceso a acompañamiento educativo** cuando
 - 📚 Usa **materiales curriculares oficiales** previamente estructurados.
 - 🔗 Permite **asignar ejercicios por QR o enlace**.
 - 🌐 **Funciona directo desde la web**, sin instalar nada.
-- 📈 **Mide logro, autonomía y nivel de ayuda**.
-- 👨‍👩‍👧 Brinda información útil a **estudiantes, familias y docentes**.
+- 📈 Agrega **finalización, turnos y nivel máximo de ayuda** sin identificar al estudiante.
+- 👨‍👩‍👧 Brinda un **comprobante anónimo y verificable** al completar la tarea.
 
 </td>
 </tr>
@@ -140,15 +143,19 @@ La importación usa **exclusivamente** la descarga oficial del MINEDU; los metad
 
 ## 🚀 Puesta en marcha
 
-La configuración parte de `.env.example`. En producción son obligatorios dos
+La configuración parte de `.env.example`. En producción son obligatorios cuatro
 secretos aleatorios e independientes (≥ 32 caracteres):
-`AIMAUTA_SESSION_SECRET` y `AIMAUTA_AGENT_SECRET`.
+`AIMAUTA_SESSION_SECRET`, `AIMAUTA_AGENT_SECRET`,
+`AIMAUTA_ASSIGNMENT_ADMIN_SECRET` y `AIMAUTA_ASSIGNMENT_TOKEN_SECRET`. Las
+tareas también requieren `DATABASE_URL` y el origen HTTPS
+`AIMAUTA_PUBLIC_URL`.
 
 La validación se ejecuta en PowerEdge desde
 `/home/hii1sc/aimauta-production`:
 
 ```bash
 npm ci
+npx prisma migrate deploy
 npm run catalog:validate
 npm run content:sync
 npm run content:index
@@ -176,6 +183,7 @@ etiquetan las imágenes con ese commit y los datos persistentes permanecen en
 - 🏛️ [Arquitectura](docs/ARCHITECTURE.md)
 - 📝 [Política de contenidos](docs/CONTENT_POLICY.md)
 - 🚀 [Despliegue](docs/DEPLOYMENT.md)
+- 🔗 [Tareas y códigos QR](docs/QR_ASSIGNMENTS.md)
 - 🎨 [Sistema visual y marca](docs/BRAND_ASSETS.md)
 
 ---
