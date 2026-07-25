@@ -202,6 +202,12 @@ svg {
   border-color: var(--lime);
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
 .hero-content {
   position: relative;
   z-index: 1;
@@ -2062,6 +2068,14 @@ svg {
     min-height: 70px;
   }
 
+  .topbar-actions {
+    gap: 0.75rem;
+  }
+
+  .topbar-actions .quiet-link {
+    font-size: 0.78rem;
+  }
+
   .brand-primary-logo {
     width: clamp(9.5rem, 48vw, 11.5rem);
   }
@@ -2258,6 +2272,12 @@ svg {
 
   .pdf-frame-wrap {
     padding: 0.4rem;
+  }
+}
+
+@media (max-width: 430px) {
+  .topbar-library-link {
+    display: none;
   }
 }
 

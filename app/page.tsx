@@ -62,9 +62,14 @@ export default async function CatalogPage() {
             />
             <span className="sr-only">AImauta</span>
           </Link>
-          <a className="quiet-link" href="#biblioteca">
-            Ver cuadernos
-          </a>
+          <div className="topbar-actions">
+            <a className="quiet-link topbar-library-link" href="#biblioteca">
+              Ver cuadernos
+            </a>
+            <Link className="quiet-link" href="/docente/acceso">
+              Panel docente
+            </Link>
+          </div>
         </nav>
 
         <div className="hero-content shell">
