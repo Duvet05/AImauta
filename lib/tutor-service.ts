@@ -7,7 +7,7 @@ import {
 } from "@/lib/learning-session";
 import { getReviewedExerciseSolution } from "@/lib/exercise-solution-store";
 import { getPublishedExercise } from "@/lib/exercise-store";
-import { askOllama } from "@/lib/ollama";
+import { askTutorModel } from "@/lib/llm";
 import {
   buildTutorSystemPrompt,
   fallbackGuide,
@@ -23,7 +23,8 @@ export type TutorTurnResult = {
   message: string;
   citations: Array<{ sourceId: string; page: number }>;
   mode:
-    | "gemma"
+    | "openai"
+    | "xai"
     | "guided-fallback"
     | "assessment-locked"
     | "exercise-locked"
@@ -192,12 +193,14 @@ export async function guideLearningTurn(input: {
   let tutorMessage: string | null = null;
   let mode: TutorTurnResult["mode"] = "guided-fallback";
   try {
-    const rawMove = await askOllama({
+    const inference = await askTutorModel({
+      sessionId: current.state.sessionId,
       systemPrompt,
       studentMessage: input.message,
       attempt: input.attempt,
       policy
     });
+    const rawMove = inference?.content ?? null;
     const move = rawMove ? parseGuidanceMove(rawMove) : null;
     if (move) {
       tutorMessage = renderGuidanceMove({
@@ -206,7 +209,7 @@ export async function guideLearningTurn(input: {
       });
     }
     if (tutorMessage && isSafeTutorMessage(tutorMessage)) {
-      mode = "gemma";
+      mode = inference?.provider ?? "guided-fallback";
     } else {
       tutorMessage = null;
     }

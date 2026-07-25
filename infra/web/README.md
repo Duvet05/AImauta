@@ -6,8 +6,10 @@ y red del host:
 
 - el migrador ejecuta `prisma migrate deploy` y debe terminar correctamente
   antes de iniciar Next.js;
-- Next.js se liga exclusivamente a `127.0.0.1:3309` y alcanza el túnel privado
-  de Ollama en `127.0.0.1:11435`;
+- Next.js se liga exclusivamente a `127.0.0.1:3309`, llama al router LLM
+  OpenAI → xAI configurado y conserva el túnel opcional de Ollama en
+  `127.0.0.1:11435` para la migración posterior a Gemma; el router actual no
+  selecciona Ollama;
 - Nginx se liga exclusivamente a `127.0.0.1:3308` y es el único destino del
   proxy público.
 
@@ -53,13 +55,19 @@ if [ ! -e /home/hii1sc/aimauta-runtime/web.env ]; then
     /home/hii1sc/aimauta-runtime/web.env
 fi
 
+# Se crea una vez a partir de model-providers.env.example, se completan las
+# credenciales fuera de Git y se restringe con chmod 600.
+test -f /home/hii1sc/aimauta-runtime/model-providers.env
+
 AIMAUTA_RELEASE="$release_id" \
   AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_MODEL_ENV_FILE=/home/hii1sc/aimauta-runtime/model-providers.env \
   AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
   docker compose -f "$release_dir/infra/web/compose.yaml" build --pull
 
 AIMAUTA_RELEASE="$release_id" \
   AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_MODEL_ENV_FILE=/home/hii1sc/aimauta-runtime/model-providers.env \
   AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
   docker compose -f "$release_dir/infra/web/compose.yaml" \
   up -d --no-build --force-recreate
@@ -75,11 +83,12 @@ tailscale version
 tailscale funnel --yes --bg --https=8443 http://127.0.0.1:3308
 ```
 
-El archivo de entorno se crea una sola vez, con permisos `0600`, sin imprimir
-los secretos. Antes del primer inicio se completan `DATABASE_URL` y
-`AIMAUTA_PUBLIC_URL`; el inicializador deja ambos vacíos deliberadamente para
-no inventar el DSN ni el dominio público. Los PDF, índices y manifiestos se
-montan en modo de solo lectura.
+Los dos archivos de entorno se crean una sola vez, con permisos `0600`, sin
+imprimir secretos. Antes del primer inicio se completan `DATABASE_URL`,
+`AIMAUTA_PUBLIC_URL` y las credenciales de proveedores; el inicializador deja
+los valores externos vacíos deliberadamente. Solo Next.js recibe
+`model-providers.env`; el migrador no recibe claves LLM. Los PDF, índices y
+manifiestos se montan en modo de solo lectura.
 `restart: unless-stopped` mantiene los contenedores después de reinicios del
 daemon. El usuario de PowerEdge debe tener `Linger=yes` para que el túnel
 systemd continúe sin una sesión SSH. En esta máquina las unidades instaladas
@@ -101,6 +110,7 @@ npm run audit:production
 sh -n infra/ingest/init-runtime.sh
 AIMAUTA_RELEASE="$release_id" \
   AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_MODEL_ENV_FILE=/home/hii1sc/aimauta-runtime/model-providers.env \
   AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
   docker compose -f "$release_dir/infra/web/compose.yaml" config --quiet
 curl --fail http://127.0.0.1:3308/_edge-health

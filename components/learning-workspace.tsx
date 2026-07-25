@@ -60,7 +60,8 @@ type TutorResponse = {
   message: string;
   citations?: Citation[];
   mode:
-    | "gemma"
+    | "openai"
+    | "xai"
     | "guided-fallback"
     | "assessment-locked"
     | "exercise-locked"

@@ -14,9 +14,10 @@ expresamente que corresponden a Aule o a una consola de proveedor.
 ## Topología
 
 - **PowerEdge:** Next.js, PDFs, índices/RAG y worker de voz autohospedado.
-- **Aule:** Ollama con Gemma, escuchando solamente en loopback.
-- **LiveKit Cloud:** señalización, SFU, TURN, dispatch e Inference STT/TTS con
-  Deepgram.
+- **Proveedores LLM temporales:** OpenAI principal y xAI como fallback.
+- **Aule opcional:** Ollama con Gemma, escuchando solamente en loopback.
+- **LiveKit Cloud:** señalización, SFU, TURN, dispatch, Deepgram STT e
+  Inworld TTS.
 - **Tailscale + SSH:** canal privado PowerEdge–Aule para Ollama.
 
 Los colegas acceden a la aplicación por el proxy HTTPS y a LiveKit por WebRTC;
@@ -34,6 +35,8 @@ PDFs:                 /home/hii1sc/aimauta-runtime/content
 Índices:              /home/hii1sc/aimauta-runtime/indexes
 Manifiestos:          /home/hii1sc/aimauta-runtime/manifests
 Entorno del worker:   /home/hii1sc/aimauta-runtime/voice-agent.env
+Entorno web:          /home/hii1sc/aimauta-runtime/web.env
+Credenciales LLM:    /home/hii1sc/aimauta-runtime/model-providers.env
 Entorno de LiveKit:   /home/hii1sc/aimauta-runtime/livekit-cloud.env
 Entorno de pruebas:   /home/hii1sc/aimauta-runtime/voice-test-venv
 ```
@@ -50,7 +53,8 @@ están dentro del repositorio ni de un release.
   Compose v2.
 - Python 3.12 o 3.13 en PowerEdge para ejecutar las pruebas del worker.
 - Tailscale y acceso SSH por llave desde PowerEdge hacia Aule.
-- Ollama y `gemma4:e4b-it-qat` instalados en Aule.
+- Claves API de OpenAI y xAI mientras se prepara Gemma 4 administrado.
+- Opcionalmente, Ollama y `gemma4:e4b-it-qat` instalados en Aule.
 - Un proyecto LiveKit Cloud y un par API dedicados a AImauta.
 - Un proxy HTTPS administrado delante de Next.js.
 
@@ -297,7 +301,7 @@ LIVEKIT_API_KEY=clave-cloud-de-aimauta
 LIVEKIT_API_SECRET=secreto-cloud-de-aimauta
 ```
 
-El archivo que Compose carga realmente es
+El entorno general que Compose carga es
 `/home/hii1sc/aimauta-runtime/web.env`. Se crea una sola vez con
 `infra/web/init-env.sh` y se le añaden las mismas cuatro variables `LIVEKIT_*`
 sin sustituir sus secretos existentes:
@@ -313,9 +317,17 @@ AIMAUTA_REMOTE_CONTENT_PROXY=false
 
 AIMAUTA_SESSION_SECRET=valor-aleatorio-exclusivo-de-sesion
 AIMAUTA_AGENT_SECRET=valor-aleatorio-exclusivo-del-worker
+AIMAUTA_ADMIN_SECRET=valor-aleatorio-exclusivo-del-directorio
 AIMAUTA_ASSIGNMENT_ADMIN_SECRET=valor-aleatorio-exclusivo-de-integracion
 AIMAUTA_ASSIGNMENT_TOKEN_SECRET=valor-aleatorio-exclusivo-de-cifrado
 AIMAUTA_TRUST_PROXY_HEADERS=true
+
+AIMAUTA_LLM_TIMEOUT_MS=12000
+AIMAUTA_LLM_MAX_CONCURRENCY=2
+AIMAUTA_LLM_ATTEMPTS_PER_MINUTE=20
+AIMAUTA_LLM_DAILY_REQUEST_LIMIT=300
+AIMAUTA_LLM_DAILY_INPUT_TOKEN_LIMIT=150000
+AIMAUTA_LLM_DAILY_OUTPUT_TOKEN_LIMIT=6000
 
 OLLAMA_BASE_URL=http://127.0.0.1:11435
 OLLAMA_MODEL=gemma4:e4b-it-qat
@@ -329,6 +341,24 @@ LIVEKIT_API_KEY=clave-cloud-de-aimauta
 LIVEKIT_API_SECRET=secreto-cloud-de-aimauta
 ```
 
+Las credenciales del modelo viven en un segundo archivo que solo se inyecta al
+contenedor de Next.js; el migrador y el build no las necesitan:
+
+```dotenv
+# /home/hii1sc/aimauta-runtime/model-providers.env
+LLM_PROVIDER=openai
+OPENAI_API_KEY=clave-de-un-proyecto-openai-dedicado
+OPENAI_MODEL=gpt-4.1
+LLM_FALLBACK_PROVIDER=xai
+XAI_API_KEY=clave-de-un-equipo-xai-dedicado
+XAI_MODEL=grok-4.3
+```
+
+No se admite seleccionar otro modelo mediante variables de entorno: la lista
+permitida queda cerrada en código para evitar una activación accidental más
+cara. Gemma/Ollama permanece reservado para la siguiente migración y el router
+actual no lo selecciona.
+
 `LIVEKIT_API_URL` usa el mismo host del proyecto con esquema HTTPS para
 RoomService y AgentDispatch. La URL WSS llega al navegador; la API key y el
 secreto nunca lo hacen.
@@ -337,6 +367,7 @@ Aplicar permisos restringidos:
 
 ```bash
 chmod 600 \
+  /home/hii1sc/aimauta-runtime/model-providers.env \
   /home/hii1sc/aimauta-runtime/livekit-cloud.env \
   /home/hii1sc/aimauta-runtime/web.env
 ```
@@ -348,6 +379,22 @@ sincronizado y verificado.
 incluir ruta, query, fragmento ni credenciales. `DATABASE_URL` apunta al
 PostgreSQL administrado de AImauta; con `network_mode: host`, el contenedor
 alcanza el listener de loopback del host.
+
+Los límites diarios se comparten entre OpenAI y xAI y se reservan en
+PostgreSQL antes de cada llamada. Las variables permiten reducir los máximos
+compilados de 300 intentos, 150 000 tokens de entrada y 6 000 tokens de salida
+por día, nunca aumentarlos. Cada fallback cuenta como un segundo intento; no hay
+reintentos automáticos. Si el registro de presupuesto falla, el tutor usa la
+respuesta determinista y no llama a ningún proveedor.
+
+Todas las peticiones usan `store: false`, pero este parámetro no equivale a
+retención cero. OpenAI documenta que sus datos de API no se usan para entrenar
+por defecto y que el monitoreo de abuso puede conservar contenido hasta 30
+días; xAI documenta el mismo plazo predeterminado para auditoría. Para un piloto
+con menores, verificar y contratar Zero Data Retention o el control equivalente
+en cada proyecto antes de habilitar estas claves. Véanse los controles de datos
+de [OpenAI](https://developers.openai.com/api/docs/guides/your-data) y la
+[guía de seguridad de xAI](https://docs.x.ai/developers/faq/security).
 
 El despliegue público documentado exige que el proxy elimine
 `CF-Connecting-IP`, `X-Real-IP` y `X-Forwarded-For` recibidas del cliente y
@@ -562,7 +609,8 @@ Internet → Tailscale Funnel HTTPS en Aule
          → reverse SSH Aule 127.0.0.1:3308
          → Nginx PowerEdge 127.0.0.1:3308
          → Next.js PowerEdge 127.0.0.1:3309
-         → Ollama Aule 127.0.0.1:11434
+         → OpenAI → xAI
+         → Ollama Aule 127.0.0.1:11434 (opcional)
 ```
 
 Nginx aplica límite de cuerpo, solicitudes y conexiones, bloquea externamente
@@ -586,16 +634,19 @@ fi
 
 AIMAUTA_RELEASE="$release_id" \
   AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_MODEL_ENV_FILE=/home/hii1sc/aimauta-runtime/model-providers.env \
   AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
   docker compose -f "$release_dir/infra/web/compose.yaml" build --pull
 AIMAUTA_RELEASE="$release_id" \
   AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_MODEL_ENV_FILE=/home/hii1sc/aimauta-runtime/model-providers.env \
   AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
   docker compose -f "$release_dir/infra/web/compose.yaml" \
   up -d --no-build --force-recreate
 
 AIMAUTA_RELEASE="$release_id" \
   AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_MODEL_ENV_FILE=/home/hii1sc/aimauta-runtime/model-providers.env \
   AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
   docker compose -f "$release_dir/infra/web/compose.yaml" \
   ps --all migrate app edge
@@ -636,7 +687,8 @@ La IP autorizada se obtiene con `tailscale ip -4`; no se copia un valor antiguo
 de esta guía. Antes de habilitar la unidad se verifica la huella fuera de banda
 y se prueba que la llave no puede abrir shell ni un segundo puerto.
 
-Este perfil habilita PDF y tutor de texto con Gemma. La vista previa local se
+Este perfil habilita PDF y tutor de texto con el router LLM configurado. La
+vista previa local se
 habilita con `AIMAUTA_AVATAR_ENABLED=true` y sigue oculta salvo en una URL de
 aprendizaje con `?avatar=1`.
 
@@ -660,6 +712,7 @@ test -d "$release_dir"
 
 AIMAUTA_RELEASE="$release_id" \
   AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_MODEL_ENV_FILE=/home/hii1sc/aimauta-runtime/model-providers.env \
   AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
   docker compose -f "$release_dir/infra/web/compose.yaml" \
   up -d --no-build --force-recreate
@@ -846,11 +899,13 @@ test -d "$release_dir"
 
 AIMAUTA_RELEASE="$release_id" \
   AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_MODEL_ENV_FILE=/home/hii1sc/aimauta-runtime/model-providers.env \
   AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
   docker compose -f "$release_dir/infra/web/compose.yaml" config --quiet
 
 AIMAUTA_RELEASE="$release_id" \
   AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_MODEL_ENV_FILE=/home/hii1sc/aimauta-runtime/model-providers.env \
   AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
   docker compose -f "$release_dir/infra/web/compose.yaml" build --pull
 
@@ -877,6 +932,7 @@ ventana sin participantes. Compose ejecuta primero el migrador del mismo
 ```bash
 AIMAUTA_RELEASE="$release_id" \
   AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_MODEL_ENV_FILE=/home/hii1sc/aimauta-runtime/model-providers.env \
   AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
   docker compose -f "$release_dir/infra/web/compose.yaml" \
   up -d --no-build --force-recreate
@@ -931,6 +987,7 @@ docker image inspect "aimauta-web:${previous_id}" >/dev/null
 
 AIMAUTA_RELEASE="$previous_id" \
   AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_MODEL_ENV_FILE=/home/hii1sc/aimauta-runtime/model-providers.env \
   AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
   docker compose -f "$previous_dir/infra/web/compose.yaml" \
   up -d --no-build --force-recreate

@@ -15,7 +15,8 @@ Propiedades transversales:
 - `Evaluamos` bloquea el tutor sin bloquear el espacio de trabajo del alumno;
 - el avatar se renderiza localmente, sin cámara ni proveedor de video;
 - los PDFs, índices y soluciones de ejercicios permanecen fuera de Git;
-- la indisponibilidad de Ollama degrada, pero no rompe, el acompañamiento.
+- la indisponibilidad de los proveedores LLM degrada, pero no rompe, el
+  acompañamiento.
 
 ## Los tres planos
 
@@ -44,20 +45,23 @@ PowerEdge: Next.js (standalone) ─────────┤                  
   ├─ catálogo y currículo (/config)      ▼                  ▼
   ├─ sesiones HMAC (en memoria)     tutor-service ◄─── worker de voz (Silero VAD)
   ├─ PDF + índices + ejercicios          ▲                  └─ POST /api/internal/turn
-  ├─ directorio escolar ── Prisma ─► PostgreSQL              (sin LLM propio)
-  └─ API LiveKit                         │
-       │                                 └─ evidencia del ejercicio publicado
-       └─ túnel SSH 127.0.0.1:11435 ──► Aule 127.0.0.1:11434  (Ollama + Gemma)
+  ├─ directorio + tareas QR ─ Prisma ─► PostgreSQL            (sin LLM propio)
+  ├─ API LiveKit                         │
+  ├─ HTTPS ──────────────────────────────┴─► OpenAI → xAI
+  └─ túnel SSH opcional 127.0.0.1:11435 ──► Aule 127.0.0.1:11434
+                                              (Gemma posterior)
 
 Pipeline offline (operador):  PDF MINEDU ─► content:sync/index ─► ingest ─► Google
                               generativelanguage.googleapis.com (Gemma/Gemini)
                               ─► revisión humana ─► promote ─► runtime
 ```
 
-PowerEdge conserva la autoridad pedagógica, el contenido y el worker. Aule solo
-sirve la inferencia de Gemma vía Ollama y no se publica en Internet. LiveKit
-Cloud transporta el audio y ejecuta STT/TTS por *Inference*. La ingesta de
-ejercicios (offline) envía imágenes de página a la API de Google.
+PowerEdge conserva la autoridad pedagógica, el contenido y el worker. El router
+temporal usa OpenAI como primario y xAI como fallback. El túnel privado a
+Ollama/Aule se conserva para una migración posterior a Gemma, pero el router
+actual no lo selecciona. LiveKit Cloud transporta el audio y ejecuta STT/TTS
+por *Inference*. La ingesta de ejercicios (offline) envía imágenes de página a
+la API de Google.
 
 ## Aplicación web y contratos HTTP
 
@@ -141,7 +145,7 @@ etapas (`Construimos`, `Comprobamos`, `Evaluamos`).
 
 En `Evaluamos` el alumno lee y escribe, pero la ayuda se bloquea en varias
 capas: la interfaz deshabilita revisión, chat y voz; `tutor-service` devuelve
-`assessment-locked` sin consultar RAG ni Ollama; el recuperador excluye
+`assessment-locked` sin consultar RAG ni ningún proveedor LLM; el recuperador excluye
 fragmentos de páginas `Evaluamos` aun dentro de la ventana vecina; el nivel de
 pista se fuerza a 0; y `/api/livekit/token` responde HTTP 423. Navegar a una
 página de evaluación no acredita por sí mismo que la ficha fue completada.
@@ -238,18 +242,19 @@ detallan en [`QR_ASSIGNMENTS.md`](QR_ASSIGNMENTS.md).
 2. aplica el bloqueo de evaluación (`assessment-locked`);
 3. recupera evidencia del ejercicio publicado de la página, antes de consumir la revisión;
 4. evoluciona la sesión y calcula la política;
-5. pide a Gemma (Ollama) elegir **una de cinco etiquetas cerradas**;
+5. pide al router LLM elegir **una de cinco etiquetas cerradas**;
 6. renderiza en servidor la pregunta aprobada, o usa una guía determinista de respaldo;
 7. devuelve nueva sesión, actividad, citas y política.
 
-Las etiquetas son `OBSERVA`, `REFORMULA`, `COMPARA`, `COMPRUEBA`, `DIVIDE` (máx.
-12 tokens internos, `think:false`). **La salida cruda de Gemma nunca llega al
-alumno**: `parseGuidanceMove` exige coincidencia exacta con el `Set`; cualquier
-otra cosa se descarta y activa la guía determinista. La plantilla renderizada
-pasa además un guard formal (una sola pregunta, sin patrones de solución). La
-evidencia se envuelve en `<EVIDENCE_UNTRUSTED>…</EVIDENCE_UNTRUSTED>` para que
-sus instrucciones no sustituyan la política; el guard estructural neutraliza
-cualquier inyección que sobreviva.
+Las etiquetas son `OBSERVA`, `REFORMULA`, `COMPARA`, `COMPRUEBA`, `DIVIDE`.
+La petición limita la salida a 16 tokens —el mínimo de Responses API— y
+`parseGuidanceMove` exige coincidencia exacta con el `Set`. **La salida cruda
+del proveedor nunca llega al alumno**: cualquier otro contenido se descarta y
+activa la guía determinista. La plantilla renderizada pasa además un guard
+formal (una sola pregunta, sin patrones de solución). La evidencia se envuelve
+en `<EVIDENCE_UNTRUSTED>…</EVIDENCE_UNTRUSTED>` para que sus instrucciones no
+sustituyan la política; el guard estructural neutraliza cualquier inyección que
+sobreviva.
 
 > **Nota de implementación.** La evidencia del turno proviene del **ejercicio
 > publicado** (`retrieveExerciseEvidence`: `label`/`title`/`prompt` con cita de
@@ -257,6 +262,40 @@ cualquier inyección que sobreviva.
 > por página (`lib/retrieval.ts`, `rankChunks`, ventana ±2 páginas, excluye
 > `Evaluamos` y `teacherOnly`), preparada como ruta alternativa pero hoy usada
 > solo en pruebas; puede sustituir el ranking sin cambiar el contrato del tutor.
+
+### Router temporal y presupuesto de inferencia
+
+`lib/llm.ts` admite una cadena cerrada: OpenAI `gpt-4.1` como primario y, si se
+configuró, xAI `grok-4.3` como único fallback. Los endpoints y modelos están
+permitidos explícitamente en código; una variable que intente seleccionar otro
+proveedor o modelo no genera tráfico. No hay reintentos: un turno realiza como
+máximo un intento en OpenAI y uno en xAI.
+
+Ambos proveedores reciben una petición mínima por Responses API con
+`store: false`. OpenAI recibe como `safety_identifier` únicamente un hash
+unidireccional del UUID efímero de sesión; xAI se invoca sin razonamiento
+extendido. El backend no adjunta el token HMAC, el token QR, notas ni
+identificadores del directorio escolar. Sí se procesan el texto libre que el
+estudiante escribió y fragmentos acotados de evidencia curricular; ese texto
+podría incluir un dato que el propio estudiante escriba.
+
+El presupuesto se reserva de forma atómica en PostgreSQL antes de cada intento.
+`LlmUsageDay` conserva solo el día UTC y contadores agregados de solicitudes y
+tokens usados o reservados; no guarda prompts, respuestas, sesiones, proveedor
+ni estudiante. Los máximos compilados son 300 intentos, 150 000 tokens de
+entrada y 6 000 de salida por día. Las variables de entorno pueden reducirlos,
+pero nunca aumentarlos. Hay además un máximo de dos solicitudes concurrentes,
+20 intentos por minuto y 15 segundos de timeout. Si PostgreSQL, el presupuesto
+o ambos proveedores no están disponibles, `tutor-service` usa la guía
+determinista sin eludir el límite.
+
+`store: false` evita crear estado de aplicación en la Responses API, pero no
+equivale por sí solo a retención cero. La configuración estándar de
+[OpenAI](https://developers.openai.com/api/docs/guides/your-data) y
+[xAI](https://docs.x.ai/developers/faq/security) puede conservar contenido por
+hasta 30 días para monitoreo de abuso. Antes de un piloto institucional con
+menores se debe verificar el control de retención apropiado, además de los
+consentimientos y acuerdos aplicables.
 
 El endpoint interno exige `Authorization: Bearer <AIMAUTA_AGENT_SECRET>` con
 comparación en tiempo constante (`lib/internal-auth.ts`), y **falla cerrado**
@@ -285,8 +324,9 @@ content:sync ─► content:index ─► exercises:ingest ─► [REVISIÓN HUMA
   modelo `gemma-4-26b-a4b-it`) con *function-calling* forzado (`mode:ANY`). Las
   imágenes se marcan como contenido **no confiable**; la defensa dura es el
   esquema rígido de salida + `reviewRequired:true`. Sale como `*.draft.json`.
-- **Egress externo.** Esta es una **segunda dependencia de IA**, distinta del
-  Ollama/Gemma local del tutor. Requiere `AIMAUTA_GEMINI_API_KEY_FILE`; el
+- **Egress externo.** Esta es una dependencia de IA **offline**, distinta del
+  router cloud temporal del tutor y de la migración posterior a Ollama/Gemma.
+  Requiere `AIMAUTA_GEMINI_API_KEY_FILE`; el
   endpoint no-Google solo se permite con opt-in explícito.
 - **Revisión humana obligatoria** antes de `promote`. La confianza es del revisor.
 - **Separación de soluciones.** Las soluciones viven en un directorio/mount
@@ -367,15 +407,16 @@ por evolucionar la misma sesión.
 
 ```text
 Silero VAD ─► LiveKit Inference · Deepgram Nova-3 (STT)
-   └─► POST /api/internal/turn ─► tutor-service ─► Ollama/Gemma o respaldo
+   └─► POST /api/internal/turn ─► tutor-service ─► OpenAI → xAI o respaldo
    ◄─────────────────── respuesta aprobada
 ◄─ LiveKit Inference · Inworld TTS-2, voz «Diego» (TTS)
 ```
 
 La sesión se configura con `llm=None`: el worker **no** construye prompts, no
-consulta RAG y no llama a Ollama; solo transcribe, autentica la llamada interna,
-publica la sesión actualizada y sintetiza la respuesta aprobada. Si el backend
-falla, reproduce un aviso breve sin inventar pistas. `AgentSession` usa
+consulta RAG y no llama directamente a proveedores LLM; solo transcribe,
+autentica la llamada interna, publica la sesión actualizada y sintetiza la
+respuesta aprobada. Si el backend falla, reproduce un aviso breve sin inventar
+pistas. `AgentSession` usa
 `record=False`, log `WARN` con redacción, health server solo en `127.0.0.1`,
 deadline de 10 minutos y `delete_room_on_close`.
 
@@ -434,11 +475,14 @@ Un host **PowerEdge** corre dos contenedores host-network, rootfs read-only,
 Mac solo edita y versiona.
 
 Secretos obligatorios en producción (≥32 chars, independientes):
-`AIMAUTA_SESSION_SECRET`, `AIMAUTA_AGENT_SECRET`, `AIMAUTA_ADMIN_SECRET`; más
-`DATABASE_URL` y, con voz activa, las variables `LIVEKIT_*`. Ollama permanece en
-`Aule` y se alcanza por un **túnel SSH reverso loopback** (`127.0.0.1:11435` →
-`127.0.0.1:11434`); nunca escucha en `0.0.0.0` ni por Funnel. Detalle operativo
-en [`DEPLOYMENT.md`](DEPLOYMENT.md).
+`AIMAUTA_SESSION_SECRET`, `AIMAUTA_AGENT_SECRET`, `AIMAUTA_ADMIN_SECRET`,
+`AIMAUTA_ASSIGNMENT_ADMIN_SECRET` y `AIMAUTA_ASSIGNMENT_TOKEN_SECRET`; además
+se requieren `DATABASE_URL` y las credenciales OpenAI/xAI en un archivo
+runtime separado. Con voz activa se añaden las variables `LIVEKIT_*`. Ollama
+permanece opcional en `Aule` para la migración posterior y se alcanza por un
+**túnel SSH local loopback** (`127.0.0.1:11435` → `127.0.0.1:11434`); nunca
+escucha en `0.0.0.0` ni por Funnel. Detalle operativo en
+[`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ## Fronteras de confianza
 
@@ -449,11 +493,14 @@ Internet público
 
 PowerEdge (runtime público)
   ├─ Next.js: autoridad de sesión, currículo, tutor y directorio
-  ├─ PostgreSQL: directorio escolar (PII; gated por AIMAUTA_ADMIN_SECRET)
+  ├─ PostgreSQL: directorio escolar, tareas QR y presupuesto LLM
   ├─ worker de voz: adaptador sin LLM
   └─ PDFs autorizados, índices y manifiestos reproducibles
 
-Canal privado PowerEdge–Aule
+Egress externo del runtime
+  └─ OpenAI principal → xAI fallback: selección pedagógica cerrada
+
+Canal privado opcional PowerEdge–Aule
   └─ SSH sobre la tailnet: 127.0.0.1:11435 → Ollama 127.0.0.1:11434
 
 Egress externo (pipeline offline, no runtime)
@@ -466,6 +513,10 @@ Egress externo (pipeline offline, no runtime)
 - No se importa material sin ficha oficial del MINEDU y licencia verificada.
 - El plano de aprendizaje no persiste conversaciones ni intentos; el registro
   anti-replay es efímero y en memoria.
+- Las tareas QR guardan progreso y conteos anónimos por ejecución. El control
+  LLM guarda solo contadores diarios agregados, nunca prompts ni respuestas.
+- Los proveedores LLM procesan temporalmente texto libre del intento y
+  evidencia curricular acotada; `store:false` no equivale a retención cero.
 - El plano de directorio **sí** almacena PII (nombres, correos, notas de
   menores); su acceso está tras `AIMAUTA_ADMIN_SECRET` y pendiente de roles por
   usuario, retención y eliminación definidas.
@@ -476,5 +527,5 @@ La postura de seguridad, los hallazgos verificados y la hoja de ruta se
 documentan en [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md). Pendientes principales:
 autenticación por usuario (rol docente/admin) para el directorio; mover
 anti-replay y rate-limit a un almacén compartido antes de escalar; y definir la
-gobernanza de datos (consentimiento, retención, egress a Google) antes de un
-piloto con menores.
+gobernanza de datos (consentimiento, retención verificada en OpenAI/xAI y egress
+a Google) antes de un piloto con menores.
