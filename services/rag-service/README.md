@@ -11,6 +11,7 @@ HTTP separado, pero en producción:
 - excluye contenido `teacherOnly` y toda etapa `assessment`;
 - limita la respuesta a cinco fragmentos y 1 200 caracteres por fragmento.
 
-OpenAI continúa eligiendo el movimiento pedagógico y xAI es su único fallback.
+El router cloud configurado continúa eligiendo el movimiento pedagógico; admite
+OpenAI, xAI y Gemini en una cadena explícita.
 Si este servicio no responde o rechaza el linaje, Next.js usa el recuperador
 local validado.

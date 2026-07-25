@@ -62,6 +62,7 @@ type TutorResponse = {
   mode:
     | "openai"
     | "xai"
+    | "gemini"
     | "guided-fallback"
     | "assessment-locked"
     | "exercise-locked"

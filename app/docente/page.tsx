@@ -42,11 +42,12 @@ export default async function DocentePage() {
 
       <div className="shell panel-shell">
         <header className="panel-header">
-          <p className="eyebrow">Tus clases</p>
+          <p className="eyebrow">Cursos de la institución</p>
           <h1>Elige un curso</h1>
           <p className="panel-lead">
-            Dentro de cada curso puedes ver cómo va cada estudiante, registrar
-            tus observaciones y asignar tareas con un enlace o código QR.
+            Dentro de cada curso puedes ver cómo va cada estudiante y registrar
+            tus observaciones, además de crear y revisar tareas compartidas por
+            enlace o código QR.
           </p>
         </header>
 

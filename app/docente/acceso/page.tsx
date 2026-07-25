@@ -71,8 +71,8 @@ export default async function AccesoPage({
 
         <h1>Acceso docente</h1>
         <p className="access-lead">
-          Ingresa la clave de tu institución para ver tus cursos, el avance de
-          tus estudiantes y las tareas que has asignado.
+          Ingresa la clave de tu institución para consultar los cursos, dejar
+          observaciones sobre tus estudiantes y revisar las tareas compartidas.
         </p>
 
         {error ? (

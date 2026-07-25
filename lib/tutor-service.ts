@@ -35,6 +35,7 @@ export type TutorTurnResult = {
   mode:
     | "openai"
     | "xai"
+    | "gemini"
     | "guided-fallback"
     | "assessment-locked"
     | "exercise-locked"
@@ -50,7 +51,7 @@ export type TutorTurnResult = {
 
 type GuidedMode = Extract<
   TutorTurnResult["mode"],
-  "openai" | "xai" | "guided-fallback"
+  "openai" | "xai" | "gemini" | "guided-fallback"
 >;
 
 async function createGuidedMessage(input: {

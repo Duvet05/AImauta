@@ -15,7 +15,7 @@ expresamente que corresponden a Aule o a una consola de proveedor.
 
 - **PowerEdge:** Next.js, PDFs, servicio RAG interno y worker de voz
   autohospedados.
-- **Proveedores LLM temporales:** OpenAI principal y xAI como fallback.
+- **Proveedores LLM temporales:** cadena explícita OpenAI, xAI y Gemini.
 - **Aule opcional:** Ollama con Gemma, escuchando solamente en loopback.
 - **LiveKit Cloud:** señalización, SFU, TURN, dispatch, Deepgram STT e
   Inworld TTS.
@@ -54,7 +54,8 @@ están dentro del repositorio ni de un release.
   Compose v2.
 - Python 3.12 o 3.13 en PowerEdge para ejecutar las pruebas del worker.
 - Tailscale y acceso SSH por llave desde PowerEdge hacia Aule.
-- Claves dedicadas de OpenAI y xAI mientras se prepara Gemma 4.
+- Claves dedicadas de los proveedores cloud habilitados mientras se prepara
+  Gemma 4.
 - Opcionalmente, Ollama y `gemma4:e4b-it-qat` instalados en Aule para la
   ingesta privada y la migración posterior del tutor.
 - Un proyecto LiveKit Cloud y un par API dedicados a AImauta.
@@ -353,17 +354,19 @@ contenedor de Next.js; el migrador y el build no las necesitan:
 ```dotenv
 # /home/hii1sc/aimauta-runtime/model-providers.env
 LLM_PROVIDER=openai
-LLM_FALLBACK_PROVIDER=xai
+LLM_FALLBACK_PROVIDERS=xai,gemini
 OPENAI_API_KEY=clave-de-un-proyecto-openai-dedicado
 OPENAI_MODEL=gpt-4.1
 XAI_API_KEY=clave-de-un-equipo-xai-dedicado
 XAI_MODEL=grok-4.3
+GOOGLE_GENAI_API_KEY=clave-de-un-proyecto-google-dedicado
+GOOGLE_GENAI_MODEL=gemini-3.6-flash
 ```
 
 No se admite seleccionar otro modelo mediante variables de entorno: la lista
-permitida del tutor queda cerrada en código a OpenAI `gpt-4.1` y xAI
-`grok-4.3`; Ollama no se selecciona todavía. El fallback sólo se intenta si se
-nombra y tiene su credencial dedicada.
+permitida del tutor queda cerrada en código a OpenAI `gpt-4.1`, xAI
+`grok-4.3` y Gemini `gemini-3.6-flash`; Ollama no se selecciona todavía. Cada
+proveedor sólo se intenta si se nombra y tiene su credencial dedicada.
 
 `LIVEKIT_API_URL` usa el mismo host del proyecto con esquema HTTPS para
 RoomService y AgentDispatch. La URL WSS llega al navegador; la API key y el
@@ -386,7 +389,7 @@ incluir ruta, query, fragmento ni credenciales. `DATABASE_URL` apunta al
 PostgreSQL administrado de AImauta; con `network_mode: host`, el contenedor
 alcanza el listener de loopback del host.
 
-Los límites diarios se comparten entre OpenAI y xAI y se reservan en
+Los límites diarios se comparten entre OpenAI, xAI y Gemini y se reservan en
 PostgreSQL antes de cada llamada. Las variables permiten reducir los máximos
 compilados de 300 intentos, 150 000 tokens de entrada y 6 000 tokens de salida
 por día, nunca aumentarlos. Cada fallback cuenta como un segundo intento; no hay
@@ -396,11 +399,14 @@ respuesta determinista y no llama a ningún proveedor.
 Las peticiones de nube usan `store: false`, pero este parámetro no equivale a
 retención cero. OpenAI documenta que sus datos de API no se usan para entrenar
 por defecto y que el monitoreo de abuso puede conservar contenido hasta 30
-días; xAI documenta el mismo plazo predeterminado para auditoría. Para un piloto
-con menores, verificar y contratar Zero Data Retention o el control equivalente
-en cada proyecto antes de habilitar estas claves. Véanse los controles de datos
-de [OpenAI](https://developers.openai.com/api/docs/guides/your-data) y la
-[guía de seguridad de xAI](https://docs.x.ai/developers/faq/security).
+días; xAI documenta el mismo plazo predeterminado para auditoría. Google
+distingue los logs configurables de la retención necesaria para monitoreo de
+abuso. Para un piloto con menores, verificar y contratar Zero Data Retention o
+el control equivalente en cada proyecto antes de habilitar estas claves.
+Véanse los controles de datos de
+[OpenAI](https://developers.openai.com/api/docs/guides/your-data), la
+[guía de seguridad de xAI](https://docs.x.ai/developers/faq/security) y la
+[política de logs de Gemini](https://ai.google.dev/gemini-api/docs/logs-policy).
 
 El despliegue público documentado exige que el proxy elimine
 `CF-Connecting-IP`, `X-Real-IP` y `X-Forwarded-For` recibidas del cliente y
@@ -637,7 +643,7 @@ Internet → Tailscale Funnel HTTPS en Aule
          → Nginx PowerEdge 127.0.0.1:3308
          → Next.js PowerEdge 127.0.0.1:3309
          → RAG interno PowerEdge 127.0.0.1:3310
-         → OpenAI → xAI
+         → OpenAI → xAI → Gemini
          → Ollama Aule 127.0.0.1:11434 (opcional)
 ```
 
