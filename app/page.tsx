@@ -102,7 +102,15 @@ export default async function CatalogPage() {
             <div className="demo-orbit demo-orbit-two" aria-hidden="true" />
             <div className="demo-card">
               <div className="demo-card-top">
-                <span className="avatar avatar-tutor">AI</span>
+                <span className="avatar demo-card-avatar" aria-hidden="true">
+                  <Image
+                    src="/brand/amauta-icon.svg"
+                    alt=""
+                    width={32}
+                    height={36}
+                    unoptimized
+                  />
+                </span>
                 <div>
                   <strong>Pista de AImauta</strong>
                   <small>Fuente: cuaderno, pág. 13</small>
