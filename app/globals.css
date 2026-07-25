@@ -3894,6 +3894,66 @@ svg {
   line-height: 1.65;
 }
 
+.material-coming-soon {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  margin: -1rem 0 2.6rem;
+  padding: 1.15rem 1.25rem;
+  border: 1px dashed rgba(23, 79, 70, 0.32);
+  border-radius: 0.9rem;
+  background:
+    radial-gradient(circle at 100% 0, rgba(217, 237, 141, 0.34), transparent 34%),
+    rgba(219, 236, 227, 0.32);
+}
+
+.material-coming-soon-icon {
+  display: inline-grid;
+  width: 2.7rem;
+  height: 2.7rem;
+  place-items: center;
+  border-radius: 50%;
+  color: white;
+  background: var(--forest);
+  font-family: var(--font-display);
+  font-size: 1.65rem;
+  line-height: 1;
+}
+
+.material-coming-soon-eyebrow {
+  color: var(--forest);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.material-coming-soon h2 {
+  margin: 0.1rem 0 0.2rem;
+  font-family: var(--font-display);
+  font-size: 1.18rem;
+  font-weight: 600;
+}
+
+.material-coming-soon p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.material-coming-soon-badge {
+  padding: 0.38rem 0.65rem;
+  border: 1px solid rgba(23, 79, 70, 0.17);
+  border-radius: 999px;
+  color: var(--forest);
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 0.65rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .panel-section {
   margin-bottom: 3.5rem;
 }
@@ -3988,6 +4048,17 @@ svg {
 .course-card-meta {
   color: var(--ink-soft);
   font-size: 0.82rem;
+}
+
+@media (max-width: 560px) {
+  .material-coming-soon {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .material-coming-soon-badge {
+    grid-column: 2;
+    justify-self: start;
+  }
 }
 
 /* Lista de estudiantes */
