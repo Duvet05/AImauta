@@ -9,7 +9,11 @@ import type {
 import { TutorAvatar } from "@/components/tutor-avatar";
 import type { PageActivity } from "@/lib/curriculum";
 import type { LearningSessionState } from "@/lib/learning-session";
-import { isExpectedVoiceAgent } from "@/lib/livekit-participant";
+import {
+  isExpectedTavusAvatar,
+  isExpectedTutorMediaParticipant,
+  isExpectedVoiceAgent,
+} from "@/lib/livekit-participant";
 import {
   resolveTutorAvatarState,
   type TutorAvatarConnection,
@@ -69,11 +73,14 @@ export function VoiceTutor({
   const [agentSpeaking, setAgentSpeaking] = useState(false);
   const [agentAudioTrack, setAgentAudioTrack] =
     useState<MediaStreamTrack | null>(null);
+  const [agentVideoTrack, setAgentVideoTrack] =
+    useState<MediaStreamTrack | null>(null);
   const [needsAudioStart, setNeedsAudioStart] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const clearRemoteAudio = useCallback(() => {
+  const clearRemoteMedia = useCallback(() => {
     setAgentAudioTrack(null);
+    setAgentVideoTrack(null);
     const container = audioContainerRef.current;
     if (!container) return;
 
@@ -120,7 +127,7 @@ export function VoiceTutor({
         room.removeAllListeners();
       }
     } finally {
-      clearRemoteAudio();
+      clearRemoteMedia();
       lastPublishedTokenRef.current = "";
       seenSessionPacketTokensRef.current.clear();
       setMicrophoneEnabled(false);
@@ -129,7 +136,7 @@ export function VoiceTutor({
       setConnection("idle");
       stoppingRef.current = false;
     }
-  }, [clearRemoteAudio]);
+  }, [clearRemoteMedia]);
 
   useEffect(() => {
     if (disabled) {
@@ -172,9 +179,9 @@ export function VoiceTutor({
         window.clearTimeout(voiceDeadlineRef.current);
         voiceDeadlineRef.current = null;
       }
-      clearRemoteAudio();
+      clearRemoteMedia();
     },
-    [clearRemoteAudio],
+    [clearRemoteMedia],
   );
 
   async function startVoice() {
@@ -242,12 +249,18 @@ export function VoiceTutor({
       room.on(
         livekit.RoomEvent.TrackSubscribed,
         (track, _publication, participant) => {
-          if (
-            track.kind !== livekit.Track.Kind.Audio ||
-            !isExpectedVoiceAgent(participant)
-          ) {
+          if (!isExpectedTutorMediaParticipant(participant)) {
             return;
           }
+
+          if (
+            track.kind === livekit.Track.Kind.Video &&
+            isExpectedTavusAvatar(participant)
+          ) {
+            setAgentVideoTrack(track.mediaStreamTrack);
+            return;
+          }
+          if (track.kind !== livekit.Track.Kind.Audio) return;
 
           setAgentAudioTrack(track.mediaStreamTrack);
           const element = track.attach();
@@ -264,7 +277,15 @@ export function VoiceTutor({
       room.on(
         livekit.RoomEvent.TrackUnsubscribed,
         (track, _publication, participant) => {
-          if (!isExpectedVoiceAgent(participant)) return;
+          if (!isExpectedTutorMediaParticipant(participant)) return;
+
+          if (track.kind === livekit.Track.Kind.Video) {
+            setAgentVideoTrack((current) =>
+              current === track.mediaStreamTrack ? null : current,
+            );
+            return;
+          }
+          if (track.kind !== livekit.Track.Kind.Audio) return;
 
           setAgentAudioTrack((current) =>
             current === track.mediaStreamTrack ? null : current,
@@ -289,7 +310,12 @@ export function VoiceTutor({
         void stopVoice();
       });
       room.on(livekit.RoomEvent.ParticipantDisconnected, (participant) => {
-        if (!isExpectedVoiceAgent(participant) || stoppingRef.current) return;
+        if (
+          !isExpectedTutorMediaParticipant(participant) ||
+          stoppingRef.current
+        ) {
+          return;
+        }
 
         setErrorMessage(
           "La sesión de voz terminó. Puedes activarla de nuevo si necesitas continuar.",
@@ -298,7 +324,9 @@ export function VoiceTutor({
       });
       room.on(livekit.RoomEvent.ActiveSpeakersChanged, (speakers) => {
         setAgentSpeaking(
-          speakers.some((participant) => isExpectedVoiceAgent(participant)),
+          speakers.some((participant) =>
+            isExpectedTutorMediaParticipant(participant),
+          ),
         );
       });
       room.on(
@@ -429,7 +457,7 @@ export function VoiceTutor({
         window.clearTimeout(voiceDeadlineRef.current);
         voiceDeadlineRef.current = null;
       }
-      clearRemoteAudio();
+      clearRemoteMedia();
       setMicrophoneEnabled(false);
     }
   }
@@ -500,7 +528,11 @@ export function VoiceTutor({
       </div>
 
       <div className="voice-presence">
-        <TutorAvatar state={avatarState} audioTrack={agentAudioTrack} />
+        <TutorAvatar
+          state={avatarState}
+          audioTrack={agentAudioTrack}
+          videoTrack={agentVideoTrack}
+        />
         <div className="voice-presence-copy">
           {disabled ? (
             <p className="voice-disabled-message">
@@ -513,7 +545,9 @@ export function VoiceTutor({
             </p>
           )}
           <span className="voice-avatar-privacy">
-            Avatar local · sin cámara
+            {agentVideoTrack
+              ? "Avatar Tavus por LiveKit · tu cámara sigue apagada"
+              : "Avatar local · sin cámara"}
           </span>
         </div>
       </div>

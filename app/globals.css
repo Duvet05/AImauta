@@ -2890,6 +2890,24 @@ svg {
   height: 100% !important;
 }
 
+.tutor-avatar-video {
+  position: absolute;
+  z-index: 2;
+  inset: 0.28rem;
+  width: calc(100% - 0.56rem);
+  height: calc(100% - 0.56rem);
+  border-radius: 50%;
+  background: #e7f1dc;
+  object-fit: cover;
+  object-position: center;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.tutor-avatar-video-ready {
+  opacity: 1;
+}
+
 .tutor-avatar-portrait {
   position: relative;
   z-index: 1;

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { isExpectedVoiceAgent } from "@/lib/livekit-participant";
+import {
+  isExpectedTavusAvatar,
+  isExpectedTutorMediaParticipant,
+  isExpectedVoiceAgent,
+} from "@/lib/livekit-participant";
 
 const expectedAgent = {
   isAgent: true,
@@ -40,6 +44,45 @@ describe("isExpectedVoiceAgent", () => {
       isExpectedVoiceAgent({
         ...expectedAgent,
         attributes: { "lk.agent.name": "another-agent" },
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("isExpectedTavusAvatar", () => {
+  const expectedAvatar = {
+    isAgent: true,
+    identity: "tavus-avatar-agent",
+    attributes: {
+      "lk.publish_on_behalf": "agent-worker-123",
+    },
+  };
+
+  it("acepta solo el participante Tavus emitido por el agente", () => {
+    expect(isExpectedTavusAvatar(expectedAvatar)).toBe(true);
+    expect(isExpectedTutorMediaParticipant(expectedAvatar)).toBe(true);
+    expect(isExpectedTutorMediaParticipant(expectedAgent)).toBe(true);
+  });
+
+  it("rechaza imitaciones sin identidad y delegación exactas", () => {
+    expect(
+      isExpectedTavusAvatar({
+        ...expectedAvatar,
+        isAgent: false,
+      }),
+    ).toBe(false);
+    expect(
+      isExpectedTavusAvatar({
+        ...expectedAvatar,
+        identity: "tavus-avatar-agent-copy",
+      }),
+    ).toBe(false);
+    expect(
+      isExpectedTavusAvatar({
+        ...expectedAvatar,
+        attributes: {
+          "lk.publish_on_behalf": "student-session-123",
+        },
       }),
     ).toBe(false);
   });

@@ -435,6 +435,12 @@ TTS_MODEL=inworld/inworld-tts-2
 TTS_VOICE=Diego
 TTS_LANGUAGE=es
 MAX_SESSION_SECONDS=600
+
+# Tavus opcional: false conserva audio LiveKit + avatar 3D local.
+TAVUS_AVATAR_ENABLED=false
+TAVUS_API_KEY=clave-servidor-de-tavus
+TAVUS_REPLICA_ID=replica-aprobada
+TAVUS_PERSONA_ID=persona-echo-livekit
 ```
 
 `AIMAUTA_AGENT_SECRET` es el único **secreto propio de AImauta** compartido
@@ -459,6 +465,22 @@ los acuerdos y una política verificada de retención y eliminación.
 `MAX_SESSION_SECONDS=600` corta STT/TTS y el job aunque el navegador permanezca
 conectado. El worker elimina la sala al cerrar; el navegador también aplica el
 deadline devuelto por la API y se desconecta si el agente sale.
+
+Tavus es una capa visual opcional: la persona debe usar pipeline `echo` y
+transporte `livekit`. El worker le entrega la voz ya sintetizada por Inworld y
+el navegador acepta su audio/video únicamente con la identidad delegada
+esperada. No recibe el token pedagógico ni reemplaza Deepgram, Inworld, RAG o el
+LLM. Si Tavus falla al crear la conversación, el mismo job conserva el audio
+normal y el avatar 3D. Para deshabilitarlo de inmediato entre sesiones:
+
+```bash
+cd /home/hii1sc/aimauta-production
+./scripts/tavus-avatar.sh off
+```
+
+El helper cambia únicamente el flag, recrea el worker con la misma imagen y
+espera su healthcheck; no muestra ningún secreto. `on` lo reactiva y `status`
+consulta el estado. No hace falta reconstruir ni redesplegar la web.
 
 ## Sincronización e indexación
 

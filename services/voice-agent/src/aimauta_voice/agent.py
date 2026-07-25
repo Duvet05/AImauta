@@ -15,15 +15,16 @@ from livekit.agents import (
     inference,
     room_io,
 )
-from livekit.plugins import silero
+from livekit.plugins import silero, tavus
 
-from aimauta_voice.config import get_settings
+from aimauta_voice.config import Settings, get_settings
 from aimauta_voice.metadata import parse_dispatch_metadata, parse_room_metadata
 from aimauta_voice.tutor_client import TutorClient, TutorServiceError, TutorTurn
 
 logger = logging.getLogger("aimauta.voice")
 CONTEXT_TOPIC = "aimauta.context.v1"
 SESSION_TOPIC = "aimauta.session.v1"
+TAVUS_AVATAR_IDENTITY = "tavus-avatar-agent"
 _ROOM_DISCONNECTED_WHILE_WAITING = (
     "room disconnected while waiting for participant"
 )
@@ -231,6 +232,44 @@ def install_session_deadline(
     return task
 
 
+async def start_optional_tavus_avatar(
+    session: AgentSession,
+    room: rtc.Room,
+    settings: Settings,
+) -> bool:
+    if not getattr(settings, "tavus_avatar_enabled", False):
+        return False
+
+    avatar: tavus.AvatarSession | None = None
+    try:
+        avatar = tavus.AvatarSession(
+            api_key=settings.tavus_api_key.get_secret_value(),
+            replica_id=settings.tavus_replica_id,
+            persona_id=settings.tavus_persona_id,
+            avatar_participant_identity=TAVUS_AVATAR_IDENTITY,
+            avatar_participant_name="AImauta Tavus Avatar",
+        )
+        await avatar.start(
+            session,
+            room,
+            livekit_url=settings.livekit_url,
+            livekit_api_key=settings.livekit_api_key,
+            livekit_api_secret=settings.livekit_api_secret,
+        )
+        return True
+    except Exception as error:
+        if avatar is not None:
+            with suppress(Exception):
+                await avatar.aclose()
+        # Never log provider bodies: they may contain account details. The
+        # voice session continues with its local audio/3D fallback.
+        logger.warning(
+            "Tavus avatar unavailable; continuing with local audio",
+            extra={"error_type": type(error).__name__},
+        )
+        return False
+
+
 async def entrypoint(ctx: agents.JobContext) -> None:
     if not ctx.room.name.startswith("aimauta-"):
         return
@@ -310,6 +349,11 @@ async def entrypoint(ctx: agents.JobContext) -> None:
             min_endpointing_delay=0.4,
             max_endpointing_delay=2.2,
         )
+        tavus_started = await start_optional_tavus_avatar(
+            session,
+            ctx.room,
+            settings,
+        )
         await session.start(
             room=ctx.room,
             agent=agent,
@@ -320,6 +364,10 @@ async def entrypoint(ctx: agents.JobContext) -> None:
                 text_output=False,
                 video_input=False,
                 delete_room_on_close=True,
+            ),
+            room_output_options=room_io.RoomOutputOptions(
+                audio_enabled=not tavus_started,
+                transcription_enabled=False,
             ),
         )
         greeting = _start_speech_if_open(

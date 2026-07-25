@@ -13,7 +13,8 @@ Propiedades transversales:
 - el libro, la página, la etapa y el nivel de ayuda se validan en el servidor;
 - texto y voz reutilizan **un solo** servicio de tutoría y una sola política;
 - `Evaluamos` bloquea el tutor sin bloquear el espacio de trabajo del alumno;
-- el avatar se renderiza localmente, sin cámara ni proveedor de video;
+- el avatar 3D se renderiza localmente como respaldo; Tavus puede sustituirlo
+  con video remoto explícitamente habilitado y sin usar la cámara del alumno;
 - los PDFs, índices y soluciones de ejercicios permanecen fuera de Git;
 - la indisponibilidad de los proveedores LLM degrada, pero no rompe, el
   acompañamiento.
@@ -40,7 +41,7 @@ El sistema se organiza en tres planos con fronteras de confianza distintas:
        │                 │               │                  │ WebRTC/datos
        │                 ├─ POST /api/session               ▼
        │                 └─ POST /api/tutor        LiveKit Cloud + Inference
-       ▼                                 │          (Deepgram STT · Inworld TTS)
+       ▼                                 │       (Deepgram STT · Inworld TTS · Tavus opcional)
 PowerEdge: Next.js (standalone) ─────────┤                  │
   ├─ catálogo y currículo (/config)      ▼                  ▼
   ├─ sesiones HMAC (en memoria)     tutor-service ◄─── worker de voz (Silero VAD)
@@ -442,15 +443,19 @@ deadline de 10 minutos y `delete_room_on_close`.
 > la inferencia aplique retención cero por defecto, un piloto con menores exige
 > consentimiento, acuerdos de tratamiento y política de retención/eliminación.
 
-## Avatar local y privado
+## Avatar Tavus opcional con respaldo local
 
-Al activar la voz, el navegador carga de forma diferida Three.js y un GLB
-sintético CC0 (MakeHuman) alojado por la propia app. Un `AnalyserNode` calcula
-solo el nivel RMS de la pista ya autorizada y anima morph-targets localmente; no
-genera transcripción, ni transmite biometría, cámara o video. `Permissions-Policy`
-permite micrófono solo same-origin y bloquea cámara, captura y geolocalización.
-Render a 30 FPS, libera WebGL/Web Audio al cerrar, y cae a un SVG local si falla
-WebGL o el modelo. `prefers-reduced-motion` deja solo el respaldo sin animación.
+Con `TAVUS_AVATAR_ENABLED=true`, el plugin servidor crea una conversación Tavus
+en pipeline `echo`; Tavus entra a la sala como participante delegado y publica
+la voz de Inworld sincronizada con video. El navegador no solicita ni publica
+la cámara del alumno. Solo acepta media de la identidad Tavus exacta y nunca
+acepta de ella mensajes que modifiquen la sesión pedagógica.
+
+Mientras el video remoto no esté disponible, y siempre que Tavus esté
+deshabilitado, el navegador usa Three.js y un GLB sintético CC0 (MakeHuman)
+alojado por la propia app. Un `AnalyserNode` anima morph-targets localmente con
+el nivel RMS. El respaldo libera WebGL/Web Audio al cerrar y cae a un SVG si
+falla WebGL o el modelo.
 
 ## Contenido, integridad y RAG
 

@@ -48,7 +48,7 @@ describe("política pedagógica", () => {
       move: "COMPRUEBA",
       attempted: true
     });
-    expect(message).toContain("Gracias por compartir tu intento");
+    expect(message).toContain("Entiendo tu idea");
     expect(isSafeTutorMessage(message)).toBe(true);
   });
 

@@ -226,6 +226,7 @@ async def test_entrypoint_keeps_http_open_until_job_shutdown(monkeypatch) -> Non
             tts_model="inworld/inworld-tts-2",
             tts_voice="Diego",
             tts_language="es",
+            tavus_avatar_enabled=False,
         ),
     )
 
@@ -240,6 +241,7 @@ async def test_entrypoint_keeps_http_open_until_job_shutdown(monkeypatch) -> Non
         == "student-session-12345678"
     )
     assert start_kwargs["room_options"].delete_room_on_close is True
+    assert start_kwargs["room_output_options"].audio_enabled is True
     assert stt_kwargs == {
         "model": "deepgram/nova-3",
         "language": "es-419",
@@ -266,6 +268,102 @@ async def test_entrypoint_keeps_http_open_until_job_shutdown(monkeypatch) -> Non
         await callback("test shutdown")
     assert http.closed is True
     assert shutdown_reasons == []
+
+
+@pytest.mark.asyncio
+async def test_optional_tavus_avatar_uses_livekit_echo_transport(
+    monkeypatch,
+) -> None:
+    created: dict[str, Any] = {}
+    started: dict[str, Any] = {}
+
+    class FakeSecret:
+        def get_secret_value(self) -> str:
+            return "t" * 32
+
+    class FakeAvatarSession:
+        def __init__(self, **kwargs: Any) -> None:
+            created.update(kwargs)
+
+        async def start(self, session: Any, room: Any, **kwargs: Any) -> None:
+            started.update({"session": session, "room": room, **kwargs})
+
+    monkeypatch.setattr(
+        voice_agent.tavus,
+        "AvatarSession",
+        FakeAvatarSession,
+    )
+    session = object()
+    room = object()
+    configured = SimpleNamespace(
+        tavus_avatar_enabled=True,
+        tavus_api_key=FakeSecret(),
+        tavus_replica_id="r044d76f4490",
+        tavus_persona_id="pb87e71797da",
+        livekit_url="wss://aimauta-test.livekit.cloud",
+        livekit_api_key="livekit-key",
+        livekit_api_secret="livekit-secret",
+    )
+
+    assert (
+        await voice_agent.start_optional_tavus_avatar(
+            session,  # type: ignore[arg-type]
+            room,  # type: ignore[arg-type]
+            configured,  # type: ignore[arg-type]
+        )
+        is True
+    )
+    assert created == {
+        "api_key": "t" * 32,
+        "replica_id": "r044d76f4490",
+        "persona_id": "pb87e71797da",
+        "avatar_participant_identity": "tavus-avatar-agent",
+        "avatar_participant_name": "AImauta Tavus Avatar",
+    }
+    assert started == {
+        "session": session,
+        "room": room,
+        "livekit_url": "wss://aimauta-test.livekit.cloud",
+        "livekit_api_key": "livekit-key",
+        "livekit_api_secret": "livekit-secret",
+    }
+
+
+@pytest.mark.asyncio
+async def test_optional_tavus_avatar_falls_back_without_exposing_error(
+    monkeypatch,
+    caplog,
+) -> None:
+    class FakeSecret:
+        def get_secret_value(self) -> str:
+            return "t" * 32
+
+    class BrokenAvatarSession:
+        def __init__(self, **_: Any) -> None:
+            raise RuntimeError("provider response with private details")
+
+    monkeypatch.setattr(
+        voice_agent.tavus,
+        "AvatarSession",
+        BrokenAvatarSession,
+    )
+    configured = SimpleNamespace(
+        tavus_avatar_enabled=True,
+        tavus_api_key=FakeSecret(),
+        tavus_replica_id="r044d76f4490",
+        tavus_persona_id="pb87e71797da",
+    )
+
+    with caplog.at_level(logging.WARNING):
+        enabled = await voice_agent.start_optional_tavus_avatar(
+            object(),  # type: ignore[arg-type]
+            object(),  # type: ignore[arg-type]
+            configured,  # type: ignore[arg-type]
+        )
+
+    assert enabled is False
+    assert "continuing with local audio" in caplog.text
+    assert "private details" not in caplog.text
 
 
 def test_start_speech_ignores_only_agent_session_closing() -> None:
