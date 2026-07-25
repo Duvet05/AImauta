@@ -12,6 +12,7 @@ type TutorAvatarProps = {
 
 const avatarDescriptions: Record<TutorAvatarState, string> = {
   idle: "en espera",
+  preview: "en vista previa silenciosa",
   connecting: "preparando la conversación",
   ready: "conectado y con el micrófono silenciado",
   listening: "escuchando",

@@ -69,11 +69,20 @@ type TutorResponse = {
 };
 
 type LearningWorkspaceProps = {
+  avatarPreviewEnabled: boolean;
   book: Book;
   firstPage: number;
   units: readonly BookUnit[];
   voiceTutorEnabled: boolean;
 };
+
+const AvatarPreview = dynamic(
+  () =>
+    import("@/components/avatar-preview").then(
+      (module) => module.AvatarPreview,
+    ),
+  { ssr: false },
+);
 
 const VoiceTutor = dynamic(
   () =>
@@ -377,6 +386,7 @@ function welcomeMessage(activity?: PageActivity): ConversationMessage {
 }
 
 export function LearningWorkspace({
+  avatarPreviewEnabled,
   book,
   firstPage,
   units,
@@ -1139,6 +1149,8 @@ export function LearningWorkspace({
                     disabledReason={modeCopy.tutorDisabledReason}
                     onSessionUpdate={applyVoiceSession}
                   />
+                ) : avatarPreviewEnabled ? (
+                  <AvatarPreview />
                 ) : null}
               </>
             ) : null}

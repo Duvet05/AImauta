@@ -234,6 +234,7 @@ OLLAMA_BASE_URL=http://127.0.0.1:11435
 OLLAMA_MODEL=gemma4:e4b-it-qat
 OLLAMA_TIMEOUT_MS=45000
 
+AIMAUTA_AVATAR_ENABLED=false
 AIMAUTA_VOICE_TUTOR_ENABLED=false
 LIVEKIT_URL=wss://proyecto-aimauta.livekit.cloud
 LIVEKIT_API_URL=https://proyecto-aimauta.livekit.cloud
@@ -469,9 +470,13 @@ from="100.120.80.60",restrict,port-forwarding,permitlisten="127.0.0.1:3308",perm
 Antes de habilitar la unidad se verifica la huella fuera de banda y se prueba
 que la llave no puede abrir shell ni un segundo puerto.
 
-Este perfil habilita PDF y tutor de texto con Gemma. La voz queda disponible
-después de configurar el proyecto LiveKit Cloud, desplegar el worker y cambiar
-`AIMAUTA_VOICE_TUTOR_ENABLED` al valor exacto `true`. El entorno web debe
+Este perfil habilita PDF y tutor de texto con Gemma. La vista previa local se
+habilita con `AIMAUTA_AVATAR_ENABLED=true` y sigue oculta salvo en una URL de
+aprendizaje con `?avatar=1`.
+
+La voz queda disponible después de configurar el proyecto LiveKit Cloud,
+desplegar el worker y cambiar `AIMAUTA_VOICE_TUTOR_ENABLED` al valor exacto
+`true`. El entorno web debe
 recibir las cuatro variables `LIVEKIT_*`, el worker apuntar a
 `AIMAUTA_APP_URL=http://127.0.0.1:3309` y ambos deben compartir exactamente el
 mismo `AIMAUTA_AGENT_SECRET`.

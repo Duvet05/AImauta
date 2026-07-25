@@ -12,7 +12,11 @@ import type {
   Texture,
   WebGLRenderer,
 } from "three";
-import type { TutorAvatarState } from "@/lib/tutor-avatar";
+import {
+  resolveTutorMouthPose,
+  type TutorAvatarState,
+  type TutorMouthPose,
+} from "@/lib/tutor-avatar";
 
 type TutorAvatar3DProps = {
   state: TutorAvatarState;
@@ -35,6 +39,7 @@ type AvatarRuntime = {
 };
 
 const ACTIVE_STATES = new Set<TutorAvatarState>([
+  "preview",
   "connecting",
   "ready",
   "listening",
@@ -42,8 +47,14 @@ const ACTIVE_STATES = new Set<TutorAvatarState>([
   "reconnecting",
 ]);
 
-const AVATAR_URL = "/avatars/aimauta-teacher.glb";
+const AVATAR_URL = "/avatars/aimauta-teacher-v1.glb";
 const ANALYSIS_INTERVAL_MS = 1_000 / 30;
+const SILENT_MOUTH_POSE = resolveTutorMouthPose({
+  level: 0,
+  low: 0,
+  mid: 0,
+  high: 0,
+});
 
 function supportsWebGl(): boolean {
   try {
@@ -74,6 +85,46 @@ function setMorph(meshes: MorphMesh[], name: string, value: number) {
     }
     mesh.morphTargetInfluences[index] = value;
   }
+}
+
+function averageSpectrumBand(
+  spectrum: Uint8Array,
+  sampleRate: number,
+  fftSize: number,
+  minimumHz: number,
+  maximumHz: number,
+): number {
+  const hzPerBin = sampleRate / fftSize;
+  const firstBin = Math.max(1, Math.floor(minimumHz / hzPerBin));
+  const lastBin = Math.min(
+    spectrum.length,
+    Math.ceil(maximumHz / hzPerBin),
+  );
+  if (lastBin <= firstBin) return 0;
+
+  let total = 0;
+  for (let index = firstBin; index < lastBin; index += 1) {
+    total += spectrum[index] ?? 0;
+  }
+  return total / (lastBin - firstBin) / 255;
+}
+
+function blendMouthPose(
+  current: TutorMouthPose,
+  target: TutorMouthPose,
+  amount: number,
+): TutorMouthPose {
+  const blend = (from: number, to: number) => from + (to - from) * amount;
+  return {
+    jawOpen: blend(current.jawOpen, target.jawOpen),
+    visemeAa: blend(current.visemeAa, target.visemeAa),
+    visemeE: blend(current.visemeE, target.visemeE),
+    visemeFf: blend(current.visemeFf, target.visemeFf),
+    visemeI: blend(current.visemeI, target.visemeI),
+    visemeO: blend(current.visemeO, target.visemeO),
+    visemeSs: blend(current.visemeSs, target.visemeSs),
+    visemeU: blend(current.visemeU, target.visemeU),
+  };
 }
 
 function disposeMaterial(material: Material, textures: Set<Texture>) {
@@ -125,8 +176,8 @@ function createAudioAnalysisGraph(audioTrack: MediaStreamTrack) {
     const source = context.createMediaStreamSource(stream);
     const analyser = context.createAnalyser();
     const silentOutput = context.createGain();
-    analyser.fftSize = 512;
-    analyser.smoothingTimeConstant = 0.35;
+    analyser.fftSize = 1_024;
+    analyser.smoothingTimeConstant = 0.42;
     silentOutput.gain.value = 0;
     source.connect(analyser);
     analyser.connect(silentOutput);
@@ -139,9 +190,10 @@ function createAudioAnalysisGraph(audioTrack: MediaStreamTrack) {
 }
 
 /**
- * Optional WebGL layer powered by Three.js. The model is loaded only after the
- * learner starts voice, and mouth motion is derived locally from the validated
- * agent audio track. The illustrated SVG remains the no-WebGL fallback.
+ * Optional WebGL layer powered by Three.js. The model loads for the explicit
+ * silent preview or an active voice session. Mouth motion is derived locally
+ * from the validated agent audio track. The illustrated SVG remains the
+ * no-WebGL fallback.
  */
 export function TutorAvatar3D({
   state,
@@ -149,7 +201,7 @@ export function TutorAvatar3D({
   onReadyChange,
 }: TutorAvatar3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mouthLevelRef = useRef(0);
+  const mouthPoseRef = useRef<TutorMouthPose>(SILENT_MOUTH_POSE);
   const stateRef = useRef(state);
   const [ready, setReady] = useState(false);
   const enabled = ACTIVE_STATES.has(state);
@@ -276,15 +328,21 @@ export function TutorAvatar3D({
 
         const seconds = now / 1_000;
         const speaking = stateRef.current === "speaking";
-        const mouth = speaking ? mouthLevelRef.current : 0;
+        const mouth = speaking ? mouthPoseRef.current : SILENT_MOUTH_POSE;
         const blinkPhase = now % 5_200;
         const blink =
           blinkPhase > 4_980
             ? Math.sin(((blinkPhase - 4_980) / 220) * Math.PI)
             : 0;
 
-        setMorph(meshes, "jawOpen", mouth * 0.6);
-        setMorph(meshes, "viseme_aa", mouth * 0.72);
+        setMorph(meshes, "jawOpen", mouth.jawOpen);
+        setMorph(meshes, "viseme_aa", mouth.visemeAa);
+        setMorph(meshes, "viseme_E", mouth.visemeE);
+        setMorph(meshes, "viseme_FF", mouth.visemeFf);
+        setMorph(meshes, "viseme_I", mouth.visemeI);
+        setMorph(meshes, "viseme_O", mouth.visemeO);
+        setMorph(meshes, "viseme_SS", mouth.visemeSs);
+        setMorph(meshes, "viseme_U", mouth.visemeU);
         setMorph(meshes, "mouthSmileLeft", speaking ? 0.03 : 0.08);
         setMorph(meshes, "mouthSmileRight", speaking ? 0.03 : 0.08);
         setMorph(meshes, "eyeBlinkLeft", blink);
@@ -312,7 +370,7 @@ export function TutorAvatar3D({
       cancelled = true;
       window.cancelAnimationFrame(animationFrame);
       resizeObserver?.disconnect();
-      mouthLevelRef.current = 0;
+      mouthPoseRef.current = SILENT_MOUTH_POSE;
       disposeResources();
       onReadyChange(false);
     };
@@ -320,7 +378,7 @@ export function TutorAvatar3D({
 
   useEffect(() => {
     if (!ready || !audioTrack || audioTrack.readyState !== "live") {
-      mouthLevelRef.current = 0;
+      mouthPoseRef.current = SILENT_MOUTH_POSE;
       return;
     }
 
@@ -328,15 +386,15 @@ export function TutorAvatar3D({
     try {
       graph = createAudioAnalysisGraph(audioTrack);
     } catch {
-      mouthLevelRef.current = 0;
+      mouthPoseRef.current = SILENT_MOUTH_POSE;
       return;
     }
     const { analyser, context, silentOutput, source } = graph;
-    const samples = new Float32Array(512);
+    const samples = new Float32Array(analyser.fftSize);
+    const spectrum = new Uint8Array(analyser.frequencyBinCount);
 
     let animationFrame = 0;
     let lastAnalysisAt = 0;
-    let level = 0;
 
     const resumeContext = () => {
       if (context.state === "suspended") {
@@ -350,13 +408,43 @@ export function TutorAvatar3D({
     const analyse = (now: number) => {
       if (now - lastAnalysisAt >= ANALYSIS_INTERVAL_MS) {
         analyser.getFloatTimeDomainData(samples);
+        analyser.getByteFrequencyData(spectrum);
         let energy = 0;
         for (const sample of samples) energy += sample * sample;
         const rms = Math.sqrt(energy / samples.length);
         const targetLevel = Math.min(1, Math.max(0, (rms - 0.012) * 12));
-        level +=
-          (targetLevel - level) * (targetLevel > level ? 0.55 : 0.22);
-        mouthLevelRef.current = level;
+        const targetPose = resolveTutorMouthPose({
+          level: targetLevel,
+          low: averageSpectrumBand(
+            spectrum,
+            context.sampleRate,
+            analyser.fftSize,
+            80,
+            500,
+          ),
+          mid: averageSpectrumBand(
+            spectrum,
+            context.sampleRate,
+            analyser.fftSize,
+            500,
+            2_200,
+          ),
+          high: averageSpectrumBand(
+            spectrum,
+            context.sampleRate,
+            analyser.fftSize,
+            2_200,
+            6_000,
+          ),
+        });
+        const currentPose = mouthPoseRef.current;
+        const blendAmount =
+          targetPose.jawOpen > currentPose.jawOpen ? 0.58 : 0.24;
+        mouthPoseRef.current = blendMouthPose(
+          currentPose,
+          targetPose,
+          blendAmount,
+        );
         lastAnalysisAt = now;
       }
       animationFrame = window.requestAnimationFrame(analyse);
@@ -364,8 +452,7 @@ export function TutorAvatar3D({
     animationFrame = window.requestAnimationFrame(analyse);
 
     const resetMouth = () => {
-      level = 0;
-      mouthLevelRef.current = 0;
+      mouthPoseRef.current = SILENT_MOUTH_POSE;
     };
     audioTrack.addEventListener("ended", resetMouth);
 

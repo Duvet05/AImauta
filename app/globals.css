@@ -2070,6 +2070,25 @@ svg {
   box-shadow: 0 0 0 4px rgba(200, 93, 82, 0.14);
 }
 
+.avatar-preview-badge {
+  padding: 0.25rem 0.45rem;
+  border: 1px solid rgba(23, 79, 70, 0.14);
+  border-radius: 999px;
+  color: var(--forest);
+  background: rgba(217, 237, 141, 0.42);
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.avatar-preview .voice-status {
+  margin: 0;
+  color: #40534d;
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
 .voice-presence {
   display: grid;
   grid-template-columns: 5.4rem minmax(0, 1fr);
@@ -2269,6 +2288,7 @@ svg {
 }
 
 .tutor-avatar-ready .tutor-avatar-state,
+.tutor-avatar-preview .tutor-avatar-state,
 .tutor-avatar-listening .tutor-avatar-state,
 .tutor-avatar-speaking .tutor-avatar-state {
   background: #58a86a;
