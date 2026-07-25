@@ -49,3 +49,22 @@ export function presentCourseWithStudentCount<
 export function uniqueRelationIds(values: readonly string[]): string[] {
   return [...new Set(values)];
 }
+
+/**
+ * Renames the completion count to something a teacher-facing client can read
+ * directly, mirroring how presentCourseWithStudentCount hides the Enrollment
+ * join table from the API contract.
+ */
+export function presentAssignment<
+  TAssignment extends { _count: { completions: number } },
+>(assignment: TAssignment) {
+  const { _count, ...fields } = assignment;
+  const { completions, ...counts } = _count;
+  return {
+    ...fields,
+    _count: {
+      ...counts,
+      completed: completions,
+    },
+  };
+}

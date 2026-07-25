@@ -3,13 +3,34 @@ import type { ReactNode } from "react";
 
 import "./globals.css";
 
+// Absolute base for social previews. Links are shared mostly over WhatsApp,
+// which resolves og:image against this origin rather than the current request.
+const siteUrl = process.env.AIMAUTA_SITE_URL?.trim() || "https://aimauta.pe";
+
+const description =
+  "Tutoría guiada sobre materiales oficiales del MINEDU. AImauta parte de tu intento, orienta con preguntas y pistas graduales, y muestra la fuente de cada explicación.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: {
     default: "AImauta — Aprende pensando",
     template: "%s | AImauta",
   },
-  description:
-    "Tutoría guiada sobre materiales oficiales del MINEDU. AImauta parte de tu intento, orienta con preguntas y pistas graduales, y muestra la fuente de cada explicación.",
+  description,
+  applicationName: "AImauta",
+  openGraph: {
+    type: "website",
+    locale: "es_PE",
+    siteName: "AImauta",
+    title: "AImauta — No hace tu tarea. Te ayuda a entenderla.",
+    description,
+    url: siteUrl,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AImauta — No hace tu tarea. Te ayuda a entenderla.",
+    description,
+  },
   icons: {
     icon: [
       {

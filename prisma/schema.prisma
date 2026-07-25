@@ -43,6 +43,7 @@ model Course {
   grade       Grade        @relation(fields: [gradeId], references: [id], onDelete: Cascade)
   teachers    Teacher[]    @relation("TeacherCourses")
   enrollments Enrollment[]
+  assignments Assignment[]
 
   @@unique([gradeId, name])
   @@index([gradeId])
@@ -57,6 +58,7 @@ model Student {
   updatedAt DateTime @updatedAt
 
   enrollments Enrollment[]
+  completions AssignmentCompletion[]
 }
 
 model Teacher {
@@ -69,6 +71,7 @@ model Teacher {
 
   courses       Course[]       @relation("TeacherCourses")
   progressNotes ProgressNote[]
+  assignments   Assignment[]
 }
 
 // A student's participation in one course. Per-student grades and teacher
@@ -91,19 +94,85 @@ model Enrollment {
   @@index([courseId])
 }
 
+// A task a teacher hands out to a course, pointing at pages of a book in the
+// versioned catalog (bookId/unitId are plain strings for the same reason as
+// Evaluation.unitId: the catalog lives in /config, not in this database).
+//
+// `token` is the only thing that travels in the shared link and QR code. It
+// carries no personal data, so a forwarded code never leaks who it was for,
+// and it can be expired or revoked without touching academic records.
+model Assignment {
+  id           String    @id @default(cuid())
+  token        String    @unique
+  teacherId    String
+  courseId     String
+  bookId       String
+  unitId       String?
+  title        String
+  instructions String?
+  firstPage    Int
+  lastPage     Int
+  active       Boolean   @default(true)
+  expiresAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  teacher     Teacher                @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  course      Course                 @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  completions AssignmentCompletion[]
+
+  @@index([teacherId])
+  @@index([courseId])
+}
+
+// Evidence that someone finished an assignment. Deliberately holds no PII: the
+// student is identified by the alias or roll number the teacher already uses in
+// class, and `studentId` stays null for anonymous QR access.
+//
+// `shareToken` addresses the celebration image. It is separate from
+// Assignment.token so that sharing an achievement never exposes the task link,
+// and so a single completion can be revoked on its own.
+model AssignmentCompletion {
+  id           String   @id @default(cuid())
+  shareToken   String   @unique
+  assignmentId String
+  studentId    String?
+  studentAlias String
+  attemptCount Int      @default(0)
+  hintsUsed    Int      @default(0)
+  autonomy     Autonomy @default(GUIDED)
+  completedAt  DateTime @default(now())
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student    Student?   @relation(fields: [studentId], references: [id], onDelete: SetNull)
+
+  @@unique([assignmentId, studentAlias])
+  @@index([assignmentId])
+  @@index([studentId])
+}
+
+// How much support the student needed to finish. Derived from hints used and
+// attempts made, never shown to the student as a score or a ranking: it exists
+// so the teacher can see who to check on, not to label anyone.
+enum Autonomy {
+  INDEPENDENT
+  GUIDED
+  SUPPORTED
+}
+
 // One graded evaluation for a student in a course. unitId is a plain string,
 // not a foreign key: units live in the versioned book-catalog config
 // (lib/curriculum.ts / config/curricula.v3.json), not in this database.
 model Evaluation {
-  id           String    @id @default(cuid())
+  id           String   @id @default(cuid())
   enrollmentId String
   title        String?
   score        Float?
   maxScore     Float?
   unitId       String?
-  evaluatedAt  DateTime  @default(now())
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  evaluatedAt  DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   enrollment    Enrollment     @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
   progressNotes ProgressNote[]
