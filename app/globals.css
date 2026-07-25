@@ -1984,7 +1984,7 @@ svg {
     var(--paper);
 }
 
-.rag-quickstart {
+.guide-quickstart {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 0.7rem;
@@ -1996,7 +1996,7 @@ svg {
   background: rgba(219, 236, 227, 0.56);
 }
 
-.rag-quickstart > span {
+.guide-quickstart > span {
   padding: 0.3rem 0.45rem;
   border-radius: 0.35rem;
   color: white;
@@ -2006,13 +2006,13 @@ svg {
   letter-spacing: 0.08em;
 }
 
-.rag-quickstart strong {
+.guide-quickstart strong {
   display: block;
   font-family: var(--font-display);
   font-size: 0.84rem;
 }
 
-.rag-quickstart p {
+.guide-quickstart p {
   margin: 0.2rem 0 0;
   color: var(--ink-soft);
   font-size: 0.7rem;
