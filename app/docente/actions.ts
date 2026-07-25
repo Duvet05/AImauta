@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 
 import { requireTeacherSession } from "@/app/docente/guard";
+import { parseCreateAssignmentInput } from "@/lib/assignment-content";
+import {
+  createAssignment as createSecureAssignment,
+  patchAssignment,
+} from "@/lib/assignment-service";
 import type { ProgressStatus } from "@/lib/generated/prisma/client";
+import { ApiError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 
 export type ActionResult = { ok: true } | { ok: false; message: string };
@@ -60,7 +66,126 @@ export async function recordProgressNote(
   return { ok: true };
 }
 
+/**
+ * Creates the assignment through the canonical snapshot parser and service.
+ * The service hashes and encrypts the public token before persisting it.
+ */
+export async function createAssignment(
+  formData: FormData,
+): Promise<ActionResult> {
+  await requireTeacherSession();
+
+  const teacherId = readString(formData, "teacherId");
+  const courseId = readString(formData, "courseId");
+  if (!teacherId || !courseId) {
+    return { ok: false, message: "Falta identificar el curso o el docente." };
+  }
+
+  const firstPage = readInteger(formData, "firstPage");
+  const lastPage = readInteger(formData, "lastPage");
+  if (
+    firstPage === null ||
+    lastPage === null ||
+    firstPage < 1 ||
+    lastPage < firstPage
+  ) {
+    return { ok: false, message: "Elige un rango de páginas válido." };
+  }
+  if (lastPage - firstPage + 1 > 50) {
+    return {
+      ok: false,
+      message: "Una tarea puede incluir como máximo 50 páginas.",
+    };
+  }
+
+  const bookId = readString(formData, "bookId");
+  const title = readString(formData, "title");
+  const instructions = readString(formData, "instructions");
+  if (!bookId || !title) {
+    return { ok: false, message: "Elige un cuaderno y escribe un nombre." };
+  }
+
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1_000);
+
+  try {
+    const input = await parseCreateAssignmentInput({
+      kind: "TASK",
+      title,
+      ...(instructions ? { instructions } : {}),
+      teacherId,
+      courseId,
+      availableFrom: null,
+      expiresAt: expiresAt.toISOString(),
+      maxHintLevel: 3,
+      minimumTurnsPerItem: 0,
+      requiredItemCount: lastPage - firstPage + 1,
+      items: Array.from(
+        { length: lastPage - firstPage + 1 },
+        (_, offset) => ({
+          kind: "PAGE",
+          bookId,
+          page: firstPage + offset,
+        }),
+      ),
+    });
+
+    await createSecureAssignment(input);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return { ok: false, message: error.message };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/docente/${courseId}`);
+  return { ok: true };
+}
+
+/**
+ * Revocation preserves aggregate anonymous runs while stopping new access.
+ */
+export async function closeAssignment(
+  formData: FormData,
+): Promise<ActionResult> {
+  await requireTeacherSession();
+
+  const assignmentId = readString(formData, "assignmentId");
+  const teacherId = readString(formData, "teacherId");
+  if (!assignmentId || !teacherId) {
+    return { ok: false, message: "Falta identificar la tarea." };
+  }
+
+  try {
+    const assignment = await patchAssignment({
+      id: assignmentId,
+      teacherId,
+      body: { status: "REVOKED" },
+    });
+    revalidatePath(
+      assignment.course?.id
+        ? `/docente/${assignment.course.id}`
+        : "/docente",
+    );
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return { ok: false, message: error.message };
+    }
+    throw error;
+  }
+  return { ok: true };
+}
+
 function readString(formData: FormData, key: string): string {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function readInteger(formData: FormData, key: string): number | null {
+  const value = readString(formData, key);
+  if (!/^[0-9]+$/.test(value)) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
 }
