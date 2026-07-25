@@ -6,6 +6,10 @@ import { LearningWorkspace } from "@/components/learning-workspace";
 import { getBook } from "@/lib/catalog";
 import { getBookUnits } from "@/lib/curriculum";
 import { resolvePublicAssignment } from "@/lib/assignment-service";
+import {
+  isAvatarEnabled,
+  isVoiceTutorEnabled,
+} from "@/lib/feature-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -43,11 +47,11 @@ export default async function AssignmentItemPage({
           landingPath: `/a/${encodeURIComponent(token)}`,
           assignmentTitle: resolved.public.title
         }}
-        avatarPreviewEnabled={false}
+        avatarPreviewEnabled={isAvatarEnabled()}
         book={book}
         firstPage={item.pages[0]}
         units={getBookUnits(book.id)}
-        voiceTutorEnabled={false}
+        voiceTutorEnabled={isVoiceTutorEnabled()}
       />
     </main>
   );
