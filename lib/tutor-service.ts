@@ -13,7 +13,7 @@ import {
   fallbackGuide,
   getTurnPolicy,
   isSafeTutorMessage,
-  parseGuidanceMove,
+  parseGuidanceDecision,
   renderGuidanceMove,
   type TurnPolicy
 } from "@/lib/pedagogy";
@@ -81,11 +81,12 @@ async function createGuidedMessage(input: {
       policy: input.policy
     });
     const rawMove = inference?.content ?? null;
-    const move = rawMove ? parseGuidanceMove(rawMove) : null;
-    if (move) {
+    const decision = rawMove ? parseGuidanceDecision(rawMove) : null;
+    if (decision) {
       tutorMessage = renderGuidanceMove({
-        move,
-        attempted: input.attempt.trim().length >= 3
+        move: decision.move,
+        attempted: input.attempt.trim().length >= 3,
+        question: decision.question
       });
     }
     if (tutorMessage && isSafeTutorMessage(tutorMessage)) {

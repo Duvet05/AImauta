@@ -15,8 +15,21 @@ export type GuidanceMove =
   | "COMPRUEBA"
   | "DIVIDE";
 
+export type GuidanceDecision = {
+  move: GuidanceMove;
+  question: string | null;
+};
+
 const MAX_TUTOR_EVIDENCE_ITEMS = 3;
 const MAX_TUTOR_EVIDENCE_CHARACTERS = 1_200;
+const MAX_GUIDANCE_QUESTION_CHARACTERS = 240;
+const guidanceMoves = new Set<GuidanceMove>([
+  "OBSERVA",
+  "REFORMULA",
+  "COMPARA",
+  "COMPRUEBA",
+  "DIVIDE"
+]);
 
 export function getTurnPolicy(input: {
   hintLevel: 0 | 1 | 2 | 3;
@@ -32,7 +45,7 @@ export function getTurnPolicy(input: {
   return {
     hintLevel: input.stage === "assessment" ? 0 : input.hintLevel,
     canRevealSolution,
-    maxOutputTokens: 12,
+    maxOutputTokens: 64,
     stage: input.stage
   };
 }
@@ -62,11 +75,14 @@ OBJETIVO
 Ayuda al estudiante a pensar y avanzar. No resuelvas el ejercicio por él.
 
 TAREA
-Elige el movimiento pedagógico más útil. Tu salida no se mostrará directamente
-al estudiante: el servidor la convertirá en una pregunta aprobada.
+Elige el movimiento pedagógico más útil y redacta una sola pregunta breve,
+natural y específica para lo que el estudiante acaba de decir.
 
 SALIDA OBLIGATORIA
-Responde con una sola de estas etiquetas exactas, sin puntuación ni texto extra:
+Devuelve únicamente JSON válido en una sola línea, sin Markdown ni texto extra:
+{"move":"OBSERVA","question":"¿Qué dato de la tabla usarías primero y por qué?"}
+
+El campo move debe ser exactamente una de estas etiquetas:
 - OBSERVA: identificar información o instrucciones relevantes.
 - REFORMULA: explicar con palabras propias qué pide el ejercicio.
 - COMPARA: relacionar datos sin calcular ni resolver.
@@ -74,6 +90,11 @@ Responde con una sola de estas etiquetas exactas, sin puntuación ni texto extra
 - DIVIDE: separar el proceso en pasos sin anticipar ninguno.
 
 REGLAS INNEGOCIABLES
+- question debe tener como máximo 22 palabras, sonar bien al decirse en voz alta
+  y contener exactamente una pregunta.
+- Haz referencia concreta a un elemento visible de EVIDENCE cuando sea posible.
+- No saludes, no felicites, no repitas la pregunta del estudiante y no encadenes
+  explicaciones antes de la pregunta.
 - No reveles ni calcules la respuesta final. El servidor controla por separado
   si una respuesta revisada puede mostrarse.
 - Usa como máximo el nivel de ayuda ${input.policy.hintLevel} de 3.
@@ -93,26 +114,70 @@ ${evidence}
 </EVIDENCE_UNTRUSTED>`;
 }
 
-export function parseGuidanceMove(value: string): GuidanceMove | null {
+export function parseGuidanceDecision(
+  value: string
+): GuidanceDecision | null {
   const normalized = value.trim().toLocaleUpperCase("es-PE");
-  const allowed = new Set<GuidanceMove>([
-    "OBSERVA",
-    "REFORMULA",
-    "COMPARA",
-    "COMPRUEBA",
-    "DIVIDE"
-  ]);
-  return allowed.has(normalized as GuidanceMove)
-    ? (normalized as GuidanceMove)
-    : null;
+  if (guidanceMoves.has(normalized as GuidanceMove)) {
+    return {
+      move: normalized as GuidanceMove,
+      question: null
+    };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return null;
+  }
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    Array.isArray(parsed)
+  ) {
+    return null;
+  }
+  const record = parsed as Record<string, unknown>;
+  if (
+    Object.keys(record).length !== 2 ||
+    !Object.hasOwn(record, "move") ||
+    !Object.hasOwn(record, "question") ||
+    typeof record.move !== "string" ||
+    typeof record.question !== "string"
+  ) {
+    return null;
+  }
+  const move = record.move.trim().toLocaleUpperCase("es-PE");
+  const question = record.question.trim();
+  if (
+    !guidanceMoves.has(move as GuidanceMove) ||
+    question !== record.question ||
+    question.length < 8 ||
+    question.length > MAX_GUIDANCE_QUESTION_CHARACTERS ||
+    question.split(/\s+/u).length > 22 ||
+    !question.endsWith("?") ||
+    !isSafeTutorMessage(question)
+  ) {
+    return null;
+  }
+  return {
+    move: move as GuidanceMove,
+    question
+  };
+}
+
+export function parseGuidanceMove(value: string): GuidanceMove | null {
+  return parseGuidanceDecision(value)?.move ?? null;
 }
 
 export function renderGuidanceMove(input: {
   move: GuidanceMove;
   attempted: boolean;
+  question?: string | null;
 }): string {
   const acknowledgement = input.attempted
-    ? "Gracias por compartir tu intento. "
+    ? "Entiendo tu idea. "
     : "";
   const questions: Record<GuidanceMove, string> = {
     OBSERVA:
@@ -126,7 +191,11 @@ export function renderGuidanceMove(input: {
     DIVIDE:
       "Si separas el ejercicio en pasos, ¿qué deberías comprender antes de avanzar?"
   };
-  return `${acknowledgement}${questions[input.move]}`;
+  const question =
+    input.question && isSafeTutorMessage(input.question)
+      ? input.question
+      : questions[input.move];
+  return `${acknowledgement}${question}`;
 }
 
 export function fallbackGuide(input: {

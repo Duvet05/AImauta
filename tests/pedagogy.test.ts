@@ -5,6 +5,7 @@ import {
   fallbackGuide,
   getTurnPolicy,
   isSafeTutorMessage,
+  parseGuidanceDecision,
   parseGuidanceMove,
   renderGuidanceMove
 } from "@/lib/pedagogy";
@@ -18,7 +19,7 @@ describe("política pedagógica", () => {
 
     expect(policy.hintLevel).toBe(3);
     expect(policy.canRevealSolution).toBe(false);
-    expect(policy.maxOutputTokens).toBe(12);
+    expect(policy.maxOutputTokens).toBe(64);
   });
 
   it("marca la evidencia como no confiable y prohíbe inventar", () => {
@@ -49,6 +50,22 @@ describe("política pedagógica", () => {
     });
     expect(message).toContain("Gracias por compartir tu intento");
     expect(isSafeTutorMessage(message)).toBe(true);
+  });
+
+  it("acepta una pregunta breve estructurada y rechaza campos adicionales", () => {
+    expect(
+      parseGuidanceDecision(
+        '{"move":"OBSERVA","question":"¿Qué dato de la tabla usarías primero y por qué?"}'
+      )
+    ).toEqual({
+      move: "OBSERVA",
+      question: "¿Qué dato de la tabla usarías primero y por qué?"
+    });
+    expect(
+      parseGuidanceDecision(
+        '{"move":"OBSERVA","question":"¿Qué observas?","answer":"42"}'
+      )
+    ).toBeNull();
   });
 
   it("el modo de respaldo también guía con una pregunta", () => {
