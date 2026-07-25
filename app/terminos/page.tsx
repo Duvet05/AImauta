@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { BrandMark } from "@/components/brand-mark";
+import { FooterQuipus } from "@/components/footer-quipus";
 
 export const metadata: Metadata = {
   title: "Términos de uso",
@@ -218,6 +219,7 @@ export default function TerminosPage() {
             <Link href="/privacidad">Privacidad y datos</Link>
           </nav>
         </div>
+        <FooterQuipus />
       </footer>
     </main>
   );

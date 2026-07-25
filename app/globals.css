@@ -301,39 +301,6 @@ svg {
   isolation: isolate;
 }
 
-.hero-editorial-figure {
-  position: absolute;
-  z-index: -1;
-  top: -1.5rem;
-  left: -2.25rem;
-  overflow: hidden;
-  width: 275px;
-  height: 345px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 48% 48% 1.5rem 1.5rem;
-  background: rgba(255, 253, 247, 0.05);
-  box-shadow: 0 28px 64px rgba(4, 29, 25, 0.2);
-  opacity: 0.46;
-  transform: rotate(2.5deg);
-}
-
-.hero-editorial-figure::after {
-  position: absolute;
-  inset: 0;
-  content: "";
-  background: linear-gradient(
-    145deg,
-    rgba(23, 79, 70, 0.06),
-    rgba(16, 60, 54, 0.55)
-  );
-}
-
-.hero-editorial-figure img {
-  padding: 1rem 0.4rem 0;
-  object-fit: contain;
-  object-position: center bottom;
-}
-
 .hero-amauta-guide {
   position: absolute;
   z-index: 1;
@@ -1193,6 +1160,28 @@ svg {
 .footer-links a:focus-visible {
   color: var(--ink);
   text-decoration-color: currentColor;
+}
+
+.footer-quipus {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  justify-content: center;
+  gap: clamp(1.5rem, 8vw, 6rem);
+  padding: 1.4rem 0 0.8rem;
+  border-top: 1px solid var(--line);
+}
+
+.footer-quipus img {
+  width: clamp(6.25rem, 10vw, 8.5rem);
+  height: auto;
+  opacity: 0.88;
+  filter: drop-shadow(0 10px 16px rgba(23, 45, 42, 0.1));
+  transform: rotate(-1.5deg);
+}
+
+.footer-quipus img:last-child {
+  transform: scaleX(-1) rotate(-1.5deg);
 }
 
 /* Páginas legales */
