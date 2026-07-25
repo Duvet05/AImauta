@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from collections.abc import Mapping
+from collections.abc import Awaitable, Mapping
 from contextlib import suppress
 
 import aiohttp
@@ -24,6 +24,12 @@ from aimauta_voice.tutor_client import TutorClient, TutorServiceError, TutorTurn
 logger = logging.getLogger("aimauta.voice")
 CONTEXT_TOPIC = "aimauta.context.v1"
 SESSION_TOPIC = "aimauta.session.v1"
+_ROOM_DISCONNECTED_WHILE_WAITING = (
+    "room disconnected while waiting for participant"
+)
+_SESSION_CLOSING_WHILE_SAYING = (
+    "AgentSession is closing, cannot use say()"
+)
 _SENSITIVE_LOG_FIELDS = frozenset(
     {
         "message_text",
@@ -33,6 +39,25 @@ _SENSITIVE_LOG_FIELDS = frozenset(
         "user_transcript",
     }
 )
+
+
+def _start_speech_if_open(
+    session: AgentSession,
+    text: str,
+    *,
+    add_to_chat_ctx: bool = True,
+    allow_interruptions: bool = True,
+) -> Awaitable[None] | None:
+    try:
+        return session.say(
+            text,
+            add_to_chat_ctx=add_to_chat_ctx,
+            allow_interruptions=allow_interruptions,
+        )
+    except RuntimeError as error:
+        if str(error) != _SESSION_CLOSING_WHILE_SAYING:
+            raise
+        return None
 
 
 class SensitiveLogFilter(logging.Filter):
@@ -131,7 +156,8 @@ class AImautaVoiceAgent(Agent):
 
         turn_ctx.add_message(role="user", content=transcript)
         await self.update_chat_ctx(turn_ctx)
-        self.session.say(
+        _start_speech_if_open(
+            self.session,
             answer,
             add_to_chat_ctx=True,
             allow_interruptions=True,
@@ -209,17 +235,24 @@ async def entrypoint(ctx: agents.JobContext) -> None:
     if not ctx.room.name.startswith("aimauta-"):
         return
 
-    await ctx.connect()
-    room_metadata = parse_room_metadata(ctx.room.metadata, ctx.room.name)
-    dispatch_metadata = parse_dispatch_metadata(
-        ctx.job.metadata,
-        room_metadata.session_id,
-    )
-    settings = get_settings()
-    install_session_deadline(ctx, settings.max_session_seconds)
+    try:
+        await ctx.connect()
+        room_metadata = parse_room_metadata(ctx.room.metadata, ctx.room.name)
+        dispatch_metadata = parse_dispatch_metadata(
+            ctx.job.metadata,
+            room_metadata.session_id,
+        )
+        settings = get_settings()
+        install_session_deadline(ctx, settings.max_session_seconds)
 
-    student_identity = f"student-{room_metadata.session_id}"
-    await ctx.wait_for_participant(identity=student_identity)
+        student_identity = f"student-{room_metadata.session_id}"
+        await ctx.wait_for_participant(identity=student_identity)
+    except asyncio.CancelledError:
+        return
+    except RuntimeError as error:
+        if str(error) != _ROOM_DISCONNECTED_WHILE_WAITING:
+            raise
+        return
 
     http = aiohttp.ClientSession()
 
@@ -289,13 +322,20 @@ async def entrypoint(ctx: agents.JobContext) -> None:
                 delete_room_on_close=True,
             ),
         )
-        await session.say(
+        greeting = _start_speech_if_open(
+            session,
             "Te escucho. Cuéntame qué intentaste y avanzaremos con una pregunta.",
             allow_interruptions=True,
         )
-    except BaseException:
+        if greeting is None:
+            await http.close()
+            return
+        await greeting
+    except BaseException as error:
         if not http.closed:
             await http.close()
+        if isinstance(error, asyncio.CancelledError):
+            return
         raise
 
 

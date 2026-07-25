@@ -120,6 +120,17 @@ afterAll(async () => {
 });
 
 describe("almacén público de ejercicios", () => {
+  it("trata una primera ausencia como no publicada y detecta una promoción sin caché negativa", async () => {
+    await expect(loadPublicExerciseManifest(bookId)).rejects.toMatchObject({
+      name: "ExerciseManifestNotPublishedError",
+    });
+
+    await publishFixture();
+    await expect(loadPublicExerciseManifest(bookId)).resolves.toMatchObject({
+      bookId,
+    });
+  });
+
   it("valida el manifiesto y nunca abre ni proyecta soluciones privadas", async () => {
     await publishFixture();
     await writeFile(
@@ -157,10 +168,13 @@ describe("almacén público de ejercicios", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("falla cerrado cuando el archivo falta o no coincide con el catálogo", async () => {
-    await expect(loadPublicExerciseManifest(bookId)).rejects.toBeInstanceOf(
-      ExerciseManifestUnavailableError,
-    );
+  it("considera no publicado un archivo retirado y falla cerrado si el existente no coincide", async () => {
+    await publishFixture();
+    await loadPublicExerciseManifest(bookId);
+    await rm(publicManifestPath, { force: true });
+    await expect(loadPublicExerciseManifest(bookId)).rejects.toMatchObject({
+      name: "ExerciseManifestNotPublishedError",
+    });
 
     await publishFixture({
       ...manifest(),
@@ -169,6 +183,19 @@ describe("almacén público de ejercicios", () => {
     await expect(loadPublicExerciseManifest(bookId)).rejects.toBeInstanceOf(
       ExerciseManifestUnavailableError,
     );
+  });
+
+  it("se recupera cuando un manifiesto corrupto es reemplazado por uno válido", async () => {
+    await publishFixture({ schemaVersion: 999, bookId });
+    await expect(loadPublicExerciseManifest(bookId)).rejects.toMatchObject({
+      name: "ExerciseManifestUnavailableError",
+      reason: "integrity",
+    });
+
+    await publishFixture();
+    await expect(loadPublicExerciseManifest(bookId)).resolves.toMatchObject({
+      bookId,
+    });
   });
 
   it("rechaza un manifiesto que ubica ejercicios en evaluación", async () => {

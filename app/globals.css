@@ -1639,9 +1639,9 @@ svg {
   align-items: start;
   margin-bottom: 0.85rem;
   padding: 0.72rem;
-  border: 1px dashed rgba(169, 31, 31, 0.42);
+  border: 1px solid rgba(23, 79, 70, 0.16);
   border-radius: 0.7rem;
-  background: rgba(217, 54, 54, 0.045);
+  background: rgba(219, 236, 227, 0.3);
 }
 
 .exercise-focus > span {
@@ -1650,9 +1650,9 @@ svg {
   height: 2rem;
   align-items: center;
   justify-content: center;
-  border: 2px solid #c92d2d;
+  border: 2px solid rgba(23, 79, 70, 0.35);
   border-radius: 999px;
-  color: #a71f1f;
+  color: var(--forest);
   background: white;
   font-weight: 900;
 }
@@ -1668,6 +1668,27 @@ svg {
   color: var(--ink-soft);
   font-size: 0.7rem;
   line-height: 1.45;
+}
+
+.exercise-focus-selectable {
+  border-style: dashed;
+  border-color: rgba(169, 31, 31, 0.42);
+  background: rgba(217, 54, 54, 0.045);
+}
+
+.exercise-focus-selectable > span {
+  border-color: #c92d2d;
+  color: #a71f1f;
+}
+
+.exercise-focus-warning {
+  border-color: rgba(183, 102, 78, 0.34);
+  background: rgba(255, 240, 232, 0.72);
+}
+
+.exercise-focus-warning > span {
+  border-color: #b7664e;
+  color: #834633;
 }
 
 .exercise-focus-active {
@@ -2049,6 +2070,25 @@ svg {
   box-shadow: 0 0 0 4px rgba(200, 93, 82, 0.14);
 }
 
+.avatar-preview-badge {
+  padding: 0.25rem 0.45rem;
+  border: 1px solid rgba(23, 79, 70, 0.14);
+  border-radius: 999px;
+  color: var(--forest);
+  background: rgba(217, 237, 141, 0.42);
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.avatar-preview .voice-status {
+  margin: 0;
+  color: #40534d;
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
 .voice-presence {
   display: grid;
   grid-template-columns: 5.4rem minmax(0, 1fr);
@@ -2248,6 +2288,7 @@ svg {
 }
 
 .tutor-avatar-ready .tutor-avatar-state,
+.tutor-avatar-preview .tutor-avatar-state,
 .tutor-avatar-listening .tutor-avatar-state,
 .tutor-avatar-speaking .tutor-avatar-state {
   background: #58a86a;
@@ -2541,6 +2582,79 @@ svg {
   line-height: 1.45;
 }
 
+.exercise-availability-banner {
+  position: absolute;
+  z-index: 4;
+  top: 5.35rem;
+  right: 1rem;
+  left: 1rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.7rem;
+  align-items: center;
+  max-width: 52rem;
+  margin-inline: auto;
+  padding: 0.72rem 0.82rem;
+  border: 1px solid rgba(23, 79, 70, 0.17);
+  border-radius: 0.75rem;
+  color: var(--ink);
+  background: rgba(255, 253, 247, 0.97);
+  box-shadow: 0 12px 32px rgba(28, 53, 46, 0.16);
+  backdrop-filter: blur(8px);
+}
+
+.exercise-availability-banner-warning {
+  border-color: rgba(183, 102, 78, 0.34);
+  background: rgba(255, 247, 241, 0.98);
+}
+
+.exercise-availability-banner-icon {
+  display: inline-flex;
+  width: 1.5rem;
+  height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: white;
+  background: var(--forest);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.exercise-availability-banner-warning
+  .exercise-availability-banner-icon {
+  background: #a75842;
+}
+
+.exercise-availability-banner strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+}
+
+.exercise-availability-banner p {
+  margin: 0.14rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.exercise-availability-banner button {
+  min-height: 38px;
+  padding: 0.48rem 0.7rem;
+  border: 1px solid rgba(23, 79, 70, 0.25);
+  border-radius: 0.55rem;
+  color: var(--forest);
+  background: white;
+  font-size: 0.68rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.exercise-availability-banner button:hover {
+  background: var(--mint);
+}
+
 .page-sync-overlay {
   position: absolute;
   z-index: 4;
@@ -2656,6 +2770,19 @@ svg {
 }
 
 @media (max-width: 520px) {
+  .exercise-availability-banner {
+    top: 5.05rem;
+    right: 0.55rem;
+    left: 0.55rem;
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 0.65rem;
+  }
+
+  .exercise-availability-banner button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
   .stage-progress-heading {
     align-items: flex-start;
     flex-direction: column;

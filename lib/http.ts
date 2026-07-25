@@ -1,4 +1,5 @@
 import { Prisma } from "@/lib/generated/prisma/client";
+import { DatabaseUnavailableError } from "@/lib/prisma";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -19,6 +20,9 @@ export function jsonResponse(body: unknown, status = 200): Response {
 export function errorResponse(error: unknown): Response {
   if (error instanceof ApiError) {
     return jsonResponse({ error: error.message }, error.status);
+  }
+  if (error instanceof DatabaseUnavailableError) {
+    return jsonResponse({ error: error.message }, 503);
   }
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     if (error.code === "P2002") {

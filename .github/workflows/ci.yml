@@ -62,6 +62,9 @@ jobs:
       - name: Build production image
         run: docker build --tag aimauta-web:ci .
 
+      - name: Test voice worker image
+        run: docker build --target test --tag aimauta-voice-agent-test:ci services/voice-agent
+
       - name: Build voice worker image
         run: docker build --tag aimauta-voice-agent:ci services/voice-agent
 

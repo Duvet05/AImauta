@@ -1,5 +1,7 @@
+import asyncio
 import json
 import logging
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -21,6 +23,8 @@ def room_metadata() -> str:
             "grade": "1.er grado",
             "language": "es-PE",
             "stage": "learn",
+            "exercise_id": "ejercicio-fracciones",
+            "exercise_revision": 2,
             "mode": "socratic",
         }
     )
@@ -58,6 +62,94 @@ class FakeHttp:
 
     async def close(self) -> None:
         self.closed = True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("error_type", "message"),
+    [
+        (asyncio.CancelledError, None),
+        (
+            RuntimeError,
+            voice_agent._ROOM_DISCONNECTED_WHILE_WAITING,
+        ),
+    ],
+)
+async def test_entrypoint_treats_wait_shutdown_as_normal(
+    monkeypatch,
+    error_type,
+    message,
+) -> None:
+    room = FakeRoom()
+
+    class FakeContext:
+        job = SimpleNamespace(metadata=dispatch_metadata())
+        proc = SimpleNamespace(userdata={"vad": object()})
+
+        def __init__(self) -> None:
+            self.room = room
+
+        async def connect(self) -> None:
+            return None
+
+        async def wait_for_participant(self, *, identity: str) -> object:
+            assert identity == "student-session-12345678"
+            if message is None:
+                raise error_type()
+            raise error_type(message)
+
+        def add_shutdown_callback(self, _callback: Any) -> None:
+            return None
+
+    monkeypatch.setattr(
+        voice_agent,
+        "get_settings",
+        lambda: SimpleNamespace(max_session_seconds=600),
+    )
+    monkeypatch.setattr(
+        voice_agent,
+        "install_session_deadline",
+        lambda *_: None,
+    )
+
+    assert await voice_agent.entrypoint(FakeContext()) is None
+
+
+@pytest.mark.asyncio
+async def test_entrypoint_does_not_hide_unexpected_wait_failure(
+    monkeypatch,
+) -> None:
+    room = FakeRoom()
+
+    class FakeContext:
+        job = SimpleNamespace(metadata=dispatch_metadata())
+        proc = SimpleNamespace(userdata={"vad": object()})
+
+        def __init__(self) -> None:
+            self.room = room
+
+        async def connect(self) -> None:
+            return None
+
+        async def wait_for_participant(self, *, identity: str) -> object:
+            raise RuntimeError("unexpected wait failure")
+
+        def add_shutdown_callback(self, _callback: Any) -> None:
+            return None
+
+    monkeypatch.setattr(
+        voice_agent,
+        "get_settings",
+        lambda: SimpleNamespace(max_session_seconds=600),
+    )
+    monkeypatch.setattr(
+        voice_agent,
+        "install_session_deadline",
+        lambda *_: None,
+    )
+
+    with pytest.raises(RuntimeError, match="unexpected wait failure"):
+        await voice_agent.entrypoint(FakeContext())
 
 
 @pytest.mark.asyncio
@@ -174,6 +266,38 @@ async def test_entrypoint_keeps_http_open_until_job_shutdown(monkeypatch) -> Non
         await callback("test shutdown")
     assert http.closed is True
     assert shutdown_reasons == []
+
+
+def test_start_speech_ignores_only_agent_session_closing() -> None:
+    class ClosingSession:
+        def say(self, *_: Any, **__: Any) -> None:
+            raise RuntimeError(voice_agent._SESSION_CLOSING_WHILE_SAYING)
+
+    class BrokenSession:
+        def say(self, *_: Any, **__: Any) -> None:
+            raise RuntimeError("tts scheduling failed")
+
+    assert (
+        voice_agent._start_speech_if_open(
+            ClosingSession(),  # type: ignore[arg-type]
+            "hola",
+        )
+        is None
+    )
+    with pytest.raises(RuntimeError, match="tts scheduling failed"):
+        voice_agent._start_speech_if_open(
+            BrokenSession(),  # type: ignore[arg-type]
+            "hola",
+        )
+
+
+def test_voice_agent_image_checks_loopback_health_endpoint() -> None:
+    dockerfile = Path(__file__).parents[1] / "Dockerfile"
+    contents = dockerfile.read_text(encoding="utf-8")
+
+    assert "HEALTHCHECK " in contents
+    assert "http://127.0.0.1:8081/" in contents
+    assert "http://0.0.0.0:8081/" not in contents
 
 
 @pytest.mark.asyncio

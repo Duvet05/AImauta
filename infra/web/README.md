@@ -82,8 +82,12 @@ docker compose -f infra/web/compose.yaml config --quiet
 curl --fail http://127.0.0.1:3308/_edge-health
 ```
 
-Este perfil publica texto y PDF. La voz queda deshabilitada de forma explícita
-con `AIMAUTA_VOICE_TUTOR_ENABLED=false`. Para habilitarla se debe desplegar
+Este perfil publica texto y PDF. La vista previa silenciosa del avatar queda
+cerrada con `AIMAUTA_AVATAR_ENABLED=false`; al cambiarla al valor exacto `true`
+se muestra únicamente en URLs de aprendizaje con `?avatar=1`.
+
+La voz queda deshabilitada de forma independiente con
+`AIMAUTA_VOICE_TUTOR_ENABLED=false`. Para habilitarla se debe desplegar
 LiveKit/worker, añadir al entorno web `LIVEKIT_URL`, `LIVEKIT_API_URL`,
 `LIVEKIT_API_KEY` y `LIVEKIT_API_SECRET`, y cambiar la bandera al valor exacto
 `true`. El worker debe usar `AIMAUTA_APP_URL=http://127.0.0.1:3309` y

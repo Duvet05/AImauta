@@ -5,3 +5,13 @@ export function isStrictlyEnabled(value: string | undefined): boolean {
 export function isVoiceTutorEnabled(): boolean {
   return isStrictlyEnabled(process.env.AIMAUTA_VOICE_TUTOR_ENABLED);
 }
+
+export function isAvatarEnabled(): boolean {
+  return isStrictlyEnabled(process.env.AIMAUTA_AVATAR_ENABLED);
+}
+
+export function isAvatarPreviewRequested(
+  value: string | string[] | undefined,
+): boolean {
+  return value === "1";
+}

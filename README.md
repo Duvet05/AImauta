@@ -94,11 +94,17 @@ propios. Sin esa integración, todas las altas comparten un bucket conservador:
 es un modo cerrado para desarrollo, no una configuración utilizable por una
 clase ni un reemplazo del control del edge.
 
-## Voz con LiveKit
+## Avatar y voz con LiveKit
 
-El avatar, el micrófono y la emisión de tokens LiveKit son una función
-opt-in. `AIMAUTA_VOICE_TUTOR_ENABLED=true` los habilita; cualquier otro valor
-los mantiene ocultos y cerrados mientras el PDF, el intento y el tutor RAG de
+El avatar visual y la voz tienen controles independientes y cerrados por
+defecto. `AIMAUTA_AVATAR_ENABLED=true` permite una vista previa local únicamente
+cuando la URL de aprendizaje incluye `?avatar=1`. Sin ese parámetro no se
+renderiza ni descarga el modelo.
+
+`AIMAUTA_VOICE_TUTOR_ENABLED=true` habilita por separado el micrófono y la
+emisión de tokens LiveKit. La interfaz de voz también requiere `?avatar=1`;
+el parámetro por sí solo nunca habilita una capacidad apagada en el servidor.
+Mientras ambas funciones están ocultas, el PDF, el intento y el tutor RAG de
 texto siguen disponibles.
 
 La API crea una sala por sesión y solicita explícitamente el agente nombrado:

@@ -22,6 +22,10 @@ import type { Book } from "@/lib/catalog";
 import type { BookUnit, PageActivity } from "@/lib/curriculum";
 import type { PublicExercise } from "@/lib/exercise-manifest";
 import type { LearningSessionState } from "@/lib/learning-session";
+import {
+  parsePageExercisesResponse,
+  type PageExercisesResponse,
+} from "@/lib/page-exercises-response";
 
 type Citation =
   | number
@@ -64,19 +68,21 @@ type TutorResponse = {
   };
 };
 
-type PageExercisesResponse = {
-  schemaVersion: 1;
-  bookId: string;
-  page: number;
-  exercises: PublicExercise[];
-};
-
 type LearningWorkspaceProps = {
+  avatarPreviewEnabled: boolean;
   book: Book;
   firstPage: number;
   units: readonly BookUnit[];
   voiceTutorEnabled: boolean;
 };
+
+const AvatarPreview = dynamic(
+  () =>
+    import("@/components/avatar-preview").then(
+      (module) => module.AvatarPreview,
+    ),
+  { ssr: false },
+);
 
 const VoiceTutor = dynamic(
   () =>
@@ -84,12 +90,290 @@ const VoiceTutor = dynamic(
   { ssr: false },
 );
 
+type ExerciseAvailability =
+  | "loading"
+  | "available"
+  | "empty"
+  | "not-published"
+  | "failed";
+
+type ExerciseModeCopy = {
+  quickstartTitle: string;
+  quickstartBody: string;
+  focusTitle: string;
+  focusBody: string;
+  focusTone: "active" | "selectable" | "neutral" | "warning";
+  focusIcon: string;
+  attemptEyebrow: string;
+  attemptTitle: string;
+  attemptPlaceholder: string;
+  reviewButtonLabel: string;
+  chatPlaceholder: string;
+  tutorPromise: string;
+  tutorDisabledReason: string;
+  banner:
+    | {
+        title: string;
+        body: string;
+        tone: "neutral" | "warning";
+        loading?: boolean;
+        retryLabel?: string;
+      }
+    | null;
+};
+
+function exerciseModeCopy({
+  availability,
+  isAssessment,
+  viewerMode,
+  hasActiveExercise,
+}: {
+  availability: ExerciseAvailability;
+  isAssessment: boolean;
+  viewerMode: ViewerMode;
+  hasActiveExercise: boolean;
+}): ExerciseModeCopy {
+  if (isAssessment) {
+    return {
+      quickstartTitle: "Evaluación: ayuda en pausa",
+      quickstartBody:
+        "Resuelve por tu cuenta. En esta etapa no mostramos recuadros, pistas ni respuestas.",
+      focusTitle: "Evaluación: ayuda en pausa",
+      focusBody:
+        "El PDF y tu espacio de respuesta siguen disponibles mientras resuelves.",
+      focusTone: "neutral",
+      focusIcon: "i",
+      attemptEyebrow: "Tu momento de resolver",
+      attemptTitle: "Desarrolla tu respuesta",
+      attemptPlaceholder:
+        "Escribe tu procedimiento y tu respuesta con tus propias palabras…",
+      reviewButtonLabel: "Evaluación en curso",
+      chatPlaceholder: "El chat se reanudará después de Evaluamos.",
+      tutorPromise:
+        "En Evaluamos, AImauta no entrega recuadros, pistas ni respuestas.",
+      tutorDisabledReason:
+        "La ayuda se pausa en Evaluamos para que resuelvas por tu cuenta.",
+      banner: {
+        title: "Evaluación: ayuda en pausa",
+        body:
+          "Puedes leer y navegar por el PDF; los recuadros, el RAG y las pistas están desactivados.",
+        tone: "neutral",
+      },
+    };
+  }
+
+  if (viewerMode === "native-readonly") {
+    return {
+      quickstartTitle: "Visor en modo lectura",
+      quickstartBody:
+        "Puedes leer el PDF, pero este visor alternativo no permite seleccionar ejercicios.",
+      focusTitle: "Visor en modo lectura",
+      focusBody:
+        "Vuelve a PDF.js desde el visor para recuperar los recuadros interactivos.",
+      focusTone: "neutral",
+      focusIcon: "i",
+      attemptEyebrow: "Notas de lectura",
+      attemptTitle: "Anota lo que observas",
+      attemptPlaceholder:
+        "Escribe una idea, un dato importante o el procedimiento que intentarías…",
+      reviewButtonLabel: "Tutor no disponible",
+      chatPlaceholder:
+        "El chat requiere PDF.js y un ejercicio interactivo seleccionado.",
+      tutorPromise:
+        "En modo lectura, AImauta no consulta RAG ni entrega ayuda.",
+      tutorDisabledReason:
+        "El visor está en modo lectura; recarga PDF.js para seleccionar un ejercicio.",
+      banner: {
+        title: "Visor en modo lectura",
+        body:
+          "El PDF sigue disponible, pero aquí no se pueden seleccionar ejercicios.",
+        tone: "neutral",
+      },
+    };
+  }
+
+  if (availability === "loading") {
+    return {
+      quickstartTitle: "Preparando el modo interactivo",
+      quickstartBody:
+        "El PDF ya está disponible; estamos comprobando si esta página tiene ejercicios revisados.",
+      focusTitle: "Buscando ejercicios interactivos…",
+      focusBody: "Puedes empezar a leer mientras termina la comprobación.",
+      focusTone: "neutral",
+      focusIcon: "…",
+      attemptEyebrow: "Notas de lectura",
+      attemptTitle: "Anota lo que observas",
+      attemptPlaceholder:
+        "Escribe una idea, un dato importante o el procedimiento que intentarías…",
+      reviewButtonLabel: "Comprobando ejercicios",
+      chatPlaceholder: "El chat se habilitará si hay un ejercicio publicado.",
+      tutorPromise:
+        "AImauta sólo abrirá el RAG cuando encuentre un ejercicio revisado.",
+      tutorDisabledReason:
+        "Estamos comprobando los ejercicios publicados de esta página.",
+      banner: {
+        title: "Preparando ejercicios interactivos",
+        body: "El PDF ya está disponible; puedes empezar a leer.",
+        tone: "neutral",
+        loading: true,
+      },
+    };
+  }
+
+  if (availability === "not-published") {
+    return {
+      quickstartTitle: "Modo lectura seguro",
+      quickstartBody:
+        "Este libro todavía no tiene ejercicios interactivos publicados. El PDF permanece disponible.",
+      focusTitle: "Ejercicios interactivos en preparación",
+      focusBody:
+        "No mostramos recuadros aproximados: el RAG se abrirá cuando exista una detección revisada.",
+      focusTone: "neutral",
+      focusIcon: "i",
+      attemptEyebrow: "Notas de lectura",
+      attemptTitle: "Anota lo que observas",
+      attemptPlaceholder:
+        "Escribe una idea, un dato importante o el procedimiento que intentarías…",
+      reviewButtonLabel: "Pistas no disponibles",
+      chatPlaceholder:
+        "El chat se habilitará cuando haya ejercicios interactivos publicados.",
+      tutorPromise:
+        "Sin ejercicios revisados, AImauta no consulta RAG ni entrega ayuda.",
+      tutorDisabledReason:
+        "Este material todavía no tiene ejercicios interactivos publicados.",
+      banner: {
+        title: "Ejercicios interactivos en preparación",
+        body:
+          "Puedes leer y navegar por el PDF; los recuadros, el RAG y las pistas permanecen cerrados.",
+        tone: "neutral",
+        retryLabel: "Comprobar de nuevo",
+      },
+    };
+  }
+
+  if (availability === "failed") {
+    return {
+      quickstartTitle: "Modo lectura temporal",
+      quickstartBody:
+        "No pudimos comprobar los ejercicios interactivos. El PDF sigue disponible.",
+      focusTitle: "No pudimos cargar los ejercicios",
+      focusBody:
+        "No mostraremos recuadros ni abriremos el RAG hasta recuperar una versión válida.",
+      focusTone: "warning",
+      focusIcon: "!",
+      attemptEyebrow: "Notas de lectura",
+      attemptTitle: "Anota lo que observas",
+      attemptPlaceholder:
+        "Escribe una idea, un dato importante o el procedimiento que intentarías…",
+      reviewButtonLabel: "Pistas no disponibles",
+      chatPlaceholder:
+        "El chat permanecerá cerrado hasta recuperar los ejercicios.",
+      tutorPromise:
+        "Ante un error, AImauta permanece cerrado y no usa datos incompletos.",
+      tutorDisabledReason:
+        "No pudimos cargar una versión válida de los ejercicios.",
+      banner: {
+        title: "Modo lectura temporal",
+        body:
+          "No pudimos cargar los ejercicios interactivos. El PDF sigue disponible.",
+        tone: "warning",
+        retryLabel: "Reintentar ejercicios",
+      },
+    };
+  }
+
+  if (availability === "empty") {
+    return {
+      quickstartTitle: "Modo lectura",
+      quickstartBody:
+        "Esta página todavía no tiene ejercicios interactivos. Puedes seguir navegando por el PDF.",
+      focusTitle: "Sin ejercicios en esta página",
+      focusBody:
+        "Las pistas seguirán desactivadas; cambia de página para buscar un ejercicio publicado.",
+      focusTone: "neutral",
+      focusIcon: "i",
+      attemptEyebrow: "Notas de lectura",
+      attemptTitle: "Anota lo que observas",
+      attemptPlaceholder:
+        "Escribe una idea, un dato importante o el procedimiento que intentarías…",
+      reviewButtonLabel: "Pistas no disponibles",
+      chatPlaceholder:
+        "Selecciona una página con un ejercicio interactivo para usar el chat.",
+      tutorPromise:
+        "En esta página, AImauta no consulta RAG ni entrega ayuda.",
+      tutorDisabledReason:
+        "Esta página no tiene ejercicios interactivos publicados.",
+      banner: {
+        title: "Modo lectura",
+        body:
+          "Esta página no tiene ejercicios interactivos; el PDF y su navegación siguen disponibles.",
+        tone: "neutral",
+      },
+    };
+  }
+
+  if (hasActiveExercise) {
+    return {
+      quickstartTitle: "Pistas con fuentes activas",
+      quickstartBody:
+        "Escribe tu intento y pide una pista. Pulsa su cita para abrir la página usada.",
+      focusTitle: "Ejercicio activo",
+      focusBody:
+        "El RAG y las pistas quedaron vinculados únicamente a este recuadro.",
+      focusTone: "active",
+      focusIcon: "✓",
+      attemptEyebrow: "Paso 1 · Tu razonamiento",
+      attemptTitle: "Escribe qué intentaste",
+      attemptPlaceholder:
+        "Explica qué entendiste, qué datos usarías o cuál sería tu primer paso…",
+      reviewButtonLabel: "Pedir una pista con cita",
+      chatPlaceholder: "Escribe tu duda sobre el ejercicio de esta página…",
+      tutorPromise:
+        "La ayuda usa este ejercicio y cita sus páginas. La respuesta revisada aparece sólo después de tres pistas y varios intentos.",
+      tutorDisabledReason: "",
+      banner: null,
+    };
+  }
+
+  return {
+    quickstartTitle: "Activa el RAG en un ejercicio",
+    quickstartBody:
+      "Pulsa la etiqueta de un recuadro rojo. Luego escribe tu intento y pide una pista con fuente.",
+    focusTitle: "Elige un ejercicio",
+    focusBody:
+      "Pulsa la etiqueta de un recuadro rojo sobre el PDF para vincular el RAG.",
+    focusTone: "selectable",
+    focusIcon: "▢",
+    attemptEyebrow: "Trabajo individual",
+    attemptTitle: "Escribe qué intentaste",
+    attemptPlaceholder:
+      "Explica qué entendiste, qué datos usarías o cuál sería tu primer paso…",
+    reviewButtonLabel: "Selecciona un ejercicio",
+    chatPlaceholder:
+      "Selecciona primero un recuadro rojo para habilitar el chat.",
+    tutorPromise:
+      "AImauta sólo consulta RAG después de seleccionar un ejercicio publicado.",
+    tutorDisabledReason:
+      "Selecciona primero un ejercicio marcado en rojo.",
+    banner: null,
+  };
+}
+
 function welcomeMessage(activity?: PageActivity): ConversationMessage {
+  if (activity?.stage === "assessment") {
+    return {
+      id: crypto.randomUUID(),
+      role: "tutor",
+      content:
+        "Estás en Evaluamos. Lee el material y desarrolla tu respuesta por tu cuenta; aquí las pistas y respuestas permanecen cerradas.",
+    };
+  }
+
   if (activity?.unitNumber) {
     return {
       id: crypto.randomUUID(),
       role: "tutor",
-      content: `Estás en la ficha ${activity.unitNumber}: ${activity.unitTitle}. Lee el ejercicio, escribe qué intentaste y pide una pista. La respuesta citará la página usada.`,
+      content: `Estás en la ficha ${activity.unitNumber}: ${activity.unitTitle}. Lee el material y escribe tu primer intento. Si la página tiene un ejercicio revisado, podrás seleccionarlo para pedir una pista con fuente.`,
     };
   }
 
@@ -97,11 +381,12 @@ function welcomeMessage(activity?: PageActivity): ConversationMessage {
     id: "welcome",
     role: "tutor",
     content:
-      "Lee el ejercicio, escribe qué intentaste y pide una pista. La respuesta citará la página usada.",
+      "Lee el material y escribe tu primer intento. AImauta sólo habilitará pistas con fuente cuando selecciones un ejercicio revisado.",
   };
 }
 
 export function LearningWorkspace({
+  avatarPreviewEnabled,
   book,
   firstPage,
   units,
@@ -120,12 +405,13 @@ export function LearningWorkspace({
   const [isSyncingPage, setIsSyncingPage] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [notice, setNotice] = useState("");
+  const [sessionError, setSessionError] = useState("");
   const [exercises, setExercises] = useState<PublicExercise[]>([]);
   const [selectedExercise, setSelectedExercise] =
     useState<ExerciseSelection | null>(null);
-  const [overlayState, setOverlayState] = useState<
-    "loading" | "ready" | "error"
-  >("loading");
+  const [exerciseAvailability, setExerciseAvailability] =
+    useState<ExerciseAvailability>("loading");
+  const [exerciseRequestRevision, setExerciseRequestRevision] = useState(0);
   const [viewerMode, setViewerMode] = useState<ViewerMode>("pdfjs");
   const conversationRef = useRef<HTMLDivElement>(null);
   const sessionTokenRef = useRef("");
@@ -146,19 +432,31 @@ export function LearningWorkspace({
         exercise.revision === selectedExercise.exerciseRevision,
     ) ?? null;
   const pageTutorAvailable = activity?.tutorAvailable ?? false;
+  const overlayState =
+    exerciseAvailability === "loading"
+      ? "loading"
+      : exerciseAvailability === "available" ||
+          exerciseAvailability === "empty"
+        ? "ready"
+        : "error";
   const tutorAvailable =
     pageTutorAvailable &&
     activeExercise !== null &&
-    overlayState === "ready" &&
+    exerciseAvailability === "available" &&
     viewerMode === "pdfjs" &&
     !isSyncingPage;
   const isAssessment =
     activity?.stage === "assessment" && activity.unitId !== null;
-  const tutorDisabledReason = isAssessment
-    ? "La voz se pausa en Evaluamos para que resuelvas por tu cuenta."
-    : viewerMode === "native-readonly"
-      ? "El visor está en modo lectura; recarga PDF.js para seleccionar un ejercicio."
-      : "Selecciona primero un ejercicio marcado en rojo.";
+  const modeCopy = exerciseModeCopy({
+    availability: exerciseAvailability,
+    isAssessment,
+    viewerMode,
+    hasActiveExercise: activeExercise !== null,
+  });
+  const interactiveSupportAvailable =
+    pageTutorAvailable &&
+    exerciseAvailability === "available" &&
+    viewerMode === "pdfjs";
 
   const applySession = useCallback((result: SessionResponse) => {
     canonicalSessionRef.current = result.state;
@@ -213,24 +511,29 @@ export function LearningWorkspace({
       },
     )
       .then(async (response) => {
-        const body = (await response.json().catch(() => ({}))) as
-          | Partial<PageExercisesResponse>
-          | { error?: string };
-        if (
-          !response.ok ||
-          !("exercises" in body) ||
-          !Array.isArray(body.exercises)
-        ) {
-          const message =
-            "error" in body && typeof body.error === "string"
-              ? body.error
-              : "Los ejercicios de esta página aún no están publicados.";
-          throw new Error(message);
+        const body = (await response.json().catch(() => null)) as unknown;
+        if (!response.ok) {
+          throw new Error("EXERCISE_REQUEST_FAILED");
         }
-        return body.exercises;
+        const parsed = parsePageExercisesResponse(body, {
+          bookId: book.id,
+          page,
+        });
+        if (!parsed) {
+          throw new Error("EXERCISE_RESPONSE_INVALID");
+        }
+        return parsed;
       })
-      .then((pageExercises) => {
+      .then((result: PageExercisesResponse) => {
         if (controller.signal.aborted) return;
+        if (result.publicationStatus === "not-published") {
+          setExercises([]);
+          setSelectedExercise(null);
+          setExerciseAvailability("not-published");
+          return;
+        }
+
+        const pageExercises = [...result.exercises];
         setExercises(pageExercises);
         setSelectedExercise((current) => {
           if (!current) return null;
@@ -251,22 +554,19 @@ export function LearningWorkspace({
               }
             : null;
         });
-        setOverlayState("ready");
+        setExerciseAvailability(
+          pageExercises.length > 0 ? "available" : "empty",
+        );
       })
-      .catch((error) => {
+      .catch(() => {
         if (controller.signal.aborted) return;
         setExercises([]);
         setSelectedExercise(null);
-        setOverlayState("error");
-        setNotice(
-          error instanceof Error
-            ? error.message
-            : "Los ejercicios de esta página aún no están publicados.",
-        );
+        setExerciseAvailability("failed");
       });
 
     return () => controller.abort();
-  }, [book.id, page]);
+  }, [book.id, exerciseRequestRevision, page]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -276,19 +576,18 @@ export function LearningWorkspace({
       .then((result) => {
         if (requestEpoch !== stateRequestEpochRef.current) return;
         applySession(result);
+        setSessionError("");
         setMessages([welcomeMessage(result.activity)]);
       })
-      .catch((error) => {
+      .catch(() => {
         if (
           controller.signal.aborted ||
           requestEpoch !== stateRequestEpochRef.current
         ) {
           return;
         }
-        setNotice(
-          error instanceof Error
-            ? error.message
-            : "No se pudo iniciar la sesión de aprendizaje.",
+        setSessionError(
+          "No pudimos iniciar la sesión de aprendizaje. Vuelve a intentarlo.",
         );
       })
       .finally(() => {
@@ -340,7 +639,14 @@ export function LearningWorkspace({
   const syncPage = useCallback(
     async (requestedPage: number, source: "page" | "unit" | "citation") => {
       const targetPage = Math.min(Math.max(requestedPage, 1), book.pages);
-      if (!sessionTokenRef.current || targetPage === page) return;
+      if (
+        !sessionTokenRef.current ||
+        targetPage === page ||
+        pendingNavigationEpochRef.current !== null
+      ) {
+        return;
+      }
+      const previousExerciseAvailability = exerciseAvailability;
       const retainedRegion =
         source !== "unit"
           ? activeExercise?.regions.find(
@@ -367,7 +673,7 @@ export function LearningWorkspace({
       tutorAbortRef.current = null;
       setIsSending(false);
       setIsSyncingPage(true);
-      setOverlayState("loading");
+      setExerciseAvailability("loading");
       setNotice("");
 
       try {
@@ -426,6 +732,11 @@ export function LearningWorkspace({
             ? error.message
             : "No se pudo cambiar de página. El material continúa en la página anterior.",
         );
+        if (previousExerciseAvailability === "loading") {
+          setExerciseRequestRevision((current) => current + 1);
+        } else {
+          setExerciseAvailability(previousExerciseAvailability);
+        }
       } finally {
         if (
           sequence === pageSyncSequenceRef.current &&
@@ -445,6 +756,7 @@ export function LearningWorkspace({
       attempt,
       book.pages,
       currentDraftKey,
+      exerciseAvailability,
       page,
       requestSession,
     ],
@@ -454,7 +766,7 @@ export function LearningWorkspace({
     if (
       !sessionTokenRef.current ||
       isSyncingPage ||
-      overlayState !== "ready" ||
+      exerciseAvailability !== "available" ||
       viewerMode !== "pdfjs"
     ) {
       return;
@@ -695,6 +1007,14 @@ export function LearningWorkspace({
     setNotice("");
   }
 
+  function retryExercises() {
+    setNotice("");
+    setExercises([]);
+    setSelectedExercise(null);
+    setExerciseAvailability("loading");
+    setExerciseRequestRevision((current) => current + 1);
+  }
+
   return (
     <div className="learning-shell">
       <header className="workspace-header">
@@ -737,11 +1057,22 @@ export function LearningWorkspace({
           ) : (
             <SessionLoading
               bookTitle={book.title}
-              error={notice}
+              error={sessionError}
               isLoading={isStartingSession}
               onRetry={() => window.location.reload()}
             />
           )}
+          {sessionToken &&
+          session &&
+          !isSyncingPage &&
+          modeCopy.banner ? (
+            <ExerciseAvailabilityBanner
+              {...modeCopy.banner}
+              onRetry={
+                modeCopy.banner.retryLabel ? retryExercises : undefined
+              }
+            />
+          ) : null}
           {isSyncingPage ? (
             <div className="page-sync-overlay" role="status">
               <span className="sync-spinner" aria-hidden="true" />
@@ -755,44 +1086,23 @@ export function LearningWorkspace({
             <div className="rag-quickstart" role="note">
               <span aria-hidden="true">RAG</span>
               <div>
-                <strong>Cómo probar las pistas con fuentes</strong>
-                <p>
-                  Lee el ejercicio de la página, escribe tu intento y pide una
-                  pista. Pulsa su cita para abrir la página usada.
-                </p>
+                <strong>{modeCopy.quickstartTitle}</strong>
+                <p>{modeCopy.quickstartBody}</p>
               </div>
             </div>
 
             <div
-              className={`exercise-focus ${
-                activeExercise ? "exercise-focus-active" : ""
-              }`}
+              className={`exercise-focus exercise-focus-${modeCopy.focusTone}`}
               role="status"
             >
-              <span aria-hidden="true">
-                {activeExercise ? "✓" : "▢"}
-              </span>
+              <span aria-hidden="true">{modeCopy.focusIcon}</span>
               <div>
                 <strong>
-                  {activeExercise
+                  {modeCopy.focusTone === "active" && activeExercise
                     ? `${activeExercise.label}: ${activeExercise.title}`
-                    : overlayState === "loading"
-                      ? "Detectando ejercicios publicados…"
-                      : overlayState === "error"
-                        ? "Ejercicios aún no disponibles"
-                        : exercises.length > 0
-                          ? "Elige un ejercicio"
-                          : "No hay ejercicios publicados en esta página"}
+                    : modeCopy.focusTitle}
                 </strong>
-                <p>
-                  {activeExercise
-                    ? "El RAG y las pistas quedaron vinculados a este recuadro."
-                    : viewerMode === "native-readonly"
-                      ? "El visor alternativo es sólo de lectura y no permite seleccionar recuadros."
-                      : exercises.length > 0
-                        ? "Pulsa la etiqueta de un recuadro rojo sobre el PDF para activar el RAG."
-                        : "Puedes leer el PDF, pero el tutor permanece cerrado hasta que haya una detección revisada."}
-                </p>
+                <p>{modeCopy.focusBody}</p>
               </div>
             </div>
 
@@ -826,15 +1136,21 @@ export function LearningWorkspace({
                     {activity.competency ? <p>{activity.competency}</p> : null}
                   </div>
                 </div>
-                <StageProgress activity={activity} session={session} />
+                <StageProgress
+                  activity={activity}
+                  session={session}
+                  supportAvailable={interactiveSupportAvailable}
+                />
                 {voiceTutorEnabled ? (
                   <VoiceTutor
                     sessionId={session.sessionId}
                     sessionToken={sessionToken}
                     disabled={!tutorAvailable}
-                    disabledReason={tutorDisabledReason}
+                    disabledReason={modeCopy.tutorDisabledReason}
                     onSessionUpdate={applyVoiceSession}
                   />
+                ) : avatarPreviewEnabled ? (
+                  <AvatarPreview />
                 ) : null}
               </>
             ) : null}
@@ -844,22 +1160,18 @@ export function LearningWorkspace({
             <div className="panel-heading">
               <span className="panel-step">1</span>
               <div>
-                <p>
-                  {tutorAvailable
-                    ? "Paso 1 · Tu razonamiento"
-                    : isAssessment
-                      ? "Tu momento de resolver"
-                      : "Trabajo individual"}
-                </p>
-                <h2>Escribe qué intentaste</h2>
+                <p>{modeCopy.attemptEyebrow}</p>
+                <h2>{modeCopy.attemptTitle}</h2>
               </div>
             </div>
             <label className="sr-only" htmlFor="student-attempt">
-              Tu intento para resolver el ejercicio
+              {tutorAvailable
+                ? "Tu intento para resolver el ejercicio"
+                : "Tus notas sobre la página"}
             </label>
             <textarea
               id="student-attempt"
-              placeholder="Explica qué entendiste, qué datos usarías o cuál sería tu primer paso…"
+              placeholder={modeCopy.attemptPlaceholder}
               value={attempt}
               onChange={(event) => setAttempt(event.target.value)}
               maxLength={2_000}
@@ -878,11 +1190,7 @@ export function LearningWorkspace({
                   !tutorAvailable
                 }
               >
-                {tutorAvailable
-                  ? "Pedir una pista con cita"
-                  : isAssessment
-                    ? "Evaluación en curso"
-                    : "Tutor no disponible"}
+                {modeCopy.reviewButtonLabel}
                 {tutorAvailable ? <SparkIcon /> : <LockButtonIcon />}
               </button>
             </div>
@@ -940,13 +1248,7 @@ export function LearningWorkspace({
               </label>
               <textarea
                 id="student-question"
-                placeholder={
-                  tutorAvailable
-                    ? "Escribe tu duda sobre el ejercicio de esta página…"
-                    : isAssessment
-                      ? "El chat se reanudará después de Evaluamos."
-                      : "El chat no está habilitado en esta sección."
-                }
+                placeholder={modeCopy.chatPlaceholder}
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
                 maxLength={1_500}
@@ -980,11 +1282,7 @@ export function LearningWorkspace({
             </form>
             <p className="tutor-promise">
               <ShieldIcon />
-              {tutorAvailable
-                ? "La ayuda usa este ejercicio y cita sus páginas. La respuesta revisada aparece sólo después de tres pistas y varios intentos."
-                : isAssessment
-                  ? "En Evaluamos, AImauta no entrega pistas ni respuestas."
-                  : "En esta sección, AImauta no consulta RAG ni entrega ayuda."}
+              {modeCopy.tutorPromise}
             </p>
             {notice && sessionToken ? (
               <p className="workspace-notice" role="status">
@@ -995,6 +1293,50 @@ export function LearningWorkspace({
         </aside>
       </div>
     </div>
+  );
+}
+
+function ExerciseAvailabilityBanner({
+  title,
+  body,
+  tone,
+  loading = false,
+  retryLabel,
+  onRetry,
+}: {
+  title: string;
+  body: string;
+  tone: "neutral" | "warning";
+  loading?: boolean;
+  retryLabel?: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <section
+      className={`exercise-availability-banner exercise-availability-banner-${tone}`}
+      role={tone === "warning" ? "alert" : "status"}
+      aria-live={tone === "warning" ? "assertive" : "polite"}
+    >
+      <span
+        className={
+          loading
+            ? "sync-spinner"
+            : "exercise-availability-banner-icon"
+        }
+        aria-hidden="true"
+      >
+        {loading ? null : tone === "warning" ? "!" : "i"}
+      </span>
+      <div>
+        <strong>{title}</strong>
+        <p>{body}</p>
+      </div>
+      {retryLabel && onRetry ? (
+        <button type="button" onClick={onRetry}>
+          {retryLabel}
+        </button>
+      ) : null}
+    </section>
   );
 }
 
