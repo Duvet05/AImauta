@@ -7,6 +7,7 @@ import {
   getPageActivity,
   type LearningStage
 } from "@/lib/curriculum";
+import type { PublicExercise } from "@/lib/exercise-manifest";
 
 export const BOOK_INDEX_VERSION = 2 as const;
 export const INDEX_EXTRACTOR_VERSION =
@@ -78,6 +79,7 @@ export type BookIndex = {
 };
 
 export type Evidence = IndexedChunk & {
+  exerciseId: string | null;
   score: number;
   sourceId: string;
 };
@@ -148,6 +150,7 @@ export function rankChunks(input: {
 
       return {
         ...chunk,
+        exerciseId: null,
         score: pageScore + lexicalScore + exerciseBoost,
         sourceId: ""
       };
@@ -160,6 +163,49 @@ export function rankChunks(input: {
     )
     .slice(0, limit)
     .map((chunk, index) => ({ ...chunk, sourceId: `S${index + 1}` }));
+}
+
+/**
+ * Builds retrieval evidence only from the exact, revisioned exercise selected
+ * by the student. Page-level book chunks cannot safely distinguish two
+ * exercises that share a PDF page, so the exercise tutor never uses them as a
+ * substitute for this binding.
+ */
+export function retrieveExerciseEvidence(
+  exercise: PublicExercise
+): Evidence[] {
+  const pages = [
+    ...new Set(exercise.regions.map((region) => region.page))
+  ].sort((left, right) => left - right);
+  if (
+    !exercise.id ||
+    !exercise.prompt.trim() ||
+    pages.length === 0 ||
+    (exercise.stage !== "learn" && exercise.stage !== "practice")
+  ) {
+    return [];
+  }
+
+  const sourceText = [
+    exercise.label.trim(),
+    exercise.title.trim(),
+    exercise.prompt.trim()
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return pages.map((page, index) => ({
+    id: `${exercise.id}:r${exercise.revision}:p${page}`,
+    exerciseId: exercise.id,
+    page,
+    text: sourceText,
+    kind: "exercise",
+    teacherOnly: false,
+    stage: exercise.stage,
+    unitId: exercise.unitId,
+    score: pages.length - index,
+    sourceId: `S${index + 1}`
+  }));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -476,6 +522,7 @@ export async function retrieveEvidence(input: {
   question: string;
   attempt: string;
   page: number;
+  allowedPages?: readonly number[];
 }): Promise<Evidence[]> {
   if (path.basename(input.bookId) !== input.bookId) {
     return [];
@@ -499,6 +546,23 @@ export async function retrieveEvidence(input: {
   if (!activity.tutorAvailable) {
     return [];
   }
+  const allowedPages =
+    input.allowedPages === undefined
+      ? null
+      : new Set(
+          input.allowedPages.filter(
+            (page) =>
+              Number.isSafeInteger(page) &&
+              page >= 1 &&
+              page <= book.pages
+          )
+        );
+  if (
+    input.allowedPages !== undefined &&
+    allowedPages?.size !== input.allowedPages.length
+  ) {
+    return [];
+  }
 
   const indexDir =
     process.env.AIMAUTA_INDEX_DIR ??
@@ -512,7 +576,9 @@ export async function retrieveEvidence(input: {
       .join("\n");
     return rankChunks({
       chunks: index.chunks.filter(
-        (chunk) => chunk.unitId === activity.unitId
+        (chunk) =>
+          chunk.unitId === activity.unitId &&
+          (allowedPages === null || allowedPages.has(chunk.page))
       ),
       query,
       page: input.page

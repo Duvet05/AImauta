@@ -1,3 +1,5 @@
+import catalogManifest from "@/config/catalog.v3.json";
+
 export const educationLevels = {
   primaria: {
     label: "Primaria",
@@ -15,13 +17,46 @@ export const courses = {
   }
 } as const;
 
+export const catalogStatuses = [
+  "draft",
+  "review",
+  "published",
+  "disabled"
+] as const;
+
+/**
+ * Only learner-facing material types may become a Book. The other values are
+ * valid administrative catalog classifications, but they must never acquire
+ * curriculum, tutor or RAG access.
+ */
+export const materialTypes = [
+  "student-workbook",
+  "student-textbook",
+  "teacher-guide",
+  "answer-key",
+  "solution-manual"
+] as const;
+
+export const tutorableMaterialTypes = [
+  "student-workbook",
+  "student-textbook"
+] as const;
+
+export const catalogLanguages = ["es-PE"] as const;
+export const catalogProvenances = ["official-minedu"] as const;
+export const MAX_INGEST_PDF_BYTES = 50 * 1024 * 1024;
+
 export type EducationLevelId = keyof typeof educationLevels;
 export type CourseId = keyof typeof courses;
 export type GradeNumber = 1 | 2 | 3 | 4 | 5 | 6;
-export type CatalogStatus = "draft" | "review" | "published" | "disabled";
-export type MaterialType = "student-workbook" | "student-textbook";
+export type CatalogStatus = (typeof catalogStatuses)[number];
+export type MaterialType = (typeof materialTypes)[number];
+export type TutorableMaterialType =
+  (typeof tutorableMaterialTypes)[number];
+export type CatalogLanguage = (typeof catalogLanguages)[number];
+export type CatalogProvenance = (typeof catalogProvenances)[number];
 
-type CatalogEntryBase = {
+export type CatalogEntryBase = {
   id: string;
   status: CatalogStatus;
   title: string;
@@ -29,7 +64,7 @@ type CatalogEntryBase = {
   gradeNumber: GradeNumber;
   courseId: CourseId;
   materialType: MaterialType;
-  language: "es-PE";
+  language: CatalogLanguage;
   description: string;
   pages: number;
   sourceLabel: string;
@@ -46,7 +81,7 @@ type CatalogEntryBase = {
   licenseEvidenceUrl: string;
   licenseReviewedAt: string;
   attribution: string;
-  provenance: "official-minedu";
+  provenance: CatalogProvenance;
 };
 
 export type PublishedCatalogEntry = CatalogEntryBase & {
@@ -59,87 +94,447 @@ export type UnpublishedCatalogEntry = CatalogEntryBase & {
 
 export type CatalogEntry = PublishedCatalogEntry | UnpublishedCatalogEntry;
 
+export type TutorablePublishedCatalogEntry = PublishedCatalogEntry & {
+  materialType: TutorableMaterialType;
+};
+
 /**
  * Public material shape. The normalized taxonomy remains available through
  * `levelId`, `gradeNumber` and `courseId`; labels are derived for compatibility
  * with the existing UI and service metadata.
  */
-export type Book = PublishedCatalogEntry & {
+export type Book = TutorablePublishedCatalogEntry & {
   level: (typeof educationLevels)[EducationLevelId]["label"];
   grade: string;
   subject: (typeof courses)[CourseId]["label"];
 };
 
-const catalogEntries: readonly CatalogEntry[] = [
-  {
-    id: "fichas-matematica-1-secundaria",
-    status: "published",
-    title: "Fichas de Matemática 1",
-    levelId: "secundaria",
-    gradeNumber: 1,
-    courseId: "matematica",
-    materialType: "student-workbook",
-    language: "es-PE",
-    description:
-      "Situaciones de la vida cotidiana para construir, comprobar y evaluar aprendizajes matemáticos.",
-    pages: 100,
-    sourceLabel: "Repositorio Institucional del MINEDU",
-    sourcePageUrl:
-      "https://repositorio.minedu.gob.pe/handle/20.500.12799/10834",
-    sourcePdfUrl:
-      "https://repositorio.minedu.gob.pe/bitstream/handle/20.500.12799/10834/Fichas%20de%20Matem%C3%A1tica%201.pdf?isAllowed=y&sequence=1",
-    discoveredViaUrl:
-      "https://librosescolaresperu.com/1-secundaria/fichas-de-matematica/",
-    storageFile: "fichas-matematica-1-secundaria.pdf",
-    expectedBytes: 32_895_443,
-    expectedSha256:
-      "c220ec82ed676a813977d61afea236e761c5253ef0beb0b0de9afccaf2eeaac0",
-    edition: "Primera reimpresión, setiembre de 2024",
-    licenseName: "Creative Commons Atribución 4.0",
-    licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
-    licenseBasis: "official-repository-metadata",
-    licenseEvidenceUrl:
-      "https://repositorio.minedu.gob.pe/handle/20.500.12799/10834?show=full",
-    licenseReviewedAt: "2026-07-24",
-    attribution:
-      "Ministerio de Educación del Perú; Larisa Mansilla Fernández; Olber Muñoz Solís; Juan Carlos Chávez Espino; Hugo Luis Támara Salazar; Hubner Luque Cristóbal Jave; Enrique García Manyari; Emilia Gabriela Del Busto Sipán",
-    provenance: "official-minedu"
-  },
-  {
-    id: "fichas-matematica-2-secundaria",
-    status: "published",
-    title: "Fichas de Matemática 2",
-    levelId: "secundaria",
-    gradeNumber: 2,
-    courseId: "matematica",
-    materialType: "student-workbook",
-    language: "es-PE",
-    description:
-      "Problemas cotidianos para desarrollar fracciones, funciones, geometría, estadística, porcentajes, progresiones y probabilidad.",
-    pages: 100,
-    sourceLabel: "Repositorio Institucional del MINEDU",
-    sourcePageUrl:
-      "https://repositorio.minedu.gob.pe/handle/20.500.12799/10835",
-    sourcePdfUrl:
-      "https://repositorio.minedu.gob.pe/bitstream/handle/20.500.12799/10835/Fichas%20de%20Matem%C3%A1tica%202.pdf?isAllowed=y&sequence=1",
-    discoveredViaUrl:
-      "https://librosescolaresperu.com/2-secundaria/fichas-de-matematica/",
-    storageFile: "fichas-matematica-2-secundaria.pdf",
-    expectedBytes: 31_997_485,
-    expectedSha256:
-      "c5c116ed7c6f091630e39d1cbeb0aa6fa2095157734daa33c5eb58ae470089a0",
-    edition: "Primera reimpresión, setiembre de 2024",
-    licenseName: "Creative Commons Atribución 4.0",
-    licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
-    licenseBasis: "official-repository-metadata",
-    licenseEvidenceUrl:
-      "https://repositorio.minedu.gob.pe/handle/20.500.12799/10835?show=full",
-    licenseReviewedAt: "2026-07-24",
-    attribution:
-      "Ministerio de Educación del Perú; Larisa Mansilla Fernández; Olber Muñoz Solís; Juan Carlos Chávez Espino; Hugo Luis Támara Salazar; Hubner Luque Cristóbal Jave; Enrique García Manyari; Marilú Yésica Quispe Amar",
-    provenance: "official-minedu"
+export type CatalogSchemaIssue = {
+  code: string;
+  id: string;
+  message: string;
+};
+
+export type CatalogManifestParseResult = {
+  entries: readonly CatalogEntry[];
+  issues: readonly CatalogSchemaIssue[];
+};
+
+const safeIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const safePdfNamePattern = /^[a-z0-9][a-z0-9._-]*\.pdf$/;
+const sha256Pattern = /^[a-f0-9]{64}$/;
+const isoDatePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+const catalogEntryFields = new Set([
+  "id",
+  "status",
+  "title",
+  "levelId",
+  "gradeNumber",
+  "courseId",
+  "materialType",
+  "language",
+  "description",
+  "pages",
+  "sourceLabel",
+  "sourcePageUrl",
+  "sourcePdfUrl",
+  "discoveredViaUrl",
+  "storageFile",
+  "expectedBytes",
+  "expectedSha256",
+  "edition",
+  "licenseName",
+  "licenseUrl",
+  "licenseBasis",
+  "licenseEvidenceUrl",
+  "licenseReviewedAt",
+  "attribution",
+  "provenance"
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
+function hasText(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return Number.isInteger(value) && Number(value) > 0;
+}
+
+function isOneOf<const T extends readonly string[]>(
+  values: T,
+  value: unknown
+): value is T[number] {
+  return typeof value === "string" && values.includes(value);
+}
+
+function isEducationLevelId(
+  value: unknown
+): value is EducationLevelId {
+  return (
+    typeof value === "string" &&
+    Object.prototype.hasOwnProperty.call(educationLevels, value)
+  );
+}
+
+function isCourseId(value: unknown): value is CourseId {
+  return (
+    typeof value === "string" &&
+    Object.prototype.hasOwnProperty.call(courses, value)
+  );
+}
+
+function isHttpsUrl(value: unknown): value is string {
+  if (!hasText(value)) {
+    return false;
   }
-];
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      url.username === "" &&
+      url.password === ""
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isOfficialMineduUrl(value: unknown): value is string {
+  if (!isHttpsUrl(value)) {
+    return false;
+  }
+  const url = new URL(value);
+  return (
+    url.hostname === "repositorio.minedu.gob.pe" ||
+    url.hostname === "repositorios.perueduca.pe"
+  );
+}
+
+function isExactIsoDate(value: unknown): value is string {
+  if (typeof value !== "string") {
+    return false;
+  }
+  const match = isoDatePattern.exec(value);
+  if (!match) {
+    return false;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+function entryId(value: unknown, index?: number): string {
+  if (isRecord(value) && hasText(value.id)) {
+    return value.id;
+  }
+  return index === undefined ? "(sin id)" : `(entrada ${index + 1})`;
+}
+
+/**
+ * Complete runtime schema check for a single catalog entry.
+ *
+ * This is intentionally independent from TypeScript's compile-time types:
+ * imported JSON and test/admin inputs are untrusted until this function
+ * accepts every required field and taxonomy value.
+ */
+export function validateCatalogEntrySchema(
+  value: unknown,
+  index?: number
+): CatalogSchemaIssue[] {
+  const issues: CatalogSchemaIssue[] = [];
+  const id = entryId(value, index);
+  const report = (code: string, message: string) => {
+    issues.push({ code, id, message });
+  };
+
+  if (!isRecord(value)) {
+    report(
+      "catalog.invalid-entry",
+      "Cada entrada del catálogo debe ser un objeto."
+    );
+    return issues;
+  }
+
+  const unexpectedFields = Object.keys(value).filter(
+    (field) => !catalogEntryFields.has(field)
+  );
+  if (unexpectedFields.length > 0) {
+    report(
+      "catalog.unexpected-field",
+      `Campos de catálogo no reconocidos: ${unexpectedFields.join(", ")}.`
+    );
+  }
+
+  if (
+    typeof value.id !== "string" ||
+    !safeIdPattern.test(value.id)
+  ) {
+    report(
+      "catalog.invalid-id",
+      "El id debe ser un slug estable en minúsculas."
+    );
+  }
+  if (!isOneOf(catalogStatuses, value.status)) {
+    report(
+      "catalog.invalid-status",
+      `Estado de catálogo no reconocido: ${String(value.status)}.`
+    );
+  }
+
+  if (!isEducationLevelId(value.levelId)) {
+    report(
+      "catalog.invalid-level",
+      `Nivel educativo no reconocido: ${String(value.levelId)}.`
+    );
+  } else {
+    if (
+      !isPositiveInteger(value.gradeNumber) ||
+      !educationLevels[value.levelId].grades.some(
+        (grade) => grade === value.gradeNumber
+      )
+    ) {
+      report(
+        "catalog.invalid-grade",
+        `El grado ${String(value.gradeNumber)} no pertenece a ` +
+          `${educationLevels[value.levelId].label}.`
+      );
+    }
+  }
+  if (!isCourseId(value.courseId)) {
+    report(
+      "catalog.invalid-course",
+      `Curso no reconocido: ${String(value.courseId)}.`
+    );
+  }
+  if (!isOneOf(materialTypes, value.materialType)) {
+    report(
+      "catalog.invalid-material-type",
+      `Tipo de material no reconocido: ${String(value.materialType)}.`
+    );
+  }
+  if (!isOneOf(catalogLanguages, value.language)) {
+    report(
+      "catalog.invalid-language",
+      `Idioma de catálogo no permitido: ${String(value.language)}.`
+    );
+  }
+  if (!isOneOf(catalogProvenances, value.provenance)) {
+    report(
+      "catalog.invalid-provenance",
+      `Procedencia de catálogo no permitida: ${String(value.provenance)}.`
+    );
+  }
+
+  if (!isPositiveInteger(value.pages)) {
+    report(
+      "catalog.invalid-pages",
+      "El número de páginas debe ser un entero positivo."
+    );
+  }
+  if (
+    typeof value.storageFile !== "string" ||
+    !safePdfNamePattern.test(value.storageFile)
+  ) {
+    report(
+      "catalog.invalid-storage-file",
+      "storageFile debe ser un nombre PDF simple y seguro."
+    );
+  }
+
+  for (const field of [
+    "title",
+    "description",
+    "sourceLabel",
+    "edition",
+    "licenseName",
+    "attribution"
+  ] as const) {
+    if (!hasText(value[field])) {
+      report(
+        "catalog.missing-metadata",
+        `Falta el metadato obligatorio ${field}.`
+      );
+    }
+  }
+
+  for (const field of [
+    "sourcePageUrl",
+    "sourcePdfUrl",
+    "discoveredViaUrl",
+    "licenseUrl",
+    "licenseEvidenceUrl"
+  ] as const) {
+    if (!isHttpsUrl(value[field])) {
+      report(
+        "catalog.invalid-url",
+        `${field} debe ser una URL HTTPS válida sin credenciales.`
+      );
+    }
+  }
+
+  if (
+    !isOfficialMineduUrl(value.sourcePageUrl) ||
+    !isOfficialMineduUrl(value.licenseEvidenceUrl)
+  ) {
+    report(
+      "catalog.invalid-provenance-source",
+      "La página fuente y la evidencia de licencia deben pertenecer a MINEDU."
+    );
+  }
+  if (value.licenseBasis !== "official-repository-metadata") {
+    report(
+      "catalog.invalid-license-basis",
+      "La licencia debe apoyarse en metadata oficial verificable."
+    );
+  }
+  if (!isExactIsoDate(value.licenseReviewedAt)) {
+    report(
+      "catalog.invalid-license-review-date",
+      "licenseReviewedAt debe ser una fecha ISO real y válida."
+    );
+  }
+
+  if (
+    !isHttpsUrl(value.sourcePdfUrl) ||
+    !isAllowedOfficialSource(new URL(value.sourcePdfUrl))
+  ) {
+    report(
+      "catalog.unapproved-pdf-source",
+      "sourcePdfUrl no pertenece a una fuente oficial permitida."
+    );
+  }
+  if (
+    !Number.isSafeInteger(value.expectedBytes) ||
+    Number(value.expectedBytes) <= 0 ||
+    Number(value.expectedBytes) > MAX_INGEST_PDF_BYTES
+  ) {
+    report(
+      "catalog.invalid-bytes",
+      "expectedBytes debe ser un entero positivo de hasta 50 MiB."
+    );
+  }
+  if (
+    typeof value.expectedSha256 !== "string" ||
+    !sha256Pattern.test(value.expectedSha256)
+  ) {
+    report(
+      "catalog.invalid-checksum",
+      "Toda entrada debe fijar un SHA-256 hexadecimal en minúsculas."
+    );
+  }
+
+  return issues;
+}
+
+export function isCatalogEntrySafe(value: unknown): value is CatalogEntry {
+  return validateCatalogEntrySchema(value).length === 0;
+}
+
+/**
+ * Parse a versioned manifest as one security boundary. If any entry, field,
+ * taxonomy value or uniqueness constraint is invalid, no entry is published.
+ */
+export function parseCatalogManifest(
+  value: unknown
+): CatalogManifestParseResult {
+  const issues: CatalogSchemaIssue[] = [];
+  if (!isRecord(value)) {
+    return {
+      entries: [],
+      issues: [
+        {
+          code: "catalog.invalid-manifest",
+          id: "(manifiesto)",
+          message: "El manifiesto de catálogo debe ser un objeto."
+        }
+      ]
+    };
+  }
+
+  const unexpectedFields = Object.keys(value).filter(
+    (field) => field !== "schemaVersion" && field !== "entries"
+  );
+  if (unexpectedFields.length > 0) {
+    issues.push({
+      code: "catalog.unexpected-manifest-field",
+      id: "(manifiesto)",
+      message:
+        `Campos de manifiesto no reconocidos: ${unexpectedFields.join(", ")}.`
+    });
+  }
+  if (value.schemaVersion !== 3) {
+    issues.push({
+      code: "catalog.invalid-schema-version",
+      id: "(manifiesto)",
+      message: "El catálogo debe declarar schemaVersion 3."
+    });
+  }
+  if (!Array.isArray(value.entries)) {
+    issues.push({
+      code: "catalog.invalid-entries",
+      id: "(manifiesto)",
+      message: "El catálogo debe contener un arreglo entries."
+    });
+    return { entries: [], issues };
+  }
+
+  value.entries.forEach((entry, index) => {
+    issues.push(...validateCatalogEntrySchema(entry, index));
+  });
+
+  const ids = new Set<string>();
+  const storageFiles = new Set<string>();
+  for (const [index, entry] of value.entries.entries()) {
+    if (!isCatalogEntrySafe(entry)) {
+      continue;
+    }
+    if (ids.has(entry.id)) {
+      issues.push({
+        code: "catalog.duplicate-id",
+        id: entry.id,
+        message: "El id de catálogo está duplicado."
+      });
+    }
+    ids.add(entry.id);
+    if (storageFiles.has(entry.storageFile)) {
+      issues.push({
+        code: "catalog.duplicate-storage-file",
+        id: entry.id || `(entrada ${index + 1})`,
+        message: `storageFile duplicado: ${entry.storageFile}.`
+      });
+    }
+    storageFiles.add(entry.storageFile);
+  }
+
+  if (issues.length > 0) {
+    return { entries: [], issues: Object.freeze(issues) };
+  }
+
+  const entries = value.entries
+    .filter(isCatalogEntrySafe)
+    .map((entry) => Object.freeze(entry));
+  return {
+    entries: Object.freeze(entries),
+    issues: Object.freeze([])
+  };
+}
+
+const parsedCatalogManifest = parseCatalogManifest(catalogManifest);
+const catalogEntries = parsedCatalogManifest.entries;
 
 const gradeLabels: Readonly<Record<GradeNumber, string>> = {
   1: "1.er grado",
@@ -156,7 +551,28 @@ export function isPublishedCatalogEntry(
   return entry.status === "published";
 }
 
-function toBook(entry: PublishedCatalogEntry): Book {
+export function isTutorableMaterialType(
+  value: unknown
+): value is TutorableMaterialType {
+  return isOneOf(tutorableMaterialTypes, value);
+}
+
+export function isTutorableCatalogEntry(
+  entry: CatalogEntry
+): entry is CatalogEntry & { materialType: TutorableMaterialType } {
+  return isTutorableMaterialType(entry.materialType);
+}
+
+export function isPublishedTutorableCatalogEntry(
+  entry: CatalogEntry
+): entry is TutorablePublishedCatalogEntry {
+  return (
+    isPublishedCatalogEntry(entry) &&
+    isTutorableCatalogEntry(entry)
+  );
+}
+
+function toBook(entry: TutorablePublishedCatalogEntry): Book {
   return {
     ...entry,
     level: educationLevels[entry.levelId].label,
@@ -166,15 +582,30 @@ function toBook(entry: PublishedCatalogEntry): Book {
 }
 
 const publishedBooks: readonly Book[] = catalogEntries
-  .filter(isPublishedCatalogEntry)
+  .filter(isPublishedTutorableCatalogEntry)
   .map(toBook);
+const curriculumEligibleEntries: readonly CatalogEntry[] =
+  catalogEntries.filter(isTutorableCatalogEntry);
 
 /**
- * Administrative view used by validation tooling. Callers serving students
- * must use `getBooks`, `getPublishedBooks` or `getBook`.
+ * Security-scoped catalog used by curriculum, ingestion and manifest code.
+ * Non-learner materials are deliberately absent so those downstream callers
+ * cannot bind a curriculum, exercise manifest, tutor or RAG index to them.
  */
 export function getCatalogEntries(): readonly CatalogEntry[] {
+  return curriculumEligibleEntries;
+}
+
+/**
+ * Complete administrative catalog, including material types which are never
+ * learner-facing. Only validation and catalog-management tooling should use it.
+ */
+export function getAdministrativeCatalogEntries(): readonly CatalogEntry[] {
   return catalogEntries;
+}
+
+export function getCatalogManifestIssues(): readonly CatalogSchemaIssue[] {
+  return parsedCatalogManifest.issues;
 }
 
 export function getPublishedBooks(): readonly Book[] {
@@ -182,15 +613,16 @@ export function getPublishedBooks(): readonly Book[] {
 }
 
 /**
- * Backwards-compatible public catalog. It deliberately exposes only published
- * materials.
+ * Backwards-compatible public catalog. It deliberately exposes only published,
+ * learner-facing materials.
  */
 export function getBooks(): readonly Book[] {
   return getPublishedBooks();
 }
 
 /**
- * Public lookup. Draft, review and disabled entries behave as unavailable.
+ * Public lookup. Draft, review, disabled and non-learner materials behave as
+ * unavailable, which also closes all downstream curriculum/tutor/RAG lookups.
  */
 export function getBook(id: string): Book | undefined {
   return publishedBooks.find((book) => book.id === id);
@@ -199,6 +631,8 @@ export function getBook(id: string): Book | undefined {
 export function isAllowedOfficialSource(source: URL): boolean {
   return (
     source.protocol === "https:" &&
+    source.username === "" &&
+    source.password === "" &&
     ((source.hostname === "repositorios.perueduca.pe" &&
       source.pathname.startsWith("/pe-recursos/")) ||
       (source.hostname === "repositorio.minedu.gob.pe" &&

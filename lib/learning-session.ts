@@ -12,10 +12,13 @@ import {
   type PageActivity
 } from "@/lib/curriculum";
 
-const TOKEN_VERSION = 2;
+const TOKEN_VERSION = 4;
 const TOKEN_TTL_SECONDS = 2 * 60 * 60;
 const MAX_TURNS_PER_SESSION = 40;
 const MAX_TRACKED_SESSIONS = 20_000;
+const MAX_DISTINCT_ATTEMPTS = 12;
+const safeExerciseIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const attemptDigestPattern = /^[A-Za-z0-9_-]{16}$/;
 
 type RevisionStore = Map<
   string,
@@ -34,7 +37,7 @@ type LearningSessionProcessState = {
 // This remains intentionally process-local; multi-process deployments need a
 // shared atomic store.
 const PROCESS_STATE_KEY = Symbol.for(
-  "org.aimauta.learning-session.process-state.v2"
+  "org.aimauta.learning-session.process-state.v4"
 );
 
 function learningSessionProcessState(): LearningSessionProcessState {
@@ -75,6 +78,8 @@ export type LearningSessionState = {
   page: number;
   unitId: string | null;
   stage: LearningStage;
+  exerciseId: string | null;
+  exerciseRevision: number | null;
   attemptCount: number;
   turnCount: number;
   totalTurnCount: number;
@@ -82,7 +87,15 @@ export type LearningSessionState = {
   revision: number;
   createdAt: number;
   expiresAt: number;
-  lastAttemptDigest?: string;
+  attemptDigests: readonly string[];
+};
+
+export type LearningExerciseBinding = {
+  id: string;
+  revision: number;
+  unitId: string;
+  stage: Extract<LearningStage, "learn" | "practice">;
+  pages: readonly number[];
 };
 
 type LearningSessionPayload = LearningSessionState & {
@@ -98,6 +111,7 @@ export class LearningSessionError extends Error {
       | "configuration"
       | "book"
       | "page"
+      | "exercise"
       | "limit"
       | "stale"
   ) {
@@ -145,6 +159,39 @@ function validateBookAndPage(bookId: string, page: number): PageActivity {
   return getPageActivity(bookId, page);
 }
 
+function validateExerciseBinding(
+  exercise: LearningExerciseBinding | null,
+  activity: PageActivity,
+  page: number
+): void {
+  if (exercise === null) {
+    return;
+  }
+
+  const pages = new Set(exercise.pages);
+  if (
+    !safeExerciseIdPattern.test(exercise.id) ||
+    !Number.isSafeInteger(exercise.revision) ||
+    exercise.revision < 1 ||
+    !safeExerciseIdPattern.test(exercise.unitId) ||
+    (exercise.stage !== "learn" && exercise.stage !== "practice") ||
+    pages.size !== exercise.pages.length ||
+    exercise.pages.some(
+      (exercisePage) =>
+        !Number.isSafeInteger(exercisePage) || exercisePage < 1
+    ) ||
+    !pages.has(page) ||
+    activity.unitId !== exercise.unitId ||
+    activity.stage !== exercise.stage ||
+    !activity.tutorAvailable
+  ) {
+    throw new LearningSessionError(
+      "El ejercicio no está habilitado en esta página.",
+      "exercise"
+    );
+  }
+}
+
 function publicState(payload: LearningSessionPayload): LearningSessionState {
   return {
     sessionId: payload.sessionId,
@@ -152,6 +199,8 @@ function publicState(payload: LearningSessionPayload): LearningSessionState {
     page: payload.page,
     unitId: payload.unitId,
     stage: payload.stage,
+    exerciseId: payload.exerciseId,
+    exerciseRevision: payload.exerciseRevision,
     attemptCount: payload.attemptCount,
     turnCount: payload.turnCount,
     totalTurnCount: payload.totalTurnCount,
@@ -159,7 +208,7 @@ function publicState(payload: LearningSessionPayload): LearningSessionState {
     revision: payload.revision,
     createdAt: payload.createdAt,
     expiresAt: payload.expiresAt,
-    lastAttemptDigest: payload.lastAttemptDigest
+    attemptDigests: [...payload.attemptDigests]
   };
 }
 
@@ -202,9 +251,12 @@ function assertCurrentRevision(payload: LearningSessionPayload): void {
 export function issueLearningSession(input: {
   bookId: string;
   page: number;
+  exercise?: LearningExerciseBinding | null;
   now?: number;
 }): { token: string; state: LearningSessionState; activity: PageActivity } {
   const activity = validateBookAndPage(input.bookId, input.page);
+  const exercise = input.exercise ?? null;
+  validateExerciseBinding(exercise, activity, input.page);
   const now = input.now ?? Math.floor(Date.now() / 1000);
   const payload: LearningSessionPayload = {
     version: TOKEN_VERSION,
@@ -213,13 +265,16 @@ export function issueLearningSession(input: {
     page: input.page,
     unitId: activity.unitId,
     stage: activity.stage,
+    exerciseId: exercise?.id ?? null,
+    exerciseRevision: exercise?.revision ?? null,
     attemptCount: 0,
     turnCount: 0,
     totalTurnCount: 0,
     hintLevel: 0,
     revision: 0,
     createdAt: now,
-    expiresAt: now + TOKEN_TTL_SECONDS
+    expiresAt: now + TOKEN_TTL_SECONDS,
+    attemptDigests: []
   };
   const token = serializeLearningSession(payload);
   trackIssued(payload);
@@ -270,11 +325,28 @@ export function verifyLearningSession(
     typeof payload.sessionId !== "string" ||
     typeof payload.bookId !== "string" ||
     !Number.isInteger(payload.page) ||
+    !(
+      (payload.exerciseId === null &&
+        payload.exerciseRevision === null) ||
+      (typeof payload.exerciseId === "string" &&
+        safeExerciseIdPattern.test(payload.exerciseId) &&
+        Number.isSafeInteger(payload.exerciseRevision) &&
+        Number(payload.exerciseRevision) > 0)
+    ) ||
     !Number.isInteger(payload.attemptCount) ||
     !Number.isInteger(payload.turnCount) ||
     !Number.isInteger(payload.totalTurnCount) ||
     !Number.isInteger(payload.hintLevel) ||
     !Number.isInteger(payload.revision) ||
+    !Array.isArray(payload.attemptDigests) ||
+    payload.attemptDigests.length > MAX_DISTINCT_ATTEMPTS ||
+    payload.attemptDigests.some(
+      (digest) =>
+        typeof digest !== "string" ||
+        !attemptDigestPattern.test(digest)
+    ) ||
+    new Set(payload.attemptDigests).size !== payload.attemptDigests.length ||
+    payload.attemptCount !== payload.attemptDigests.length ||
     payload.attemptCount < 0 ||
     payload.turnCount < 0 ||
     payload.totalTurnCount < 0 ||
@@ -353,22 +425,159 @@ function evolve(
 
 export function moveLearningSession(
   token: string,
-  page: number
+  page: number,
+  exercise: LearningExerciseBinding | null = null
 ): { token: string; state: LearningSessionState; activity: PageActivity } {
   const current = verifyLearningSession(token);
-  validateBookAndPage(current.bookId, page);
+  const activity = validateBookAndPage(current.bookId, page);
+  validateExerciseBinding(exercise, activity, page);
+  const sameExercise =
+    exercise !== null &&
+    current.exerciseId === exercise.id &&
+    current.exerciseRevision === exercise.revision;
   return evolve(current, {
     page,
-    attemptCount: 0,
-    turnCount: 0,
-    hintLevel: 0,
-    lastAttemptDigest: undefined
+    exerciseId: exercise?.id ?? null,
+    exerciseRevision: exercise?.revision ?? null,
+    attemptCount: sameExercise ? current.attemptCount : 0,
+    turnCount: sameExercise ? current.turnCount : 0,
+    hintLevel: sameExercise ? current.hintLevel : 0,
+    attemptDigests: sameExercise ? current.attemptDigests : []
   });
+}
+
+function normalizeAttempt(attempt: string): string {
+  return attempt
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim()
+    .replace(/\s+/gu, " ")
+    .toLocaleLowerCase("es-PE");
+}
+
+function isSubstantiveAttempt(attempt: string): boolean {
+  const normalized = normalizeAttempt(attempt);
+  const words =
+    normalized.match(/\p{Letter}[\p{Letter}\p{Mark}\p{Number}]*/gu) ?? [];
+  const numbers = normalized.match(/\p{Number}+(?:[.,/]\p{Number}+)?/gu) ?? [];
+  const mathematicalRelation = /[=<>+\-*/×÷]/u.test(normalized);
+
+  return (
+    (normalized.length >= 18 && words.length >= 3) ||
+    (normalized.length >= 7 &&
+      numbers.length >= 2 &&
+      mathematicalRelation)
+  );
+}
+
+const irrelevantAttemptWords = new Set([
+  "ambos",
+  "cada",
+  "como",
+  "con",
+  "cuidado",
+  "del",
+  "despues",
+  "desde",
+  "donde",
+  "el",
+  "ella",
+  "en",
+  "entonces",
+  "finalmente",
+  "esta",
+  "este",
+  "esto",
+  "la",
+  "las",
+  "los",
+  "para",
+  "pero",
+  "por",
+  "porque",
+  "primero",
+  "que",
+  "sin",
+  "una",
+  "uno",
+  "usar",
+  "usaria",
+  "voy",
+  "y"
+]);
+
+function relevantTokens(value: string): Set<string> {
+  return new Set(
+    normalizeAttempt(value)
+      .split(/[^\p{Letter}\p{Mark}\p{Number}]+/gu)
+      .filter(
+        (token) =>
+          token.length >= 4 &&
+          /\p{Letter}/u.test(token) &&
+          !irrelevantAttemptWords.has(token)
+      )
+  );
+}
+
+function conceptMatches(left: string, right: string): boolean {
+  if (left === right) {
+    return true;
+  }
+  const maximumPrefix = Math.min(left.length, right.length);
+  let commonPrefix = 0;
+  while (
+    commonPrefix < maximumPrefix &&
+    left[commonPrefix] === right[commonPrefix]
+  ) {
+    commonPrefix += 1;
+  }
+  return (
+    commonPrefix >= 5 &&
+    commonPrefix / maximumPrefix >= 0.7
+  );
+}
+
+function matchedAttemptConcepts(
+  attempt: string,
+  referenceText: string
+): string[] | null {
+  const reference = [...relevantTokens(referenceText)];
+  const attemptTokens = [...relevantTokens(attempt)];
+  if (reference.length === 0 || attemptTokens.length === 0) {
+    return null;
+  }
+  const matchedConcepts = new Set<string>();
+  let matchedAttemptTokens = 0;
+  for (const token of attemptTokens) {
+    const concept = reference
+      .filter((candidate) => conceptMatches(token, candidate))
+      .sort((left, right) => left.localeCompare(right))[0];
+    if (concept) {
+      matchedAttemptTokens += 1;
+      matchedConcepts.add(concept);
+    }
+  }
+  if (
+    matchedConcepts.size < 2 ||
+    matchedAttemptTokens / attemptTokens.length < 0.3
+  ) {
+    return null;
+  }
+  return [...matchedConcepts].sort((left, right) =>
+    left.localeCompare(right)
+  );
+}
+
+function canonicalAttemptText(attempt: string): string {
+  return normalizeAttempt(attempt)
+    .replace(/[^\p{Letter}\p{Number}]+/gu, " ")
+    .trim()
+    .replace(/\s+/gu, " ");
 }
 
 function attemptDigest(attempt: string): string {
   return createHmac("sha256", secret())
-    .update(attempt.trim())
+    .update(normalizeAttempt(attempt))
     .digest("base64url")
     .slice(0, 16);
 }
@@ -376,6 +585,7 @@ function attemptDigest(attempt: string): string {
 export function recordLearningTurn(input: {
   token: string;
   attempt: string;
+  attemptReference?: string;
 }): { token: string; state: LearningSessionState; activity: PageActivity } {
   const current = verifyLearningSession(input.token);
   if (current.totalTurnCount >= MAX_TURNS_PER_SESSION) {
@@ -384,16 +594,36 @@ export function recordLearningTurn(input: {
       "limit"
     );
   }
-  const digest = input.attempt.trim() ? attemptDigest(input.attempt) : undefined;
+  const concepts =
+    input.attemptReference === undefined
+      ? null
+      : matchedAttemptConcepts(
+          input.attempt,
+          input.attemptReference
+        );
+  const digestMaterial =
+    isSubstantiveAttempt(input.attempt) &&
+    (input.attemptReference === undefined || concepts !== null)
+      ? concepts?.join("\u0000") ?? canonicalAttemptText(input.attempt)
+      : null;
+  const digest =
+    digestMaterial === null
+      ? undefined
+      : attemptDigest(digestMaterial);
   const isNewAttempt = Boolean(
-    digest && digest !== current.lastAttemptDigest
+    digest &&
+      current.attemptDigests.length < MAX_DISTINCT_ATTEMPTS &&
+      !current.attemptDigests.includes(digest)
   );
 
   return evolve(current, {
     turnCount: current.turnCount + 1,
     totalTurnCount: current.totalTurnCount + 1,
     attemptCount: current.attemptCount + (isNewAttempt ? 1 : 0),
-    lastAttemptDigest: digest ?? current.lastAttemptDigest
+    attemptDigests:
+      isNewAttempt && digest
+        ? [...current.attemptDigests, digest]
+        : current.attemptDigests
   });
 }
 

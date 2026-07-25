@@ -12,15 +12,21 @@ import {
 } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
-import { PdfViewer } from "@/components/pdf-viewer";
+import {
+  PdfViewer,
+  type ExerciseSelection,
+  type ViewerMode,
+} from "@/components/pdf-viewer";
 import { StageProgress } from "@/components/stage-progress";
 import type { VoiceSessionUpdate } from "@/components/voice-tutor";
 import type { Book } from "@/lib/catalog";
 import {
+  getFirstTutorablePage,
   getBookUnits,
   type BookUnit,
   type PageActivity,
 } from "@/lib/curriculum";
+import type { PublicExercise } from "@/lib/exercise-manifest";
 import type { LearningSessionState } from "@/lib/learning-session";
 
 type Citation =
@@ -49,14 +55,26 @@ type SessionResponse = {
 type TutorResponse = {
   message: string;
   citations?: Citation[];
-  mode: "gemma" | "guided-fallback" | "assessment-locked";
+  mode:
+    | "gemma"
+    | "guided-fallback"
+    | "assessment-locked"
+    | "exercise-locked"
+    | "reviewed-answer";
   sessionToken: string;
   session: LearningSessionState;
   activity: PageActivity;
   policy: {
     hintLevel: 0 | 1 | 2 | 3;
-    canRevealSolution: false;
+    canRevealSolution: boolean;
   };
+};
+
+type PageExercisesResponse = {
+  schemaVersion: 1;
+  bookId: string;
+  page: number;
+  exercises: PublicExercise[];
 };
 
 type LearningWorkspaceProps = {
@@ -64,7 +82,6 @@ type LearningWorkspaceProps = {
   voiceTutorEnabled: boolean;
 };
 
-const INITIAL_PAGE = 13;
 const VoiceTutor = dynamic(
   () =>
     import("@/components/voice-tutor").then((module) => module.VoiceTutor),
@@ -92,8 +109,11 @@ export function LearningWorkspace({
   book,
   voiceTutorEnabled,
 }: LearningWorkspaceProps) {
-  const firstPage = Math.min(INITIAL_PAGE, book.pages);
   const units = useMemo(() => getBookUnits(book.id), [book.id]);
+  const firstPage = Math.min(
+    getFirstTutorablePage(book.id) ?? 1,
+    book.pages,
+  );
   const [page, setPage] = useState(firstPage);
   const [attempt, setAttempt] = useState("");
   const [question, setQuestion] = useState("");
@@ -107,6 +127,13 @@ export function LearningWorkspace({
   const [isSyncingPage, setIsSyncingPage] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [notice, setNotice] = useState("");
+  const [exercises, setExercises] = useState<PublicExercise[]>([]);
+  const [selectedExercise, setSelectedExercise] =
+    useState<ExerciseSelection | null>(null);
+  const [overlayState, setOverlayState] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
+  const [viewerMode, setViewerMode] = useState<ViewerMode>("pdfjs");
   const conversationRef = useRef<HTMLDivElement>(null);
   const sessionTokenRef = useRef("");
   const canonicalSessionRef = useRef<LearningSessionState | null>(null);
@@ -116,14 +143,29 @@ export function LearningWorkspace({
   const tutorRequestSequenceRef = useRef(0);
   const tutorAbortRef = useRef<AbortController | null>(null);
   const attemptDraftsRef = useRef<Record<string, string>>({});
+  const previousSelectionRef = useRef<ExerciseSelection | null>(null);
 
-  const currentDraftKey = `${activity?.unitId ?? "orientation"}:${page}`;
-  const tutorAvailable = activity?.tutorAvailable ?? false;
+  const currentDraftKey = `${activity?.unitId ?? "orientation"}:${selectedExercise?.exerciseId ?? "none"}:${selectedExercise?.exerciseRevision ?? 0}`;
+  const activeExercise =
+    exercises.find(
+      (exercise) =>
+        exercise.id === selectedExercise?.exerciseId &&
+        exercise.revision === selectedExercise.exerciseRevision,
+    ) ?? null;
+  const pageTutorAvailable = activity?.tutorAvailable ?? false;
+  const tutorAvailable =
+    pageTutorAvailable &&
+    activeExercise !== null &&
+    overlayState === "ready" &&
+    viewerMode === "pdfjs" &&
+    !isSyncingPage;
   const isAssessment =
     activity?.stage === "assessment" && activity.unitId !== null;
   const tutorDisabledReason = isAssessment
     ? "La voz se pausa en Evaluamos para que resuelvas por tu cuenta."
-    : "El tutor no está habilitado en esta sección.";
+    : viewerMode === "native-readonly"
+      ? "El visor está en modo lectura; recarga PDF.js para seleccionar un ejercicio."
+      : "Selecciona primero un ejercicio marcado en rojo.";
 
   const applySession = useCallback((result: SessionResponse) => {
     canonicalSessionRef.current = result.state;
@@ -139,6 +181,7 @@ export function LearningWorkspace({
       targetPage: number,
       token?: string,
       signal?: AbortSignal,
+      selection?: ExerciseSelection | null,
     ): Promise<SessionResponse> => {
       const response = await fetch("/api/session", {
         method: "POST",
@@ -146,6 +189,9 @@ export function LearningWorkspace({
         body: JSON.stringify({
           bookId: book.id,
           page: targetPage,
+          exerciseId: selection?.exerciseId ?? null,
+          exerciseRevision: selection?.exerciseRevision ?? null,
+          exerciseRegionId: selection?.regionId ?? null,
           ...(token ? { sessionToken: token } : {}),
         }),
         signal,
@@ -161,6 +207,73 @@ export function LearningWorkspace({
     },
     [book.id],
   );
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    void fetch(
+      `/api/materials/${encodeURIComponent(book.id)}/exercises?page=${page}`,
+      {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      },
+    )
+      .then(async (response) => {
+        const body = (await response.json().catch(() => ({}))) as
+          | Partial<PageExercisesResponse>
+          | { error?: string };
+        if (
+          !response.ok ||
+          !("exercises" in body) ||
+          !Array.isArray(body.exercises)
+        ) {
+          const message =
+            "error" in body && typeof body.error === "string"
+              ? body.error
+              : "Los ejercicios de esta página aún no están publicados.";
+          throw new Error(message);
+        }
+        return body.exercises;
+      })
+      .then((pageExercises) => {
+        if (controller.signal.aborted) return;
+        setExercises(pageExercises);
+        setSelectedExercise((current) => {
+          if (!current) return null;
+          const exercise = pageExercises.find(
+            (candidate) =>
+              candidate.id === current.exerciseId &&
+              candidate.revision === current.exerciseRevision,
+          );
+          const region = exercise?.regions.find(
+            (candidate) => candidate.page === page,
+          );
+          return exercise && region
+            ? {
+                exerciseId: exercise.id,
+                exerciseRevision: exercise.revision,
+                regionId: region.id,
+                page,
+              }
+            : null;
+        });
+        setOverlayState("ready");
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        setExercises([]);
+        setSelectedExercise(null);
+        setOverlayState("error");
+        setNotice(
+          error instanceof Error
+            ? error.message
+            : "Los ejercicios de esta página aún no están publicados.",
+        );
+      });
+
+    return () => controller.abort();
+  }, [book.id, page]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -211,6 +324,14 @@ export function LearningWorkspace({
     attemptDraftsRef.current[currentDraftKey] = attempt;
   }, [attempt, currentDraftKey]);
 
+  useEffect(() => {
+    if (previousSelectionRef.current && !selectedExercise) {
+      setMessages([welcomeMessage(activity ?? undefined)]);
+      setQuestion("");
+    }
+    previousSelectionRef.current = selectedExercise;
+  }, [activity, selectedExercise]);
+
   const scrollConversationToEnd = useCallback(() => {
     window.setTimeout(() => {
       const conversation = conversationRef.current;
@@ -227,6 +348,22 @@ export function LearningWorkspace({
     async (requestedPage: number, source: "page" | "unit" | "citation") => {
       const targetPage = Math.min(Math.max(requestedPage, 1), book.pages);
       if (!sessionTokenRef.current || targetPage === page) return;
+      const retainedRegion =
+        source !== "unit"
+          ? activeExercise?.regions.find(
+              (region) => region.page === targetPage,
+            )
+          : undefined;
+      const targetSelection: ExerciseSelection | null =
+        retainedRegion && activeExercise
+          ? {
+              exerciseId: activeExercise.id,
+              exerciseRevision: activeExercise.revision,
+              regionId: retainedRegion.id,
+              page: targetPage,
+            }
+          : null;
+      const targetExerciseId = targetSelection?.exerciseId ?? null;
 
       attemptDraftsRef.current[currentDraftKey] = attempt;
       const sequence = ++pageSyncSequenceRef.current;
@@ -237,18 +374,29 @@ export function LearningWorkspace({
       tutorAbortRef.current = null;
       setIsSending(false);
       setIsSyncingPage(true);
+      setOverlayState("loading");
       setNotice("");
 
       try {
         let result: SessionResponse;
         try {
-          result = await requestSession(targetPage, sessionTokenRef.current);
+          result = await requestSession(
+            targetPage,
+            sessionTokenRef.current,
+            undefined,
+            targetSelection,
+          );
         } catch (error) {
           const message = error instanceof Error ? error.message : "";
           if (!/sesión|token|firma|expiró/iu.test(message)) {
             throw error;
           }
-          result = await requestSession(targetPage);
+          result = await requestSession(
+            targetPage,
+            undefined,
+            undefined,
+            targetSelection,
+          );
         }
 
         if (
@@ -260,11 +408,17 @@ export function LearningWorkspace({
 
         const previousUnitId = activity?.unitId;
         applySession(result);
-        const nextDraftKey = `${result.activity.unitId ?? "orientation"}:${result.state.page}`;
+        setSelectedExercise(targetSelection);
+        const nextDraftKey = `${result.activity.unitId ?? "orientation"}:${targetExerciseId ?? "none"}:${targetSelection?.exerciseRevision ?? 0}`;
         setAttempt(attemptDraftsRef.current[nextDraftKey] ?? "");
         setQuestion("");
 
-        if (source === "unit" || previousUnitId !== result.activity.unitId) {
+        if (
+          source === "unit" ||
+          previousUnitId !== result.activity.unitId ||
+          targetSelection === null ||
+          !result.activity.tutorAvailable
+        ) {
           setMessages([welcomeMessage(result.activity)]);
         }
       } catch (error) {
@@ -293,6 +447,7 @@ export function LearningWorkspace({
     },
     [
       activity,
+      activeExercise,
       applySession,
       attempt,
       book.pages,
@@ -301,6 +456,94 @@ export function LearningWorkspace({
       requestSession,
     ],
   );
+
+  async function selectExercise(selection: ExerciseSelection) {
+    if (
+      !sessionTokenRef.current ||
+      isSyncingPage ||
+      overlayState !== "ready" ||
+      viewerMode !== "pdfjs"
+    ) {
+      return;
+    }
+    const exercise = exercises.find(
+      (candidate) =>
+        candidate.id === selection.exerciseId &&
+        candidate.revision === selection.exerciseRevision &&
+        candidate.regions.some(
+          (region) =>
+            region.id === selection.regionId && region.page === page,
+        ),
+    );
+    if (!exercise) {
+      setNotice("Ese ejercicio no está publicado para la página visible.");
+      return;
+    }
+    if (
+      selectedExercise?.exerciseId === selection.exerciseId &&
+      selectedExercise.exerciseRevision === selection.exerciseRevision &&
+      selectedExercise.regionId === selection.regionId
+    ) {
+      return;
+    }
+
+    attemptDraftsRef.current[currentDraftKey] = attempt;
+    const requestEpoch = ++stateRequestEpochRef.current;
+    tutorRequestSequenceRef.current += 1;
+    tutorAbortRef.current?.abort();
+    tutorAbortRef.current = null;
+    setIsSending(false);
+    setIsSyncingPage(true);
+    setNotice("");
+
+    try {
+      let result: SessionResponse;
+      try {
+        result = await requestSession(
+          page,
+          sessionTokenRef.current,
+          undefined,
+          selection,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (!/sesión|token|firma|expiró/iu.test(message)) {
+          throw error;
+        }
+        result = await requestSession(
+          page,
+          undefined,
+          undefined,
+          selection,
+        );
+      }
+      if (requestEpoch !== stateRequestEpochRef.current) return;
+
+      applySession(result);
+      setSelectedExercise(selection);
+      const nextDraftKey = `${result.activity.unitId ?? "orientation"}:${exercise.id}:${exercise.revision}`;
+      setAttempt(attemptDraftsRef.current[nextDraftKey] ?? "");
+      setQuestion("");
+      setMessages([
+        {
+          id: crypto.randomUUID(),
+          role: "tutor",
+          content: `Seleccionaste ${exercise.label}: ${exercise.title}. Cuéntame qué entendiste o escribe tu primer intento; avanzaré con pistas sobre este ejercicio.`,
+        },
+      ]);
+    } catch (error) {
+      if (requestEpoch !== stateRequestEpochRef.current) return;
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "No se pudo activar ese ejercicio.",
+      );
+    } finally {
+      if (requestEpoch === stateRequestEpochRef.current) {
+        setIsSyncingPage(false);
+      }
+    }
+  }
 
   async function askTutor(message: string) {
     const cleanMessage = message.trim();
@@ -439,6 +682,8 @@ export function LearningWorkspace({
       update.state.page !== currentSession.page ||
       update.state.unitId !== currentSession.unitId ||
       update.state.stage !== currentSession.stage ||
+      update.state.exerciseId !== currentSession.exerciseId ||
+      update.state.exerciseRevision !== currentSession.exerciseRevision ||
       update.token === sessionTokenRef.current ||
       update.state.revision <= currentSession.revision ||
       update.state.turnCount <= currentSession.turnCount ||
@@ -488,6 +733,13 @@ export function LearningWorkspace({
               book={book}
               page={page}
               onPageChange={(nextPage) => void syncPage(nextPage, "page")}
+              exercises={exercises}
+              selected={selectedExercise}
+              overlayState={overlayState}
+              onExerciseSelect={(selection) =>
+                void selectExercise(selection)
+              }
+              onViewerModeChange={setViewerMode}
             />
           ) : (
             <SessionLoading
@@ -514,6 +766,39 @@ export function LearningWorkspace({
                 <p>
                   Lee el ejercicio de la página, escribe tu intento y pide una
                   pista. Pulsa su cita para abrir la página usada.
+                </p>
+              </div>
+            </div>
+
+            <div
+              className={`exercise-focus ${
+                activeExercise ? "exercise-focus-active" : ""
+              }`}
+              role="status"
+            >
+              <span aria-hidden="true">
+                {activeExercise ? "✓" : "▢"}
+              </span>
+              <div>
+                <strong>
+                  {activeExercise
+                    ? `${activeExercise.label}: ${activeExercise.title}`
+                    : overlayState === "loading"
+                      ? "Detectando ejercicios publicados…"
+                      : overlayState === "error"
+                        ? "Ejercicios aún no disponibles"
+                        : exercises.length > 0
+                          ? "Elige un ejercicio"
+                          : "No hay ejercicios publicados en esta página"}
+                </strong>
+                <p>
+                  {activeExercise
+                    ? "El RAG y las pistas quedaron vinculados a este recuadro."
+                    : viewerMode === "native-readonly"
+                      ? "El visor alternativo es sólo de lectura y no permite seleccionar recuadros."
+                      : exercises.length > 0
+                        ? "Pulsa la etiqueta de un recuadro rojo sobre el PDF para activar el RAG."
+                        : "Puedes leer el PDF, pero el tutor permanece cerrado hasta que haya una detección revisada."}
                 </p>
               </div>
             </div>
@@ -553,7 +838,7 @@ export function LearningWorkspace({
                   <VoiceTutor
                     sessionId={session.sessionId}
                     sessionToken={sessionToken}
-                    disabled={!activity.tutorAvailable}
+                    disabled={!tutorAvailable}
                     disabledReason={tutorDisabledReason}
                     onSessionUpdate={applyVoiceSession}
                   />
@@ -703,7 +988,7 @@ export function LearningWorkspace({
             <p className="tutor-promise">
               <ShieldIcon />
               {tutorAvailable
-                ? "La pista usa esta ficha y muestra la página consultada. No revela la respuesta final."
+                ? "La ayuda usa este ejercicio y cita sus páginas. La respuesta revisada aparece sólo después de tres pistas y varios intentos."
                 : isAssessment
                   ? "En Evaluamos, AImauta no entrega pistas ni respuestas."
                   : "En esta sección, AImauta no consulta RAG ni entrega ayuda."}

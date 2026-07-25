@@ -13,9 +13,13 @@
     "test:watch": "vitest",
     "catalog:validate": "tsx scripts/validate-catalog.ts",
     "content:sync": "tsx scripts/sync-content.ts",
-    "content:index": "tsx scripts/index-content.ts"
+    "content:index": "tsx scripts/index-content.ts",
+    "exercises:ingest": "tsx scripts/ingest-exercises.ts",
+    "exercises:validate": "tsx scripts/validate-exercise-release.ts",
+    "exercises:promote": "tsx scripts/promote-exercise-release.ts"
   },
   "dependencies": {
+    "@napi-rs/canvas": "1.0.2",
     "livekit-client": "2.21.0",
     "livekit-server-sdk": "2.17.0",
     "next": "16.2.11",

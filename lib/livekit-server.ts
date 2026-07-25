@@ -8,6 +8,7 @@ import {
 
 import { getBook } from "@/lib/catalog";
 import { getPageActivity } from "@/lib/curriculum";
+import { getPublishedExercise } from "@/lib/exercise-store";
 import { verifyLearningSession } from "@/lib/learning-session";
 import { consumeRateLimit } from "@/lib/rate-limit";
 
@@ -100,11 +101,41 @@ export async function createVoiceAccess(sessionToken: string): Promise<{
     windowMs: 60_000
   });
   const activity = getPageActivity(session.bookId, session.page);
-  if (!activity.tutorAvailable) {
+  if (
+    !activity.tutorAvailable ||
+    session.exerciseId === null ||
+    session.exerciseRevision === null
+  ) {
     throw new VoiceUnavailableError(
       activity.stage === "assessment" && activity.unitId !== null
         ? "El tutor de voz está en pausa durante Evaluamos."
-        : "El tutor de voz no está habilitado en esta página."
+        : "Selecciona un ejercicio publicado antes de activar la voz."
+    );
+  }
+
+  // Configuration parsing has no network side effect. Keep it ahead of the
+  // manifest read so a disabled/misconfigured deployment reports 503, while a
+  // configured deployment still revalidates publication before any LiveKit
+  // room or token operation.
+  const config = configuration();
+  let exercise;
+  try {
+    exercise = await getPublishedExercise(
+      session.bookId,
+      session.exerciseId
+    );
+  } catch {
+    throw new VoiceUnavailableError(
+      "El ejercicio seleccionado ya no está disponible."
+    );
+  }
+  if (
+    !exercise ||
+    exercise.revision !== session.exerciseRevision ||
+    !exercise.regions.some((region) => region.page === session.page)
+  ) {
+    throw new VoiceUnavailableError(
+      "El ejercicio seleccionado ya no está disponible."
     );
   }
 
@@ -113,7 +144,6 @@ export async function createVoiceAccess(sessionToken: string): Promise<{
     throw new VoiceUnavailableError("Material no encontrado.");
   }
 
-  const config = configuration();
   const roomName = `aimauta-${session.sessionId}`;
   const participantIdentity = `student-${session.sessionId}`;
   const roomMetadata = JSON.stringify({
@@ -127,6 +157,8 @@ export async function createVoiceAccess(sessionToken: string): Promise<{
     grade: book.grade,
     language: "es-PE",
     stage: session.stage,
+    exercise_id: session.exerciseId,
+    exercise_revision: session.exerciseRevision,
     mode: "socratic"
   });
   const dispatchMetadata = JSON.stringify({

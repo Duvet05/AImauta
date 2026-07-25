@@ -38,6 +38,22 @@ yarn-error.log*
 /data/manifests/*.generated.json
 *.pdf
 
+# private ingestion workspace and generated review/release artifacts
+/aimauta-ingest/
+**/jobs/
+**/reports/
+model-api-key*
+*.private*.json
+*.public.draft.json
+*.ingestion-report.json
+*.part
+*.part-*
+
+# Explicitly allow synthetic examples and fixtures intended for review.
+!/tests/fixtures/
+!/tests/fixtures/**
+!/config/**/*.example.json
+
 # credentials
 *.key
 *.p12

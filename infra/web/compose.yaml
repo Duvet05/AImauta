@@ -31,6 +31,7 @@ services:
       - "${AIMAUTA_RUNTIME_DIR:-/home/hii1sc/aimauta-runtime}/content:/srv/aimauta/content:ro"
       - "${AIMAUTA_RUNTIME_DIR:-/home/hii1sc/aimauta-runtime}/indexes:/srv/aimauta/indexes:ro"
       - "${AIMAUTA_RUNTIME_DIR:-/home/hii1sc/aimauta-runtime}/manifests:/srv/aimauta/manifests:ro"
+      - "${AIMAUTA_RUNTIME_DIR:-/home/hii1sc/aimauta-runtime}/exercise-solutions:/srv/aimauta/exercise-solutions:ro"
     healthcheck:
       test:
         - CMD-SHELL

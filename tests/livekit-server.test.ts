@@ -11,6 +11,9 @@ const sdk = vi.hoisted(() => ({
   toJwt: vi.fn(),
   updateRoomMetadata: vi.fn()
 }));
+const exerciseStore = vi.hoisted(() => ({
+  getPublishedExercise: vi.fn()
+}));
 
 vi.mock("livekit-server-sdk", () => ({
   AccessToken: class {
@@ -57,11 +60,21 @@ vi.mock("livekit-server-sdk", () => ({
   },
   TrackSource: { MICROPHONE: 2 }
 }));
+vi.mock("@/lib/exercise-store", () => ({
+  getPublishedExercise: exerciseStore.getPublishedExercise
+}));
 
 import { issueLearningSession } from "@/lib/learning-session";
 import { createVoiceAccess } from "@/lib/livekit-server";
 
 const bookId = "fichas-matematica-1-secundaria";
+const exercise = {
+  id: "ejercicio-voz",
+  revision: 1,
+  unitId: "ficha-1-fracciones",
+  stage: "practice" as const,
+  pages: [17]
+};
 
 beforeAll(() => {
   process.env.AIMAUTA_SESSION_SECRET =
@@ -88,11 +101,34 @@ beforeEach(() => {
   sdk.createDispatch.mockResolvedValue({});
   sdk.deleteDispatch.mockResolvedValue(undefined);
   sdk.toJwt.mockResolvedValue("student-jwt");
+  exerciseStore.getPublishedExercise.mockResolvedValue({
+    id: exercise.id,
+    status: "published",
+    unitId: exercise.unitId,
+    stage: exercise.stage,
+    revision: exercise.revision,
+    label: "Ejercicio",
+    title: "Ejercicio de voz",
+    prompt: "Resuelve el ejercicio.",
+    regions: [
+      {
+        id: "ejercicio-voz-region-1",
+        page: 17,
+        role: "prompt",
+        order: 1,
+        rect: { x: 0.1, y: 0.1, width: 0.8, height: 0.3 }
+      }
+    ]
+  });
 });
 
 describe("acceso LiveKit", () => {
   it("crea una sala AImauta, despacha el agente nombrado y limita el JWT", async () => {
-    const session = issueLearningSession({ bookId, page: 17 });
+    const session = issueLearningSession({
+      bookId,
+      page: 17,
+      exercise
+    });
     const access = await createVoiceAccess(session.token);
 
     expect(sdk.listRooms).toHaveBeenCalledWith([
@@ -119,6 +155,8 @@ describe("acceso LiveKit", () => {
       session_id: session.state.sessionId,
       page: 17,
       stage: "practice",
+      exercise_id: "ejercicio-voz",
+      exercise_revision: 1,
       mode: "socratic"
     });
     expect(JSON.parse(room.metadata)).not.toHaveProperty("session_token");
@@ -153,7 +191,11 @@ describe("acceso LiveKit", () => {
         state: { jobs: [{ state: { status: 2 } }] }
       }
     ]);
-    const session = issueLearningSession({ bookId, page: 17 });
+    const session = issueLearningSession({
+      bookId,
+      page: 17,
+      exercise
+    });
 
     await createVoiceAccess(session.token);
 
@@ -185,11 +227,30 @@ describe("acceso LiveKit", () => {
         state: { jobs: [{ state: { status: 1 } }] }
       }
     ]);
-    const session = issueLearningSession({ bookId, page: 17 });
+    const session = issueLearningSession({
+      bookId,
+      page: 17,
+      exercise
+    });
 
     await createVoiceAccess(session.token);
 
     expect(sdk.deleteDispatch).not.toHaveBeenCalled();
     expect(sdk.createDispatch).not.toHaveBeenCalled();
+  });
+
+  it("no crea sala si el ejercicio fue retirado o cambió de revisión", async () => {
+    exerciseStore.getPublishedExercise.mockResolvedValue(undefined);
+    const session = issueLearningSession({
+      bookId,
+      page: 17,
+      exercise
+    });
+
+    await expect(createVoiceAccess(session.token)).rejects.toThrow(
+      /ya no está disponible/
+    );
+    expect(sdk.listRooms).not.toHaveBeenCalled();
+    expect(sdk.createRoom).not.toHaveBeenCalled();
   });
 });

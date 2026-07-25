@@ -29,22 +29,24 @@ afterAll(async () => {
 });
 
 describe("fallos previos a inferencia", () => {
-  it("no consume la revisión si el índice RAG no puede leerse", async () => {
+  it("no abre un índice roto cuando falta seleccionar ejercicio", async () => {
     const issued = issueLearningSession({
       bookId: "fichas-matematica-1-secundaria",
       page: 13
     });
 
-    await expect(
-      guideLearningTurn({
-        sessionToken: issued.token,
-        message: "¿Qué observo?",
-        attempt: ""
-      })
-    ).rejects.toThrow();
-
+    const result = await guideLearningTurn({
+      sessionToken: issued.token,
+      message: "¿Qué observo?",
+      attempt: ""
+    });
+    expect(result).toMatchObject({
+      mode: "exercise-locked",
+      citations: [],
+      session: { revision: 1, totalTurnCount: 1 }
+    });
     expect(
-      recordLearningTurn({ token: issued.token, attempt: "" }).state
-    ).toMatchObject({ revision: 1, totalTurnCount: 1 });
+      recordLearningTurn({ token: result.sessionToken, attempt: "" }).state
+    ).toMatchObject({ revision: 2, totalTurnCount: 2 });
   });
 });

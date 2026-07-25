@@ -7,6 +7,8 @@ import {
   learningSessionErrorStatus
 } from "@/lib/learning-session";
 import { RateLimitError } from "@/lib/rate-limit";
+import { ExerciseSolutionUnavailableError } from "@/lib/exercise-solution-store";
+import { ExerciseManifestUnavailableError } from "@/lib/exercise-store";
 import { guideLearningTurn } from "@/lib/tutor-service";
 
 export const runtime = "nodejs";
@@ -66,6 +68,15 @@ export async function POST(request: Request): Promise<Response> {
     }
     if (error instanceof RateLimitError) {
       return json({ error: error.message }, 429, error.retryAfterSeconds);
+    }
+    if (
+      error instanceof ExerciseManifestUnavailableError ||
+      error instanceof ExerciseSolutionUnavailableError
+    ) {
+      return json(
+        { error: "La guía revisada del ejercicio no está disponible." },
+        503
+      );
     }
     console.error("Internal voice turn failure", error);
     return json({ error: "No se pudo procesar el turno de voz." }, 500);

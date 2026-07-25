@@ -37,6 +37,9 @@ repositorio.
 En PowerEdge, desde un checkout limpio:
 
 ```bash
+chmod +x infra/ingest/init-runtime.sh
+infra/ingest/init-runtime.sh
+
 chmod +x infra/web/init-env.sh
 infra/web/init-env.sh /home/hii1sc/aimauta-runtime/web.env
 
@@ -74,6 +77,7 @@ npm run catalog:validate
 npm run typecheck
 npm run lint
 npm test
+sh -n infra/ingest/init-runtime.sh
 docker compose -f infra/web/compose.yaml config --quiet
 curl --fail http://127.0.0.1:3308/_edge-health
 ```

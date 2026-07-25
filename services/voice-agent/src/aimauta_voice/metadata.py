@@ -14,6 +14,8 @@ class RoomMetadata(BaseModel):
     grade: str = Field(max_length=100)
     language: str = "es-PE"
     stage: str
+    exercise_id: str = Field(min_length=1, max_length=160)
+    exercise_revision: int = Field(ge=1)
     mode: str
 
     def model_post_init(self, __context: object) -> None:
