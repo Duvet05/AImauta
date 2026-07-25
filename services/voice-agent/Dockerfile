@@ -17,6 +17,7 @@ ENV PATH="/venv/bin:$PATH" \
 COPY requirements-test.lock ./
 RUN /venv/bin/pip install --require-hashes --no-deps -r requirements-test.lock
 WORKDIR /app
+COPY Dockerfile ./Dockerfile
 COPY pyproject.toml ./
 COPY src ./src
 COPY tests ./tests
