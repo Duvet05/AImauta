@@ -19,7 +19,6 @@ import {
 } from "@/lib/pedagogy";
 import { retrieveRagServiceEvidence } from "@/lib/rag-service";
 import {
-  retrieveEvidence,
   retrieveExerciseEvidence,
   type Evidence
 } from "@/lib/retrieval";
@@ -110,32 +109,6 @@ async function createGuidedMessage(input: {
   };
 }
 
-async function retrievePageEvidence(input: {
-  bookId: string;
-  page: number;
-  question: string;
-  attempt: string;
-}): Promise<Evidence[]> {
-  const request = {
-    bookId: input.bookId,
-    question: input.question,
-    attempt: input.attempt,
-    page: input.page,
-    allowedPages: [input.page]
-  };
-  const remoteEvidence = await retrieveRagServiceEvidence(request);
-  if (remoteEvidence !== null) {
-    return remoteEvidence;
-  }
-
-  try {
-    return await retrieveEvidence(request);
-  } catch {
-    // A malformed or unavailable local index must fail closed.
-    return [];
-  }
-}
-
 export async function guideLearningTurn(input: {
   sessionToken: string;
   message: string;
@@ -180,74 +153,16 @@ export async function guideLearningTurn(input: {
     verified.exerciseId === null ||
     verified.exerciseRevision === null
   ) {
-    const evidence = await retrievePageEvidence({
-      bookId: verified.bookId,
-      page: verified.page,
-      question: input.message,
-      attempt: input.attempt
-    });
-    const current = recordLearningTurn({
-      token: input.sessionToken,
-      attempt: input.attempt,
-      attemptReference:
-        evidence.length > 0
-          ? evidence
-              .map((item) => item.text.slice(0, 1_200))
-              .join("\n")
-          : undefined
-    });
-    await recordAssignmentLearningProgress(current.state);
-
-    if (evidence.length === 0) {
-      return {
-        message:
-          "No encuentro evidencia validada para orientar esta página. Selecciona un ejercicio marcado o avisa a tu docente.",
-        citations: [],
-        mode: "exercise-locked",
-        sessionToken: current.token,
-        session: current.state,
-        activity: current.activity,
-        policy: {
-          hintLevel: 0,
-          canRevealSolution: false
-        }
-      };
-    }
-
-    const basePolicy = getTurnPolicy({
-      hintLevel: current.state.hintLevel,
-      stage: current.state.stage,
-      attemptCount: current.state.attemptCount,
-      turnCount: current.state.turnCount
-    });
-    const policy: TurnPolicy = {
-      ...basePolicy,
-      // Only a reviewed exercise solution can ever unlock a final answer.
-      canRevealSolution: false
-    };
-    const guided = await createGuidedMessage({
-      sessionId: current.state.sessionId,
-      page: current.state.page,
-      attemptCount: current.state.attemptCount,
-      message: input.message,
-      attempt: input.attempt,
-      evidence,
-      policy
-    });
-
     return {
-      message: guided.message,
-      citations: evidence.map((item) => ({
-        sourceId: item.sourceId,
-        page: item.page,
-        chunkId: item.id
-      })),
-      mode: guided.mode,
-      sessionToken: current.token,
-      session: current.state,
-      activity: current.activity,
+      message:
+        "Selecciona primero uno de los ejercicios marcados sobre el cuaderno. Hasta entonces, AImauta no consulta el material ni da pistas.",
+      citations: [],
+      mode: "exercise-locked",
+      sessionToken: input.sessionToken,
+      session: verified,
+      activity: verifiedActivity,
       policy: {
-        hintLevel: policy.hintLevel,
+        hintLevel: 0,
         canRevealSolution: false
       }
     };
@@ -272,7 +187,7 @@ export async function guideLearningTurn(input: {
   const exercisePages = [
     ...new Set(exercise.regions.map((region) => region.page))
   ].sort((left, right) => left - right);
-  const evidence = (
+  const localEvidence = (
     await retrieveExerciseEvidence({
       bookId: verified.bookId,
       exercise,
@@ -290,7 +205,7 @@ export async function guideLearningTurn(input: {
         getPageActivity(verified.bookId, item.page).stage !== "assessment"
     )
     .map((item, index) => ({ ...item, sourceId: `S${index + 1}` }));
-  if (evidence.length === 0) {
+  if (localEvidence.length === 0) {
     return {
       message:
         "El material de referencia de este ejercicio no está disponible. AImauta no dará pistas hasta que el cuaderno validado esté listo.",
@@ -310,6 +225,35 @@ export async function guideLearningTurn(input: {
     exerciseId: exercise.id,
     revision: exercise.revision
   });
+  const allowedPages = verified.assignment
+    ? exercisePages.filter((page) =>
+        verified.assignment?.allowedPages.includes(page)
+      )
+    : exercisePages;
+  const remoteEvidence = await retrieveRagServiceEvidence({
+    bookId: verified.bookId,
+    exercise,
+    requiredAnchor: exercise.prompt,
+    question: input.message,
+    attempt: input.attempt,
+    page: verified.page,
+    allowedPages
+  });
+  const seenChunkIds = new Set(localEvidence.map((item) => item.id));
+  const evidence = [
+    ...localEvidence,
+    ...(remoteEvidence ?? []).filter((item) => {
+      if (
+        item.exerciseId !== exercise.id ||
+        !allowedPages.includes(item.page) ||
+        seenChunkIds.has(item.id)
+      ) {
+        return false;
+      }
+      seenChunkIds.add(item.id);
+      return true;
+    })
+  ].map((item, index) => ({ ...item, sourceId: `S${index + 1}` }));
   const current = recordLearningTurn({
     token: input.sessionToken,
     attempt: input.attempt,
@@ -351,7 +295,6 @@ export async function guideLearningTurn(input: {
       }
     };
   }
-
   const guided = await createGuidedMessage({
     sessionId: current.state.sessionId,
     page: current.state.page,

@@ -89,8 +89,8 @@ Texto:  navegador ─► /api/tutor ──────────────�
                                                   ├─► tutor-service
 Voz:    navegador ─► LiveKit ─► worker STT ─► /api/internal/turn
                                                   │
-                                                  ├─► RAG interno localhost:3310
-                                                  │    (evidencia validada con fuente)
+                                                  ├─► release humano exacto
+                                                  │    └─► RAG opcional localhost:3311
                                                   ├─► OpenAI → xAI → Gemini
                                                   │    (elige el movimiento)
                                                   └─► guía segura de respaldo (determinista)
@@ -144,7 +144,7 @@ La importación usa **exclusivamente** la descarga oficial del MINEDU; los metad
 | **Visor** | PDF.js (`pdfjs-dist`) con capa de texto |
 | **Avatar 3D** | Three.js · modelo MakeHuman CC0, local |
 | **Datos** | Prisma · PostgreSQL |
-| **Tutor / IA** | RAG interno FastAPI · router **OpenAI → xAI → Gemini** · migración posterior a Gemma |
+| **Tutor / IA** | Release humano + RAG opcional por ejercicio · router **OpenAI → xAI → Gemini** |
 | **Voz** | LiveKit Cloud Inference (Deepgram Nova-3 / Inworld TTS 2 · Silero VAD) |
 | **Pruebas** | Vitest |
 | **Licencia** | MIT |

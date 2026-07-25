@@ -44,20 +44,16 @@ beforeAll(async () => {
     "test-only-session-secret-with-at-least-32-characters";
   delete process.env.OLLAMA_BASE_URL;
   delete process.env.OLLAMA_MODEL;
-  delete process.env.AIMAUTA_RAG_SERVICE_URL;
-  delete process.env.OPENAI_API_KEY;
-  delete process.env.XAI_API_KEY;
 });
 
 afterAll(async () => {
   delete process.env.AIMAUTA_INDEX_DIR;
   delete process.env.AIMAUTA_SESSION_SECRET;
-  delete process.env.AIMAUTA_RAG_SERVICE_URL;
   await rm(indexDir, { recursive: true, force: true });
 });
 
 describe("POST /api/tutor", () => {
-  it("orienta una página indexada aun sin ejercicio seleccionado", async () => {
+  it("no consulta RAG mientras no haya un ejercicio seleccionado", async () => {
     const response = await POST(
       new Request("http://aimauta.test/api/tutor", {
         method: "POST",
@@ -76,8 +72,8 @@ describe("POST /api/tutor", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     await expect(response.json()).resolves.toMatchObject({
-      mode: "guided-fallback",
-      citations: [{ sourceId: "S1", page: 13 }],
+      mode: "exercise-locked",
+      citations: [],
       policy: { canRevealSolution: false }
     });
   });

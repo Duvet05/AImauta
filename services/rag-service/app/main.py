@@ -1,34 +1,39 @@
-"""Loopback-only HTTP contract for AImauta retrieval."""
+"""Authenticated loopback contract for optional exercise retrieval."""
 
 from __future__ import annotations
 
+import hmac
 from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.engine import (
     IndexRepository,
     IndexUnavailableError,
     LineageMismatchError,
 )
 
-CONTRACT_VERSION = "1"
+CONTRACT_VERSION = "2"
 repository: IndexRepository | None = None
+settings: Settings | None = None
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    global repository
-    repository = IndexRepository(get_settings())
+    global repository, settings
+    settings = get_settings()
+    repository = IndexRepository(settings)
     yield
     repository = None
+    settings = None
 
 
 app = FastAPI(
-    title="AImauta internal RAG",
+    title="AImauta internal exercise RAG",
     version=CONTRACT_VERSION,
     docs_url=None,
     redoc_url=None,
@@ -39,7 +44,19 @@ app = FastAPI(
 
 @app.middleware("http")
 async def response_contract(request: Request, call_next):
-    response: Response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        configured = settings.service_secret if settings is not None else ""
+        provided = request.headers.get("authorization", "")
+        expected = f"Bearer {configured}"
+        if not configured or not hmac.compare_digest(provided, expected):
+            response: Response = JSONResponse(
+                status_code=401,
+                content={"detail": "Unauthorized"},
+            )
+        else:
+            response = await call_next(request)
+    else:
+        response = await call_next(request)
     response.headers["Cache-Control"] = "no-store"
     response.headers["X-Aimauta-Rag-Contract"] = CONTRACT_VERSION
     return response
@@ -53,17 +70,42 @@ class RetrieveRequest(StrictModel):
     book_id: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=160)
     source_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     curriculum_version: str = Field(min_length=1, max_length=80)
+    exercise_id: str = Field(
+        pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$",
+        max_length=160,
+    )
+    exercise_revision: int = Field(ge=1, le=2_147_483_647)
+    required_anchor: str = Field(min_length=3, max_length=2_000)
+    required_anchor_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    region_ids: list[str] = Field(min_length=1, max_length=64)
     page: int = Field(ge=1, le=10_000)
     allowed_pages: list[int] = Field(min_length=1, max_length=32)
-    unit_id: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=160)
+    unit_id: str = Field(
+        pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$",
+        max_length=160,
+    )
     stage: Literal["learn", "practice"]
     query: str = Field(max_length=3_500)
-    top_k: int = Field(default=3, ge=1, le=5)
+    top_k: int = Field(default=3, ge=1, le=3)
+
+    @field_validator("required_anchor")
+    @classmethod
+    def clean_anchor(cls, value: str) -> str:
+        if value != value.strip():
+            raise ValueError("required_anchor must be canonical")
+        return value
 
     @field_validator("query")
     @classmethod
     def clean_query(cls, value: str) -> str:
         return value.strip()
+
+    @field_validator("region_ids")
+    @classmethod
+    def validate_regions(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("region_ids must be unique")
+        return value
 
     @model_validator(mode="after")
     def validate_page_scope(self):
@@ -76,6 +118,9 @@ class RetrieveRequest(StrictModel):
 
 class SourceResponse(StrictModel):
     id: str
+    exercise_id: str
+    exercise_revision: int
+    required_anchor_digest: str
     page: int
     text: str
     kind: Literal["content", "exercise", "instruction"]
@@ -85,18 +130,15 @@ class SourceResponse(StrictModel):
 
 
 class RetrieveResponse(StrictModel):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     book_id: str
     source_sha256: str
     curriculum_version: str
+    exercise_id: str
+    exercise_revision: int
+    required_anchor_digest: str
+    region_ids: list[str]
     sources: list[SourceResponse]
-
-
-class BookResponse(StrictModel):
-    book_id: str
-    source_sha256: str
-    curriculum_version: str
-    page_count: int
 
 
 def active_repository() -> IndexRepository:
@@ -107,39 +149,23 @@ def active_repository() -> IndexRepository:
 
 @app.get("/health")
 def health() -> dict[str, object]:
-    try:
-        books = active_repository().list_books()
-    except IndexUnavailableError as error:
-        raise HTTPException(status_code=503, detail="RAG indexes unavailable") from error
-    if not books:
-        raise HTTPException(status_code=503, detail="No RAG indexes available")
-    return {"status": "ok", "schema_version": 1, "books": len(books)}
+    # Liveness is independent from optional index availability. Missing or
+    # malformed indexes fail each retrieval closed without restarting the web.
+    return {"status": "ok", "schema_version": 2}
 
 
-@app.get("/api/v1/books", response_model=list[BookResponse])
-def list_books() -> list[BookResponse]:
-    try:
-        books = active_repository().list_books()
-    except IndexUnavailableError as error:
-        raise HTTPException(status_code=503, detail="RAG indexes unavailable") from error
-    return [
-        BookResponse(
-            book_id=book.book_id,
-            source_sha256=book.source_sha256,
-            curriculum_version=book.curriculum_version,
-            page_count=book.page_count,
-        )
-        for book in books
-    ]
-
-
-@app.post("/api/v1/retrieve", response_model=RetrieveResponse)
+@app.post("/api/v2/retrieve", response_model=RetrieveResponse)
 def retrieve(payload: RetrieveRequest) -> RetrieveResponse:
     try:
         result = active_repository().retrieve(
             book_id=payload.book_id,
             source_sha256=payload.source_sha256,
             curriculum_version=payload.curriculum_version,
+            exercise_id=payload.exercise_id,
+            exercise_revision=payload.exercise_revision,
+            required_anchor=payload.required_anchor,
+            required_anchor_digest=payload.required_anchor_digest,
+            region_ids=tuple(payload.region_ids),
             page=payload.page,
             allowed_pages=tuple(payload.allowed_pages),
             unit_id=payload.unit_id,
@@ -148,7 +174,7 @@ def retrieve(payload: RetrieveRequest) -> RetrieveResponse:
             top_k=payload.top_k,
         )
     except LineageMismatchError as error:
-        raise HTTPException(status_code=409, detail="RAG index lineage mismatch") from error
+        raise HTTPException(status_code=409, detail="RAG lineage mismatch") from error
     except IndexUnavailableError as error:
         raise HTTPException(status_code=404, detail="RAG scope unavailable") from error
 
@@ -156,9 +182,16 @@ def retrieve(payload: RetrieveRequest) -> RetrieveResponse:
         book_id=result.book_id,
         source_sha256=result.source_sha256,
         curriculum_version=result.curriculum_version,
+        exercise_id=result.exercise_id,
+        exercise_revision=result.exercise_revision,
+        required_anchor_digest=result.required_anchor_digest,
+        region_ids=list(result.region_ids),
         sources=[
             SourceResponse(
                 id=source.identifier,
+                exercise_id=result.exercise_id,
+                exercise_revision=result.exercise_revision,
+                required_anchor_digest=result.required_anchor_digest,
                 page=source.page,
                 text=source.text,
                 kind=source.kind,

@@ -26,12 +26,12 @@ WORKDIR /app
 COPY app ./app
 
 USER 65532:65532
-EXPOSE 3310
+EXPOSE 3311
 
 HEALTHCHECK --interval=15s --timeout=4s --start-period=10s --retries=5 \
-  CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3310/health', timeout=2).close()"]
+  CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3311/health', timeout=2).close()"]
 
-CMD ["uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "3310", "--workers", "1", "--limit-concurrency", "32", "--timeout-keep-alive", "5", "--no-access-log", "--no-server-header"]
+CMD ["uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "3311", "--workers", "1", "--limit-concurrency", "32", "--timeout-keep-alive", "5", "--no-access-log", "--no-server-header"]
 
 FROM runtime AS test
 COPY tests ./tests

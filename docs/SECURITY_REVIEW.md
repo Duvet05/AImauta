@@ -131,11 +131,10 @@ El CI es completo (catalog:validate, typecheck, lint, vitest, build, pytest del 
 ## Divergencias documentación ↔ código
 
 - **DOC-1 —** `ARCHITECTURE.md` omite: la capa Prisma/PostgreSQL y su PII; todo el subsistema de ejercicios y su ruta `GET /api/materials/:bookId/exercises`; el egress a Google (MED-1); la re-verificación de integridad SHA-256 por request de la ruta PDF (`lib/file-integrity.ts`).
-- **DOC-2 — Mitigado.** Las sesiones sin ejercicio publicado consultan el
-  servicio RAG loopback con página, unidad, etapa, checksum y versión curricular
-  exactos, y degradan al recuperador TypeScript local. Esa ruta nunca libera una
-  solución. Los ejercicios publicados conservan `retrieveExerciseEvidence` y
-  la solución humana revisada como contrato separado.
+- **DOC-2 — Mitigado.** Una sesión sin ejercicio publicado queda
+  `exercise-locked`: no consulta índices, sidecar ni modelo y no avanza sus
+  contadores pedagógicos. El sidecar opcional sólo se consulta después de
+  validar ejercicio, revisión, regiones, evidencia humana y solución revisada.
 - **Dos fuentes de verdad —** el catálogo vive en `/config` y se copia crudo a `ConfigSnapshot` en BD; la app sigue leyendo los archivos → posible drift. `Evaluation.unitId` es string suelto, no FK (decisión deliberada, documentar).
 
 ---

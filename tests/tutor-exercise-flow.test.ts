@@ -4,9 +4,8 @@ const dependencies = vi.hoisted(() => ({
   askTutorModel: vi.fn(),
   getPublishedExercise: vi.fn(),
   getReviewedExerciseSolution: vi.fn(),
-  retrieveEvidence: vi.fn(),
-  retrieveExerciseEvidence: vi.fn(),
   retrieveRagServiceEvidence: vi.fn(),
+  retrieveExerciseEvidence: vi.fn(),
 }));
 
 vi.mock("@/lib/llm", () => ({
@@ -19,13 +18,12 @@ vi.mock("@/lib/exercise-solution-store", () => ({
   getReviewedExerciseSolution:
     dependencies.getReviewedExerciseSolution,
 }));
-vi.mock("@/lib/retrieval", () => ({
-  retrieveEvidence: dependencies.retrieveEvidence,
-  retrieveExerciseEvidence: dependencies.retrieveExerciseEvidence,
-}));
 vi.mock("@/lib/rag-service", () => ({
   retrieveRagServiceEvidence:
     dependencies.retrieveRagServiceEvidence,
+}));
+vi.mock("@/lib/retrieval", () => ({
+  retrieveExerciseEvidence: dependencies.retrieveExerciseEvidence,
 }));
 
 import {
@@ -108,7 +106,6 @@ beforeEach(() => {
   dependencies.getReviewedExerciseSolution.mockResolvedValue(
     reviewedSolution,
   );
-  dependencies.retrieveEvidence.mockResolvedValue([]);
   dependencies.retrieveRagServiceEvidence.mockResolvedValue(null);
   dependencies.retrieveExerciseEvidence.mockResolvedValue([
     {
@@ -139,7 +136,7 @@ beforeEach(() => {
 });
 
 describe("tutor vinculado a ejercicio revisado", () => {
-  it("falla cerrado sin selección cuando no existe evidencia validada", async () => {
+  it("falla cerrado sin selección y no abre RAG ni soluciones", async () => {
     const issued = issueLearningSession({ bookId, page: 13 });
     const result = await guideLearningTurn({
       sessionToken: issued.token,
@@ -150,102 +147,13 @@ describe("tutor vinculado a ejercicio revisado", () => {
     expect(result).toMatchObject({
       mode: "exercise-locked",
       citations: [],
+      session: { attemptCount: 0, turnCount: 0 },
       policy: { canRevealSolution: false },
     });
     expect(
       dependencies.retrieveRagServiceEvidence,
-    ).toHaveBeenCalledOnce();
-    expect(dependencies.retrieveEvidence).toHaveBeenCalledOnce();
-    expect(dependencies.retrieveExerciseEvidence).not.toHaveBeenCalled();
-    expect(
-      dependencies.getReviewedExerciseSolution,
     ).not.toHaveBeenCalled();
-  });
-
-  it("orienta una página con evidencia del servicio interno sin liberar respuesta", async () => {
-    dependencies.retrieveRagServiceEvidence.mockResolvedValueOnce([
-      {
-        id: "rag:page-13",
-        exerciseId: null,
-        page: 13,
-        text: "Compara las cantidades y explica qué dato observas primero.",
-        kind: "exercise",
-        teacherOnly: false,
-        stage: "learn",
-        unitId: "ficha-1-fracciones",
-        score: 8,
-        sourceId: "S1",
-      },
-    ]);
-    dependencies.askTutorModel.mockResolvedValueOnce({
-      content: "OBSERVA",
-      provider: "openai",
-    });
-    const issued = issueLearningSession({ bookId, page: 13 });
-
-    const result = await guideLearningTurn({
-      sessionToken: issued.token,
-      message: "¿Cómo empiezo?",
-      attempt: "Compararía las cantidades visibles.",
-    });
-
-    expect(result).toMatchObject({
-      mode: "openai",
-      citations: [
-        { sourceId: "S1", page: 13, chunkId: "rag:page-13" },
-      ],
-      policy: { canRevealSolution: false },
-    });
-    expect(dependencies.retrieveEvidence).not.toHaveBeenCalled();
     expect(dependencies.retrieveExerciseEvidence).not.toHaveBeenCalled();
-    expect(
-      dependencies.getReviewedExerciseSolution,
-    ).not.toHaveBeenCalled();
-  });
-
-  it("nunca desbloquea una respuesta final en orientación por página", async () => {
-    dependencies.retrieveRagServiceEvidence.mockResolvedValue([
-      {
-        id: "rag:page-13",
-        exerciseId: null,
-        page: 13,
-        text: "Compara las cantidades y explica qué dato observas primero.",
-        kind: "exercise",
-        teacherOnly: false,
-        stage: "learn",
-        unitId: "ficha-1-fracciones",
-        score: 8,
-        sourceId: "S1",
-      },
-    ]);
-    let sessionToken = issueLearningSession({
-      bookId,
-      page: 13,
-    }).token;
-    let finalResult;
-
-    for (const attempt of [
-      "Observaría los datos visibles.",
-      "Compararía primero los denominadores.",
-      "Luego buscaría una relación entre las cantidades.",
-      "Comprobaría la estrategia con el enunciado.",
-      "Separaría la comparación en dos pasos.",
-    ]) {
-      finalResult = await guideLearningTurn({
-        sessionToken,
-        message: "¿Qué hago ahora?",
-        attempt,
-      });
-      sessionToken = finalResult.sessionToken;
-    }
-
-    expect(finalResult).toMatchObject({
-      policy: { canRevealSolution: false },
-    });
-    expect(finalResult?.mode).not.toBe("reviewed-answer");
-    expect(finalResult?.message).not.toContain(
-      reviewedSolution.finalAnswer,
-    );
     expect(
       dependencies.getReviewedExerciseSolution,
     ).not.toHaveBeenCalled();
@@ -284,6 +192,17 @@ describe("tutor vinculado a ejercicio revisado", () => {
       bookId,
       exerciseId: exercise.id,
       revision: exercise.revision,
+    });
+    expect(
+      dependencies.retrieveRagServiceEvidence,
+    ).toHaveBeenCalledWith({
+      bookId,
+      exercise,
+      requiredAnchor: exercise.prompt,
+      question: "¿Cómo las comparo?",
+      attempt: "Compararía numeradores y denominadores.",
+      page: 13,
+      allowedPages: [13, 14],
     });
   });
 
@@ -336,6 +255,9 @@ describe("tutor vinculado a ejercicio revisado", () => {
     expect(result.message).not.toContain(reviewedSolution.finalAnswer);
     expect(
       dependencies.getReviewedExerciseSolution,
+    ).not.toHaveBeenCalled();
+    expect(
+      dependencies.retrieveRagServiceEvidence,
     ).not.toHaveBeenCalled();
     expect(dependencies.askTutorModel).not.toHaveBeenCalled();
   });

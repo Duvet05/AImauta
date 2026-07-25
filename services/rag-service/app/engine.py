@@ -8,12 +8,15 @@ lets the online path exclude teacher-only and assessment content.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import unicodedata
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from app.config import Settings
 
@@ -27,6 +30,47 @@ SHA256 = re.compile(r"^[a-f0-9]{64}$")
 ALLOWED_KINDS = frozenset({"content", "exercise", "instruction"})
 ALLOWED_STAGES = frozenset({"orientation", "learn", "practice", "assessment"})
 TUTOR_STAGES = frozenset({"learn", "practice"})
+ANCHOR_STOP_WORDS = frozenset(
+    {
+        "como",
+        "con",
+        "del",
+        "desde",
+        "ejercicio",
+        "esta",
+        "este",
+        "estos",
+        "estas",
+        "las",
+        "los",
+        "para",
+        "por",
+        "problema",
+        "que",
+        "una",
+        "uno",
+        "unos",
+        "unas",
+    }
+)
+INDEX_KEYS = frozenset(
+    {
+        "version",
+        "extractorVersion",
+        "generatedAt",
+        "bookId",
+        "sourceSha256",
+        "pageCount",
+        "taxonomy",
+        "curriculum",
+        "quality",
+        "license",
+        "chunks",
+    }
+)
+CHUNK_KEYS = frozenset(
+    {"id", "page", "text", "kind", "teacherOnly", "stage", "unitId"}
+)
 
 
 class IndexUnavailableError(RuntimeError):
@@ -73,6 +117,10 @@ class RetrievalResult:
     book_id: str
     source_sha256: str
     curriculum_version: str
+    exercise_id: str
+    exercise_revision: int
+    required_anchor_digest: str
+    region_ids: tuple[str, ...]
     sources: tuple[RetrievedSource, ...]
 
 
@@ -110,6 +158,22 @@ def _tokens(value: str) -> set[str]:
     }
 
 
+def _anchor_tokens(value: str) -> set[str]:
+    return _tokens(value).difference(ANCHOR_STOP_WORDS)
+
+
+def _is_sorted_unique_pages(value: object, page_count: int) -> bool:
+    return (
+        isinstance(value, list)
+        and all(
+            _is_positive_integer(page)
+            and page <= page_count
+            and (index == 0 or value[index - 1] < page)
+            for index, page in enumerate(value)
+        )
+    )
+
+
 class IndexRepository:
     def __init__(self, settings: Settings):
         self.settings = settings
@@ -132,7 +196,7 @@ class IndexRepository:
         chunks_per_page: dict[int, int],
     ) -> Chunk:
         item = _record(raw)
-        if item is None:
+        if item is None or set(item) != CHUNK_KEYS:
             raise IndexUnavailableError("invalid chunk")
 
         identifier = item.get("id")
@@ -189,6 +253,7 @@ class IndexRepository:
         document = _record(raw)
         if (
             document is None
+            or set(document) != INDEX_KEYS
             or document.get("version") != BOOK_INDEX_VERSION
             or document.get("extractorVersion") != INDEX_EXTRACTOR_VERSION
         ):
@@ -197,7 +262,11 @@ class IndexRepository:
         book_id = document.get("bookId")
         source_sha256 = document.get("sourceSha256")
         page_count = document.get("pageCount")
+        generated_at = document.get("generatedAt")
+        taxonomy = _record(document.get("taxonomy"))
         curriculum = _record(document.get("curriculum"))
+        quality = _record(document.get("quality"))
+        license_info = _record(document.get("license"))
         raw_chunks = document.get("chunks")
         if book_id != expected_book_id:
             raise IndexUnavailableError("book mismatch")
@@ -205,13 +274,55 @@ class IndexRepository:
             raise IndexUnavailableError("invalid source checksum")
         if not _is_positive_integer(page_count):
             raise IndexUnavailableError("invalid page count")
+        if not isinstance(generated_at, str):
+            raise IndexUnavailableError("invalid generation timestamp")
+        try:
+            datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
+        except ValueError as error:
+            raise IndexUnavailableError("invalid generation timestamp") from error
+        if (
+            taxonomy is None
+            or set(taxonomy)
+            != {
+                "levelId",
+                "gradeNumber",
+                "courseId",
+                "materialType",
+                "language",
+            }
+            or not isinstance(taxonomy.get("levelId"), str)
+            or not SAFE_ID.fullmatch(taxonomy["levelId"])
+            or not _is_positive_integer(taxonomy.get("gradeNumber"))
+            or taxonomy["gradeNumber"] > 20
+            or not isinstance(taxonomy.get("courseId"), str)
+            or not SAFE_ID.fullmatch(taxonomy["courseId"])
+            or not isinstance(taxonomy.get("materialType"), str)
+            or not SAFE_ID.fullmatch(taxonomy["materialType"])
+            or not isinstance(taxonomy.get("language"), str)
+            or not re.fullmatch(r"[a-z]{2}(?:-[A-Z]{2})?", taxonomy["language"])
+        ):
+            raise IndexUnavailableError("invalid taxonomy")
         if (
             curriculum is None
+            or set(curriculum) != {"version"}
             or not isinstance(curriculum.get("version"), str)
             or not curriculum["version"].strip()
             or len(curriculum["version"]) > 80
         ):
             raise IndexUnavailableError("invalid curriculum lineage")
+        if (
+            license_info is None
+            or set(license_info) != {"name", "url", "attribution"}
+            or any(
+                not isinstance(license_info.get(field), str)
+                or not license_info[field].strip()
+                or len(license_info[field]) > 4_000
+                for field in ("name", "url", "attribution")
+            )
+            or urlparse(license_info["url"]).scheme != "https"
+            or not urlparse(license_info["url"]).netloc
+        ):
+            raise IndexUnavailableError("invalid license lineage")
         if (
             not isinstance(raw_chunks, list)
             or len(raw_chunks) > page_count * MAX_CHUNKS_PER_PAGE
@@ -229,6 +340,55 @@ class IndexRepository:
             )
             for item in raw_chunks
         )
+        if (
+            quality is None
+            or set(quality) != {"missing", "outliers", "teacherOnly"}
+            or not _is_sorted_unique_pages(quality.get("missing"), page_count)
+            or not isinstance(quality.get("outliers"), list)
+            or not isinstance(quality.get("teacherOnly"), dict)
+        ):
+            raise IndexUnavailableError("invalid quality report")
+        teacher_quality = quality["teacherOnly"]
+        if (
+            set(teacher_quality) != {"chunkCount", "pages"}
+            or not isinstance(teacher_quality.get("chunkCount"), int)
+            or isinstance(teacher_quality.get("chunkCount"), bool)
+            or teacher_quality["chunkCount"] < 0
+            or not _is_sorted_unique_pages(
+                teacher_quality.get("pages"),
+                page_count,
+            )
+        ):
+            raise IndexUnavailableError("invalid teacher-only report")
+
+        covered_pages = {chunk.page for chunk in chunks}
+        expected_missing = [
+            page for page in range(1, page_count + 1) if page not in covered_pages
+        ]
+        teacher_chunks = [chunk for chunk in chunks if chunk.teacher_only]
+        expected_teacher_pages = sorted({chunk.page for chunk in teacher_chunks})
+        if (
+            quality["missing"] != expected_missing
+            or teacher_quality["chunkCount"] != len(teacher_chunks)
+            or teacher_quality["pages"] != expected_teacher_pages
+        ):
+            raise IndexUnavailableError("quality report does not match chunks")
+
+        outlier_pages: set[int] = set()
+        for raw_outlier in quality["outliers"]:
+            outlier = _record(raw_outlier)
+            if (
+                outlier is None
+                or set(outlier) != {"page", "wordCount", "direction"}
+                or not _is_positive_integer(outlier.get("page"))
+                or outlier["page"] > page_count
+                or outlier["page"] in outlier_pages
+                or outlier["page"] in expected_missing
+                or not _is_positive_integer(outlier.get("wordCount"))
+                or outlier.get("direction") not in {"low", "high"}
+            ):
+                raise IndexUnavailableError("invalid quality outlier")
+            outlier_pages.add(outlier["page"])
         return BookIndex(
             book_id=book_id,
             source_sha256=source_sha256,
@@ -308,6 +468,11 @@ class IndexRepository:
         book_id: str,
         source_sha256: str,
         curriculum_version: str,
+        exercise_id: str,
+        exercise_revision: int,
+        required_anchor: str,
+        required_anchor_digest: str,
+        region_ids: tuple[str, ...],
         page: int,
         allowed_pages: tuple[int, ...],
         unit_id: str,
@@ -325,8 +490,24 @@ class IndexRepository:
             page > index.page_count
             or stage not in TUTOR_STAGES
             or not SAFE_ID.fullmatch(unit_id)
+            or not SAFE_ID.fullmatch(exercise_id)
+            or not _is_positive_integer(exercise_revision)
+            or not SHA256.fullmatch(required_anchor_digest)
+            or not region_ids
+            or len(region_ids) > 64
+            or len(set(region_ids)) != len(region_ids)
+            or any(not SAFE_ID.fullmatch(identifier) for identifier in region_ids)
         ):
             raise IndexUnavailableError("invalid curricular scope")
+        canonical_anchor = unicodedata.normalize("NFC", required_anchor).strip()
+        if (
+            canonical_anchor != required_anchor
+            or len(canonical_anchor) < 3
+            or len(canonical_anchor) > 2_000
+            or hashlib.sha256(canonical_anchor.encode("utf-8")).hexdigest()
+            != required_anchor_digest
+        ):
+            raise LineageMismatchError("exercise anchor mismatch")
 
         allowed = set(allowed_pages)
         if (
@@ -340,6 +521,22 @@ class IndexRepository:
         ):
             raise IndexUnavailableError("invalid page scope")
 
+        required_tokens = _anchor_tokens(canonical_anchor)
+        if len(required_tokens) < 3:
+            return RetrievalResult(
+                book_id=index.book_id,
+                source_sha256=index.source_sha256,
+                curriculum_version=index.curriculum_version,
+                exercise_id=exercise_id,
+                exercise_revision=exercise_revision,
+                required_anchor_digest=required_anchor_digest,
+                region_ids=region_ids,
+                sources=(),
+            )
+        minimum_anchor_matches = min(
+            8,
+            max(3, (len(required_tokens) * 6 + 9) // 10),
+        )
         query_tokens = _tokens(query)
         scored: list[tuple[float, Chunk]] = []
         for chunk in index.chunks:
@@ -351,6 +548,9 @@ class IndexRepository:
             ):
                 continue
             chunk_tokens = _tokens(chunk.text)
+            anchor_matches = len(required_tokens.intersection(chunk_tokens))
+            if anchor_matches < minimum_anchor_matches:
+                continue
             lexical_matches = len(query_tokens.intersection(chunk_tokens))
             distance = abs(chunk.page - page)
             page_score = 5.0 if distance == 0 else 2.5 if distance == 1 else 1.0
@@ -359,10 +559,10 @@ class IndexRepository:
                 if not query_tokens
                 else (lexical_matches / len(query_tokens)) * 8.0
             )
+            anchor_score = (anchor_matches / len(required_tokens)) * 10.0
             kind_boost = 0.5 if chunk.kind == "exercise" else 0.0
-            score = page_score + lexical_score + kind_boost
-            if score > 0:
-                scored.append((score, chunk))
+            score = page_score + lexical_score + anchor_score + kind_boost
+            scored.append((score, chunk))
 
         scored.sort(key=lambda item: (-item[0], abs(item[1].page - page), item[1].identifier))
         sources = tuple(
@@ -381,5 +581,9 @@ class IndexRepository:
             book_id=index.book_id,
             source_sha256=index.source_sha256,
             curriculum_version=index.curriculum_version,
+            exercise_id=exercise_id,
+            exercise_revision=exercise_revision,
+            required_anchor_digest=required_anchor_digest,
+            region_ids=region_ids,
             sources=sources,
         )
