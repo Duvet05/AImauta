@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { getBook } from "@/lib/catalog";
-import { getBookUnits, getPageActivity } from "@/lib/curriculum";
+import {
+  getBookUnits,
+  getFirstTutorablePage,
+  getPageActivity
+} from "@/lib/curriculum";
 
 const bookId = "fichas-matematica-1-secundaria";
 const secondBookId = "fichas-matematica-2-secundaria";
@@ -10,6 +14,19 @@ describe("currículo por página", () => {
   it("modela las ocho fichas del libro", () => {
     expect(getBookUnits(bookId)).toHaveLength(8);
     expect(getBookUnits(secondBookId)).toHaveLength(8);
+  });
+
+  it("deriva la página inicial de la primera sección learn segura", () => {
+    for (const candidateBookId of [bookId, secondBookId]) {
+      const firstLearnSection = getBookUnits(candidateBookId)
+        .flatMap((unit) => unit.sections)
+        .find((section) => section.stage === "learn");
+
+      expect(getFirstTutorablePage(candidateBookId)).toBe(
+        firstLearnSection?.startPage
+      );
+    }
+    expect(getFirstTutorablePage("libro-inexistente")).toBeUndefined();
   });
 
   it.each([

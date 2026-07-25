@@ -18,6 +18,8 @@ def valid_metadata() -> str:
             "grade": "1.er grado",
             "language": "es-PE",
             "stage": "learn",
+            "exercise_id": "ejercicio-fracciones",
+            "exercise_revision": 2,
             "mode": "socratic",
         }
     )
@@ -38,6 +40,8 @@ def test_accepts_server_metadata() -> None:
     parsed = parse_room_metadata(valid_metadata(), "aimauta-session-12345678")
     assert parsed.page == 13
     assert parsed.app == "aimauta"
+    assert parsed.exercise_id == "ejercicio-fracciones"
+    assert parsed.exercise_revision == 2
 
 
 def test_rejects_foreign_room_prefix() -> None:

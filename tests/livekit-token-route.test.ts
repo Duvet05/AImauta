@@ -7,6 +7,21 @@ import {
 } from "@/lib/learning-session";
 
 const bookId = "fichas-matematica-1-secundaria";
+const exercise = {
+  id: "ejercicio-voz",
+  revision: 1,
+  unitId: "ficha-1-fracciones",
+  stage: "learn" as const,
+  pages: [13]
+};
+
+function issueExerciseSession() {
+  return issueLearningSession({
+    bookId,
+    page: 13,
+    exercise
+  });
+}
 
 beforeAll(() => {
   process.env.AIMAUTA_SESSION_SECRET =
@@ -45,7 +60,7 @@ describe("POST /api/livekit/token", () => {
   });
 
   it("indica claramente cuando LiveKit aún no está configurado", async () => {
-    const session = issueLearningSession({ bookId, page: 13 });
+    const session = issueExerciseSession();
     const response = await POST(request(session.token));
     expect(response.status).toBe(503);
   });
@@ -56,7 +71,7 @@ describe("POST /api/livekit/token", () => {
     process.env.LIVEKIT_API_KEY = "test-key";
     process.env.LIVEKIT_API_SECRET = "test-secret";
     try {
-      const session = issueLearningSession({ bookId, page: 13 });
+      const session = issueExerciseSession();
       const response = await POST(request(session.token));
       expect(response.status).toBe(503);
     } finally {
@@ -70,7 +85,7 @@ describe("POST /api/livekit/token", () => {
   it("rechaza LiveKit remoto sin TLS o con hosts Cloud distintos", async () => {
     process.env.LIVEKIT_API_KEY = "test-key";
     process.env.LIVEKIT_API_SECRET = "test-secret";
-    const session = issueLearningSession({ bookId, page: 13 });
+    const session = issueExerciseSession();
     try {
       process.env.LIVEKIT_URL = "ws://livekit.example.test";
       process.env.LIVEKIT_API_URL = "http://livekit.example.test";

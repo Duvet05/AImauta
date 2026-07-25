@@ -3,7 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   getBooks,
   getCatalogEntries,
+  isCatalogEntrySafe,
+  isPublishedTutorableCatalogEntry,
+  isTutorableMaterialType,
+  MAX_INGEST_PDF_BYTES,
+  parseCatalogManifest,
   type CatalogEntry,
+  type MaterialType,
   type CatalogStatus
 } from "@/lib/catalog";
 import { validateCatalogCurriculum } from "@/lib/catalog-validation";
@@ -20,10 +26,49 @@ const catalogStatuses = [
   "disabled"
 ] as const satisfies readonly CatalogStatus[];
 
-describe("catálogo curricular v2", () => {
+const requiredCatalogFields = [
+  "id",
+  "status",
+  "title",
+  "levelId",
+  "gradeNumber",
+  "courseId",
+  "materialType",
+  "language",
+  "description",
+  "pages",
+  "sourceLabel",
+  "sourcePageUrl",
+  "sourcePdfUrl",
+  "discoveredViaUrl",
+  "storageFile",
+  "expectedBytes",
+  "expectedSha256",
+  "edition",
+  "licenseName",
+  "licenseUrl",
+  "licenseBasis",
+  "licenseEvidenceUrl",
+  "licenseReviewedAt",
+  "attribution",
+  "provenance"
+] as const;
+
+function manifestWith(...entries: readonly unknown[]) {
+  return {
+    schemaVersion: 3,
+    entries
+  };
+}
+
+describe("catálogo curricular v3", () => {
   it("expone al estudiante únicamente materiales published", () => {
     const publishedIds = getCatalogEntries()
-      .filter((entry) => entry.status === "published")
+      .filter(
+        (entry) =>
+          entry.status === "published" &&
+          isTutorableMaterialType(entry.materialType)
+      )
       .map((entry) => entry.id);
 
     expect(getBooks().map((book) => book.id)).toEqual(publishedIds);
@@ -42,6 +87,107 @@ describe("catálogo curricular v2", () => {
 
   it("valida el catálogo y currículo vigentes sin observaciones", () => {
     expect(validateCatalogCurriculum()).toEqual([]);
+  });
+
+  it.each(requiredCatalogFields)(
+    "falla cerrado si una entrada published omite %s",
+    (field) => {
+      const mutated: Record<string, unknown> = {
+        ...getCatalogEntries()[0]
+      };
+      delete mutated[field];
+
+      const parsed = parseCatalogManifest(manifestWith(mutated));
+
+      expect(parsed.entries).toEqual([]);
+      expect(parsed.issues.length).toBeGreaterThan(0);
+      expect(isCatalogEntrySafe(mutated)).toBe(false);
+    }
+  );
+
+  it.each([
+    ["materialType", "teacher-workbook", "catalog.invalid-material-type"],
+    ["language", "es", "catalog.invalid-language"],
+    ["provenance", "community-upload", "catalog.invalid-provenance"]
+  ] as const)(
+    "rechaza en runtime una entrada published con %s=%s",
+    (field, value, expectedCode) => {
+      const entry = {
+        ...getCatalogEntries()[0],
+        [field]: value
+      };
+      const parsed = parseCatalogManifest(manifestWith(entry));
+
+      expect(parsed.entries).toEqual([]);
+      expect(parsed.issues.map((issue) => issue.code)).toContain(
+        expectedCode
+      );
+      expect(
+        validateCatalogCurriculum(
+          [entry],
+          [getCurriculumEntries()[0]]
+        ).map((issue) => issue.code)
+      ).toContain(expectedCode);
+    }
+  );
+
+  it("rechaza el manifiesto completo si una de varias entradas es inválida", () => {
+    const [first, second] = getCatalogEntries();
+    const poisoned = {
+      ...second,
+      language: "es-ES"
+    };
+
+    const parsed = parseCatalogManifest(
+      manifestWith(first, poisoned)
+    );
+
+    expect(parsed.entries).toEqual([]);
+    expect(parsed.issues.map((issue) => issue.code)).toContain(
+      "catalog.invalid-language"
+    );
+  });
+
+  it.each([
+    "teacher-guide",
+    "answer-key",
+    "solution-manual"
+  ] as const satisfies readonly MaterialType[])(
+    "clasifica %s pero nunca lo publica como libro tutorable",
+    (materialType) => {
+      const entry = {
+        ...getCatalogEntries()[0],
+        status: "published",
+        materialType
+      } satisfies CatalogEntry;
+      const curriculum = getCurriculumEntries()[0];
+
+      expect(isCatalogEntrySafe(entry)).toBe(true);
+      expect(
+        parseCatalogManifest(manifestWith(entry)).entries.filter(
+          isPublishedTutorableCatalogEntry
+        )
+      ).toEqual([]);
+      expect(
+        validateCatalogCurriculum([entry], [curriculum]).map(
+          (issue) => issue.code
+        )
+      ).toContain("curriculum.disallowed-material-type");
+      expect(validateCatalogCurriculum([entry], [])).toEqual([]);
+    }
+  );
+
+  it("rechaza fechas normalizables pero inexistentes", () => {
+    const entry = {
+      ...getCatalogEntries()[0],
+      licenseReviewedAt: "2026-02-31"
+    };
+
+    expect(
+      parseCatalogManifest(manifestWith(entry)).issues.map(
+        (issue) => issue.code
+      )
+    ).toContain("catalog.invalid-license-review-date");
   });
 
   it.each(catalogStatuses)(
@@ -65,6 +211,29 @@ describe("catálogo curricular v2", () => {
       expect(codes).toContain("catalog.invalid-checksum");
     }
   );
+
+  it("acepta 50 MiB exactos y rechaza un byte adicional", () => {
+    const entry = getCatalogEntries()[0];
+    const atLimit = parseCatalogManifest(
+      manifestWith({
+        ...entry,
+        expectedBytes: MAX_INGEST_PDF_BYTES
+      })
+    );
+    const overLimit = parseCatalogManifest(
+      manifestWith({
+        ...entry,
+        expectedBytes: MAX_INGEST_PDF_BYTES + 1
+      })
+    );
+
+    expect(atLimit.issues).toEqual([]);
+    expect(atLimit.entries).toHaveLength(1);
+    expect(overLimit.entries).toEqual([]);
+    expect(overLimit.issues.map((issue) => issue.code)).toContain(
+      "catalog.invalid-bytes"
+    );
+  });
 
   it.each(["ready", "reviewing"] as const)(
     "rechaza el estado legado %s",

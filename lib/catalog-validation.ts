@@ -1,8 +1,9 @@
 import {
-  courses,
-  educationLevels,
-  getCatalogEntries,
-  isAllowedOfficialSource,
+  getAdministrativeCatalogEntries,
+  getCatalogManifestIssues,
+  isCatalogEntrySafe,
+  isTutorableMaterialType,
+  validateCatalogEntrySchema,
   type CatalogEntry
 } from "@/lib/catalog";
 import {
@@ -17,18 +18,9 @@ export type CatalogValidationIssue = {
   message: string;
 };
 
-const catalogStatuses = new Set([
-  "draft",
-  "review",
-  "published",
-  "disabled"
-]);
 const orderedUnitStages = ["learn", "practice", "assessment"] as const;
 const unitStages = new Set(["learn", "practice", "assessment"]);
 const safeIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const safePdfNamePattern = /^[a-z0-9][a-z0-9._-]*\.pdf$/;
-const sha256Pattern = /^[a-f0-9]{64}$/;
-const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
 
 function isPositiveInteger(value: unknown): value is number {
   return Number.isInteger(value) && Number(value) > 0;
@@ -38,169 +30,17 @@ function hasText(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function isHttpsUrl(value: unknown): boolean {
-  if (!hasText(value)) {
-    return false;
-  }
-  try {
-    return new URL(value).protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
 function summarizePages(pages: readonly number[]): string {
   const preview = pages.slice(0, 12).join(", ");
   return pages.length > 12 ? `${preview}… (${pages.length} en total)` : preview;
 }
 
 function validateCatalogEntry(
-  entry: CatalogEntry,
+  entry: unknown,
   issues: CatalogValidationIssue[]
-): void {
-  const id = hasText(entry.id) ? entry.id : "(sin id)";
-
-  if (!safeIdPattern.test(entry.id)) {
-    issues.push({
-      code: "catalog.invalid-id",
-      id,
-      message: "El id debe ser un slug estable en minúsculas."
-    });
-  }
-  if (!catalogStatuses.has(entry.status)) {
-    issues.push({
-      code: "catalog.invalid-status",
-      id,
-      message: `Estado de catálogo no reconocido: ${String(entry.status)}.`
-    });
-  }
-
-  const level = educationLevels[entry.levelId];
-  if (!level) {
-    issues.push({
-      code: "catalog.invalid-level",
-      id,
-      message: `Nivel educativo no reconocido: ${String(entry.levelId)}.`
-    });
-  } else if (
-    !(level.grades as readonly number[]).includes(entry.gradeNumber)
-  ) {
-    issues.push({
-      code: "catalog.invalid-grade",
-      id,
-      message: `El grado ${entry.gradeNumber} no pertenece a ${level.label}.`
-    });
-  }
-
-  if (!Object.prototype.hasOwnProperty.call(courses, entry.courseId)) {
-    issues.push({
-      code: "catalog.invalid-course",
-      id,
-      message: `Curso no reconocido: ${String(entry.courseId)}.`
-    });
-  }
-  if (!isPositiveInteger(entry.pages)) {
-    issues.push({
-      code: "catalog.invalid-pages",
-      id,
-      message: "El número de páginas debe ser un entero positivo."
-    });
-  }
-  if (!safePdfNamePattern.test(entry.storageFile)) {
-    issues.push({
-      code: "catalog.invalid-storage-file",
-      id,
-      message: "storageFile debe ser un nombre PDF simple y seguro."
-    });
-  }
-
-  for (const [field, value] of [
-    ["title", entry.title],
-    ["description", entry.description],
-    ["sourceLabel", entry.sourceLabel],
-    ["edition", entry.edition],
-    ["licenseName", entry.licenseName],
-    ["attribution", entry.attribution]
-  ] as const) {
-    if (!hasText(value)) {
-      issues.push({
-        code: "catalog.missing-metadata",
-        id,
-        message: `Falta el metadato obligatorio ${field}.`
-      });
-    }
-  }
-
-  for (const [field, value] of [
-    ["sourcePageUrl", entry.sourcePageUrl],
-    ["discoveredViaUrl", entry.discoveredViaUrl],
-    ["licenseUrl", entry.licenseUrl],
-    ["licenseEvidenceUrl", entry.licenseEvidenceUrl]
-  ] as const) {
-    if (!isHttpsUrl(value)) {
-      issues.push({
-        code: "catalog.invalid-url",
-        id,
-        message: `${field} debe ser una URL HTTPS válida.`
-      });
-    }
-  }
-  if (entry.licenseBasis !== "official-repository-metadata") {
-    issues.push({
-      code: "catalog.invalid-license-basis",
-      id,
-      message: "La licencia debe apoyarse en metadata oficial verificable."
-    });
-  }
-  if (
-    !isoDatePattern.test(entry.licenseReviewedAt) ||
-    Number.isNaN(Date.parse(`${entry.licenseReviewedAt}T00:00:00Z`))
-  ) {
-    issues.push({
-      code: "catalog.invalid-license-review-date",
-      id,
-      message: "licenseReviewedAt debe ser una fecha ISO válida."
-    });
-  }
-
-  try {
-    if (!isAllowedOfficialSource(new URL(entry.sourcePdfUrl))) {
-      issues.push({
-        code: "catalog.unapproved-pdf-source",
-        id,
-        message: "sourcePdfUrl no pertenece a una fuente oficial permitida."
-      });
-    }
-  } catch {
-    issues.push({
-      code: "catalog.unapproved-pdf-source",
-      id,
-      message: "sourcePdfUrl no es una URL válida."
-    });
-  }
-
-  if (
-    !Number.isSafeInteger(entry.expectedBytes) ||
-    entry.expectedBytes <= 0
-  ) {
-    issues.push({
-      code: "catalog.invalid-bytes",
-      id,
-      message:
-        "Toda entrada debe fijar expectedBytes como un entero positivo seguro."
-    });
-  }
-  if (
-    typeof entry.expectedSha256 !== "string" ||
-    !sha256Pattern.test(entry.expectedSha256)
-  ) {
-    issues.push({
-      code: "catalog.invalid-checksum",
-      id,
-      message:
-        "Toda entrada debe fijar un SHA-256 hexadecimal en minúsculas."
-    });
-  }
+): entry is CatalogEntry {
+  issues.push(...validateCatalogEntrySchema(entry));
+  return isCatalogEntrySafe(entry);
 }
 
 function validRange(range: PageRange, pages: number): boolean {
@@ -446,15 +286,22 @@ function validateCurriculum(
 }
 
 export function validateCatalogCurriculum(
-  entries: readonly CatalogEntry[] = getCatalogEntries(),
+  entries?: readonly unknown[],
   curricula: readonly BookCurriculum[] = getCurriculumEntries()
 ): CatalogValidationIssue[] {
-  const issues: CatalogValidationIssue[] = [];
+  const usesRuntimeManifest = entries === undefined;
+  const candidateEntries =
+    entries ?? getAdministrativeCatalogEntries();
+  const issues: CatalogValidationIssue[] = usesRuntimeManifest
+    ? [...getCatalogManifestIssues()]
+    : [];
   const entriesById = new Map<string, CatalogEntry>();
   const storageFiles = new Set<string>();
 
-  for (const entry of entries) {
-    validateCatalogEntry(entry, issues);
+  for (const entry of candidateEntries) {
+    if (!validateCatalogEntry(entry, issues)) {
+      continue;
+    }
     if (entriesById.has(entry.id)) {
       issues.push({
         code: "catalog.duplicate-id",
@@ -488,12 +335,21 @@ export function validateCatalogCurriculum(
       });
       continue;
     }
+    if (!isTutorableMaterialType(entry.materialType)) {
+      issues.push({
+        code: "curriculum.disallowed-material-type",
+        id: curriculum.bookId,
+        message:
+          `El tipo ${entry.materialType} no puede recibir currículo, tutor ni RAG.`
+      });
+      continue;
+    }
     if (isPositiveInteger(entry.pages)) {
       validateCurriculum(curriculum, entry.pages, issues);
     }
   }
 
-  for (const entry of entries) {
+  for (const entry of entriesById.values()) {
     const matching = curriculaByBook.get(entry.id) ?? [];
     if (matching.length > 1) {
       issues.push({
@@ -502,7 +358,11 @@ export function validateCatalogCurriculum(
         message: "El material tiene más de un currículo activo."
       });
     }
-    if (entry.status === "published" && matching.length !== 1) {
+    if (
+      entry.status === "published" &&
+      isTutorableMaterialType(entry.materialType) &&
+      matching.length !== 1
+    ) {
       issues.push({
         code: "catalog.published-missing-curriculum",
         id: entry.id,
@@ -515,7 +375,7 @@ export function validateCatalogCurriculum(
 }
 
 export function assertCatalogCurriculumIsValid(
-  entries: readonly CatalogEntry[] = getCatalogEntries(),
+  entries?: readonly unknown[],
   curricula: readonly BookCurriculum[] = getCurriculumEntries()
 ): void {
   const issues = validateCatalogCurriculum(entries, curricula);

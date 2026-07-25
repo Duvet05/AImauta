@@ -10,6 +10,13 @@ import {
 } from "@/lib/learning-session";
 
 const bookId = "fichas-matematica-1-secundaria";
+const exercise = {
+  id: "ejercicio-1",
+  revision: 1,
+  unitId: "ficha-1-fracciones",
+  stage: "learn" as const,
+  pages: [13, 14]
+};
 
 beforeAll(() => {
   process.env.AIMAUTA_SESSION_SECRET =
@@ -89,6 +96,87 @@ describe("sesión pedagógica firmada", () => {
       totalTurnCount: 2,
       hintLevel: 2
     });
+  });
+
+  it("no cuenta letras sueltas ni respuestas triviales como intentos", () => {
+    let token = issueLearningSession({ bookId, page: 17 }).token;
+    for (const attempt of ["a", "b", "c", "sí", "no sé"]) {
+      token = recordLearningTurn({ token, attempt }).token;
+    }
+
+    const state = verifyLearningSession(token);
+    expect(state.attemptCount).toBe(0);
+    expect(state.turnCount).toBe(5);
+    expect(state.hintLevel).toBe(2);
+  });
+
+  it("acepta una relación matemática breve como intento sustantivo", () => {
+    const issued = issueLearningSession({ bookId, page: 17 });
+    const attempted = recordLearningTurn({
+      token: issued.token,
+      attempt: "3/4 > 2/3"
+    });
+
+    expect(attempted.state.attemptCount).toBe(1);
+  });
+
+  it("no vuelve a contar un intento anterior al alternar respuestas", () => {
+    let token = issueLearningSession({ bookId, page: 17 }).token;
+    for (const attempt of [
+      "123 + 456",
+      "789 + 012",
+      "123 + 456"
+    ]) {
+      token = recordLearningTurn({ token, attempt }).token;
+    }
+
+    const state = verifyLearningSession(token);
+    expect(state.attemptCount).toBe(2);
+    expect(state.attemptDigests).toHaveLength(2);
+  });
+
+  it("firma el ejercicio y conserva el progreso sólo entre sus páginas", () => {
+    const issued = issueLearningSession({
+      bookId,
+      page: 13,
+      exercise
+    });
+    const attempted = recordLearningTurn({
+      token: issued.token,
+      attempt: "Compararía las partes del gráfico."
+    });
+    const continued = moveLearningSession(
+      attempted.token,
+      14,
+      exercise
+    );
+
+    expect(continued.state).toMatchObject({
+      page: 14,
+      exerciseId: "ejercicio-1",
+      exerciseRevision: 1,
+      attemptCount: 1,
+      turnCount: 1
+    });
+
+    const cleared = moveLearningSession(continued.token, 15);
+    expect(cleared.state).toMatchObject({
+      page: 15,
+      exerciseId: null,
+      exerciseRevision: null,
+      attemptCount: 0,
+      turnCount: 0
+    });
+  });
+
+  it("rechaza vincular un ejercicio fuera de sus páginas o etapa", () => {
+    expect(() =>
+      issueLearningSession({
+        bookId,
+        page: 15,
+        exercise
+      })
+    ).toThrow(/no está habilitado/);
   });
 
   it("rechaza el replay de un token anterior después de una mutación", () => {

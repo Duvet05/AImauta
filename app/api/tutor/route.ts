@@ -4,6 +4,8 @@ import {
   verifyLearningSession
 } from "@/lib/learning-session";
 import { RateLimitError } from "@/lib/rate-limit";
+import { ExerciseSolutionUnavailableError } from "@/lib/exercise-solution-store";
+import { ExerciseManifestUnavailableError } from "@/lib/exercise-store";
 import { guideLearningTurn } from "@/lib/tutor-service";
 
 export const runtime = "nodejs";
@@ -66,6 +68,15 @@ export async function POST(request: Request): Promise<Response> {
         { error: error.message },
         429,
         error.retryAfterSeconds
+      );
+    }
+    if (
+      error instanceof ExerciseManifestUnavailableError ||
+      error instanceof ExerciseSolutionUnavailableError
+    ) {
+      return json(
+        { error: "La guía revisada de este ejercicio no está disponible." },
+        503
       );
     }
     console.error("Tutor turn failure", error);

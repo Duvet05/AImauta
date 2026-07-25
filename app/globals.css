@@ -1572,6 +1572,56 @@ svg {
   line-height: 1.45;
 }
 
+.exercise-focus {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: start;
+  margin-bottom: 0.85rem;
+  padding: 0.72rem;
+  border: 1px dashed rgba(169, 31, 31, 0.42);
+  border-radius: 0.7rem;
+  background: rgba(217, 54, 54, 0.045);
+}
+
+.exercise-focus > span {
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #c92d2d;
+  border-radius: 999px;
+  color: #a71f1f;
+  background: white;
+  font-weight: 900;
+}
+
+.exercise-focus strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 0.84rem;
+}
+
+.exercise-focus p {
+  margin: 0.2rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.exercise-focus-active {
+  border-style: solid;
+  border-color: rgba(23, 79, 70, 0.25);
+  background: rgba(219, 236, 227, 0.62);
+}
+
+.exercise-focus-active > span {
+  border-color: var(--forest);
+  color: white;
+  background: var(--forest);
+}
+
 .unit-selector-row {
   display: grid;
   gap: 0.4rem;

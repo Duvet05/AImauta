@@ -11,14 +11,28 @@ import {
   type KeyboardEvent,
 } from "react";
 
+import {
+  ExerciseOverlayLayer,
+  type ExerciseOverlayState,
+  type ExerciseSelection,
+} from "@/components/exercise-overlay-layer";
 import styles from "@/components/pdf-viewer.module.css";
 import type { Book } from "@/lib/catalog";
+import type { PublicExercise } from "@/lib/exercise-manifest";
 
 type PdfViewerProps = {
   book: Book;
   page: number;
   onPageChange: (page: number) => void;
+  exercises?: readonly PublicExercise[];
+  selected?: ExerciseSelection | null;
+  overlayState?: ExerciseOverlayState;
+  onExerciseSelect?: (selection: ExerciseSelection) => void;
+  onViewerModeChange?: (mode: ViewerMode) => void;
 };
+
+export type { ExerciseSelection };
+export type ViewerMode = "pdfjs" | "native-readonly";
 
 type ViewerStatus =
   | "loading-document"
@@ -92,7 +106,16 @@ function destroyLoadingTask(task: PdfLoadingTask | null): void {
   void task.destroy().catch(() => undefined);
 }
 
-export function PdfViewer({ book, page, onPageChange }: PdfViewerProps) {
+export function PdfViewer({
+  book,
+  page,
+  onPageChange,
+  exercises = [],
+  selected = null,
+  overlayState = "ready",
+  onExerciseSelect,
+  onViewerModeChange,
+}: PdfViewerProps) {
   const generatedId = useId();
   const pageInputId = `pdf-page-${generatedId}`;
   const pageTotalId = `pdf-page-total-${generatedId}`;
@@ -121,6 +144,7 @@ export function PdfViewer({ book, page, onPageChange }: PdfViewerProps) {
   } | null>(null);
   const [viewportWidth, setViewportWidth] = useState(0);
   const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
+  const [renderedPage, setRenderedPage] = useState<number | null>(null);
   const [renderScale, setRenderScale] = useState(1);
   const [zoomMultiplier, setZoomMultiplier] = useState(1);
   const [fitWidth, setFitWidth] = useState(true);
@@ -135,6 +159,7 @@ export function PdfViewer({ book, page, onPageChange }: PdfViewerProps) {
       setViewerStatus("error");
       setPdfDocument(null);
       setHasPositionedText(false);
+      setRenderedPage(null);
 
       if (forceFallback || isDefinitivePdfError(error) || failures >= 2) {
         setNativeFallback(true);
@@ -149,6 +174,12 @@ export function PdfViewer({ book, page, onPageChange }: PdfViewerProps) {
     setViewerStatus("loading-document");
     setRetrySequence((current) => current + 1);
   }, []);
+
+  useEffect(() => {
+    onViewerModeChange?.(
+      nativeFallback ? "native-readonly" : "pdfjs",
+    );
+  }, [nativeFallback, onViewerModeChange]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -195,6 +226,7 @@ export function PdfViewer({ book, page, onPageChange }: PdfViewerProps) {
         setViewerError("");
         setHasPositionedText(false);
         setAccessiblePageText("");
+        setRenderedPage(null);
 
         const pdfjsLibrary = await loadPdfJs();
         if (cancelled) return;
@@ -245,6 +277,7 @@ export function PdfViewer({ book, page, onPageChange }: PdfViewerProps) {
         setViewerError("");
         setHasPositionedText(false);
         setAccessiblePageText("");
+        setRenderedPage(null);
         textContainer.replaceChildren();
 
         if (page < 1 || page > pdfDocument.numPages) {
@@ -328,6 +361,7 @@ export function PdfViewer({ book, page, onPageChange }: PdfViewerProps) {
         }
 
         failureCountRef.current = 0;
+        setRenderedPage(page);
         setViewerStatus("ready");
       } catch (error) {
         if (cancelled) return;
@@ -603,6 +637,15 @@ export function PdfViewer({ book, page, onPageChange }: PdfViewerProps) {
               aria-label={`Texto seleccionable de la página ${page}`}
               aria-hidden={!hasPositionedText}
             />
+            {viewerStatus === "ready" && renderedPage === page ? (
+              <ExerciseOverlayLayer
+                exercises={exercises}
+                page={page}
+                selected={selected}
+                overlayState={overlayState}
+                onExerciseSelect={onExerciseSelect}
+              />
+            ) : null}
             {accessiblePageText ? (
               <p className={styles.screenReaderText}>
                 {accessiblePageText}

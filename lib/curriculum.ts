@@ -1,4 +1,5 @@
-import { getBook } from "@/lib/catalog";
+import curriculaManifest from "@/config/curricula.v3.json";
+import { getBook, getCatalogEntries } from "@/lib/catalog";
 
 export type LearningStage =
   | "orientation"
@@ -52,254 +53,6 @@ export type PageActivity = {
   tutorAvailable: boolean;
 };
 
-const mathematicsOneUnits: readonly BookUnit[] = [
-  {
-    id: "ficha-1-fracciones",
-    number: 1,
-    title: "Operaciones con fracciones",
-    competency: "Resuelve problemas de cantidad",
-    startPage: 13,
-    endPage: 22,
-    sections: [
-      { stage: "learn", startPage: 13, endPage: 16 },
-      { stage: "practice", startPage: 17, endPage: 20 },
-      { stage: "assessment", startPage: 21, endPage: 22 }
-    ]
-  },
-  {
-    id: "ficha-2-proporcionalidad",
-    number: 2,
-    title: "Proporcionalidad en situaciones cotidianas",
-    competency: "Resuelve problemas de regularidad, equivalencia y cambio",
-    startPage: 23,
-    endPage: 32,
-    sections: [
-      { stage: "learn", startPage: 23, endPage: 26 },
-      { stage: "practice", startPage: 27, endPage: 29 },
-      { stage: "assessment", startPage: 30, endPage: 32 }
-    ]
-  },
-  {
-    id: "ficha-3-escalas",
-    number: 3,
-    title: "Mapas, escalas y desplazamientos",
-    competency: "Resuelve problemas de forma, movimiento y localización",
-    startPage: 33,
-    endPage: 44,
-    sections: [
-      { stage: "learn", startPage: 33, endPage: 36 },
-      { stage: "practice", startPage: 37, endPage: 40 },
-      { stage: "assessment", startPage: 41, endPage: 44 }
-    ]
-  },
-  {
-    id: "ficha-4-estadistica",
-    number: 4,
-    title: "Medidas de tendencia central",
-    competency: "Resuelve problemas de gestión de datos e incertidumbre",
-    startPage: 45,
-    endPage: 54,
-    sections: [
-      { stage: "learn", startPage: 45, endPage: 48 },
-      { stage: "practice", startPage: 49, endPage: 51 },
-      { stage: "assessment", startPage: 52, endPage: 54 }
-    ]
-  },
-  {
-    id: "ficha-5-enteros",
-    number: 5,
-    title: "Números enteros en situaciones reales",
-    competency: "Resuelve problemas de cantidad",
-    startPage: 55,
-    endPage: 64,
-    sections: [
-      { stage: "learn", startPage: 55, endPage: 58 },
-      { stage: "practice", startPage: 59, endPage: 62 },
-      { stage: "assessment", startPage: 63, endPage: 64 }
-    ]
-  },
-  {
-    id: "ficha-6-inecuaciones",
-    number: 6,
-    title: "Inecuaciones y límites de velocidad",
-    competency: "Resuelve problemas de regularidad, equivalencia y cambio",
-    startPage: 65,
-    endPage: 74,
-    sections: [
-      { stage: "learn", startPage: 65, endPage: 68 },
-      { stage: "practice", startPage: 69, endPage: 72 },
-      { stage: "assessment", startPage: 73, endPage: 74 }
-    ]
-  },
-  {
-    id: "ficha-7-cuadrilateros",
-    number: 7,
-    title: "Cuadriláteros con el mecano",
-    competency: "Resuelve problemas de forma, movimiento y localización",
-    startPage: 75,
-    endPage: 86,
-    sections: [
-      { stage: "learn", startPage: 75, endPage: 78 },
-      { stage: "practice", startPage: 79, endPage: 81 },
-      { stage: "assessment", startPage: 82, endPage: 86 }
-    ]
-  },
-  {
-    id: "ficha-8-probabilidad",
-    number: 8,
-    title: "Probabilidad en promociones comerciales",
-    competency: "Resuelve problemas de gestión de datos e incertidumbre",
-    startPage: 87,
-    endPage: 100,
-    sections: [
-      { stage: "learn", startPage: 87, endPage: 90 },
-      { stage: "practice", startPage: 91, endPage: 94 },
-      { stage: "assessment", startPage: 95, endPage: 100 }
-    ]
-  }
-];
-
-const mathematicsTwoUnits: readonly BookUnit[] = [
-  {
-    id: "ficha-1-comparacion-fracciones",
-    number: 1,
-    title: "Orden y comparación de fracciones",
-    competency: "Resuelve problemas de cantidad",
-    startPage: 13,
-    endPage: 22,
-    sections: [
-      { stage: "learn", startPage: 13, endPage: 16 },
-      { stage: "practice", startPage: 17, endPage: 20 },
-      { stage: "assessment", startPage: 21, endPage: 22 }
-    ]
-  },
-  {
-    id: "ficha-2-funciones-lineales",
-    number: 2,
-    title: "Funciones lineales en la vida cotidiana",
-    competency: "Resuelve problemas de regularidad, equivalencia y cambio",
-    startPage: 23,
-    endPage: 32,
-    sections: [
-      { stage: "learn", startPage: 23, endPage: 26 },
-      { stage: "practice", startPage: 27, endPage: 30 },
-      { stage: "assessment", startPage: 31, endPage: 32 }
-    ]
-  },
-  {
-    id: "ficha-3-transformaciones",
-    number: 3,
-    title: "Transformaciones en el plano cartesiano",
-    competency: "Resuelve problemas de forma, movimiento y localización",
-    startPage: 33,
-    endPage: 44,
-    sections: [
-      { stage: "learn", startPage: 33, endPage: 35 },
-      { stage: "practice", startPage: 36, endPage: 40 },
-      { stage: "assessment", startPage: 41, endPage: 44 }
-    ]
-  },
-  {
-    id: "ficha-4-decision-estadistica",
-    number: 4,
-    title: "Información estadística para tomar decisiones",
-    competency: "Resuelve problemas de gestión de datos e incertidumbre",
-    startPage: 45,
-    endPage: 56,
-    sections: [
-      { stage: "learn", startPage: 45, endPage: 47 },
-      { stage: "practice", startPage: 48, endPage: 52 },
-      { stage: "assessment", startPage: 53, endPage: 56 }
-    ]
-  },
-  {
-    id: "ficha-5-porcentajes",
-    number: 5,
-    title: "Porcentajes en la vida cotidiana",
-    competency: "Resuelve problemas de cantidad",
-    startPage: 57,
-    endPage: 66,
-    sections: [
-      { stage: "learn", startPage: 57, endPage: 59 },
-      { stage: "practice", startPage: 60, endPage: 64 },
-      { stage: "assessment", startPage: 65, endPage: 66 }
-    ]
-  },
-  {
-    id: "ficha-6-progresiones",
-    number: 6,
-    title: "Progresiones aritméticas",
-    competency: "Resuelve problemas de regularidad, equivalencia y cambio",
-    startPage: 67,
-    endPage: 76,
-    sections: [
-      { stage: "learn", startPage: 67, endPage: 70 },
-      { stage: "practice", startPage: 71, endPage: 74 },
-      { stage: "assessment", startPage: 75, endPage: 76 }
-    ]
-  },
-  {
-    id: "ficha-7-mapas",
-    number: 7,
-    title: "Ubicación y escalas en mapas",
-    competency: "Resuelve problemas de forma, movimiento y localización",
-    startPage: 77,
-    endPage: 86,
-    sections: [
-      { stage: "learn", startPage: 77, endPage: 79 },
-      { stage: "practice", startPage: 80, endPage: 83 },
-      { stage: "assessment", startPage: 84, endPage: 86 }
-    ]
-  },
-  {
-    id: "ficha-8-probabilidad",
-    number: 8,
-    title: "Probabilidad para tomar decisiones",
-    competency: "Resuelve problemas de gestión de datos e incertidumbre",
-    startPage: 87,
-    endPage: 100,
-    sections: [
-      { stage: "learn", startPage: 87, endPage: 90 },
-      { stage: "practice", startPage: 91, endPage: 94 },
-      { stage: "assessment", startPage: 95, endPage: 100 }
-    ]
-  }
-];
-
-const curriculumEntries: readonly BookCurriculum[] = [
-  {
-    bookId: "fichas-matematica-1-secundaria",
-    version: "2024.1",
-    orientation: {
-      title: "Orientación y estrategias",
-      startPage: 1,
-      endPage: 12
-    },
-    units: mathematicsOneUnits
-  },
-  {
-    bookId: "fichas-matematica-2-secundaria",
-    version: "2024.1",
-    orientation: {
-      title: "Orientación y estrategias",
-      startPage: 1,
-      endPage: 12
-    },
-    units: mathematicsTwoUnits
-  }
-];
-
-const curriculaByBook: ReadonlyMap<string, readonly BookCurriculum[]> =
-  curriculumEntries.reduce<Map<string, BookCurriculum[]>>(
-    (entries, curriculum) => {
-      const matching = entries.get(curriculum.bookId) ?? [];
-      matching.push(curriculum);
-      entries.set(curriculum.bookId, matching);
-      return entries;
-    },
-    new Map()
-  );
-
 const stageLabels: Readonly<Record<LearningStage, string>> = {
   orientation: "Explora",
   learn: "Construimos",
@@ -328,20 +81,27 @@ function hasText(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
 const safeIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-function validPageRange<T extends PageRange>(
-  range: T | null | undefined,
+function validPageRange(
+  range: unknown,
   pages: number
-): range is T {
+): range is PageRange {
   return (
-    range !== null &&
-    range !== undefined &&
+    isRecord(range) &&
     Number.isInteger(range.startPage) &&
     Number.isInteger(range.endPage) &&
-    range.startPage >= 1 &&
-    range.startPage <= range.endPage &&
-    range.endPage <= pages
+    Number(range.startPage) >= 1 &&
+    Number(range.startPage) <= Number(range.endPage) &&
+    Number(range.endPage) <= pages
   );
 }
 
@@ -355,14 +115,16 @@ function validPageRange<T extends PageRange>(
  * continuous, non-overlapping page ranges.
  */
 export function isCurriculumStructureSafe(
-  curriculum: BookCurriculum,
+  curriculum: unknown,
   pages: number
-): boolean {
+): curriculum is BookCurriculum {
   if (
     !Number.isInteger(pages) ||
     pages < 1 ||
+    !isRecord(curriculum) ||
+    !safeIdPattern.test(String(curriculum.bookId ?? "")) ||
     !hasText(curriculum.version) ||
-    !curriculum.orientation ||
+    !isRecord(curriculum.orientation) ||
     !hasText(curriculum.orientation.title) ||
     !validPageRange(curriculum.orientation, pages) ||
     curriculum.orientation.startPage !== 1 ||
@@ -375,26 +137,35 @@ export function isCurriculumStructureSafe(
   let expectedUnitStartPage = curriculum.orientation.endPage + 1;
   const unitIds = new Set<string>();
   for (const [unitIndex, unit] of curriculum.units.entries()) {
+    if (!isRecord(unit)) {
+      return false;
+    }
+    const {
+      id,
+      title,
+      competency,
+      number,
+      sections
+    } = unit;
     if (
-      !unit ||
-      !safeIdPattern.test(unit.id) ||
-      unitIds.has(unit.id) ||
-      !hasText(unit.title) ||
-      !hasText(unit.competency) ||
-      unit.number !== unitIndex + 1 ||
+      !safeIdPattern.test(String(id ?? "")) ||
+      unitIds.has(String(id)) ||
+      !hasText(title) ||
+      !hasText(competency) ||
+      number !== unitIndex + 1 ||
       !validPageRange(unit, pages) ||
       unit.startPage !== expectedUnitStartPage ||
-      !Array.isArray(unit.sections) ||
-      unit.sections.length !== orderedUnitStages.length
+      !Array.isArray(sections) ||
+      sections.length !== orderedUnitStages.length
     ) {
       return false;
     }
-    unitIds.add(unit.id);
+    unitIds.add(String(id));
 
     let expectedSectionStartPage = unit.startPage;
-    for (const [sectionIndex, section] of unit.sections.entries()) {
+    for (const [sectionIndex, section] of sections.entries()) {
       if (
-        !section ||
+        !isRecord(section) ||
         section.stage !== orderedUnitStages[sectionIndex] ||
         !validPageRange(section, pages) ||
         section.startPage !== expectedSectionStartPage ||
@@ -412,6 +183,59 @@ export function isCurriculumStructureSafe(
 
   return expectedUnitStartPage === pages + 1;
 }
+
+function loadCurriculumEntries(manifest: unknown): readonly BookCurriculum[] {
+  if (
+    !isRecord(manifest) ||
+    manifest.schemaVersion !== 3 ||
+    !Array.isArray(manifest.entries) ||
+    manifest.entries.length === 0
+  ) {
+    return [];
+  }
+
+  const catalogEntries = getCatalogEntries();
+  const bookIds = new Set<string>();
+  const validated: BookCurriculum[] = [];
+
+  for (const candidate of manifest.entries) {
+    if (
+      !isRecord(candidate) ||
+      !safeIdPattern.test(String(candidate.bookId ?? "")) ||
+      bookIds.has(String(candidate.bookId))
+    ) {
+      return [];
+    }
+
+    const catalogMatches = catalogEntries.filter(
+      (entry) => entry.id === candidate.bookId
+    );
+    if (
+      catalogMatches.length !== 1 ||
+      !isCurriculumStructureSafe(candidate, catalogMatches[0].pages)
+    ) {
+      return [];
+    }
+
+    bookIds.add(candidate.bookId);
+    validated.push(candidate);
+  }
+
+  return validated;
+}
+
+const curriculumEntries = loadCurriculumEntries(curriculaManifest);
+
+const curriculaByBook: ReadonlyMap<string, readonly BookCurriculum[]> =
+  curriculumEntries.reduce<Map<string, BookCurriculum[]>>(
+    (entries, curriculum) => {
+      const matching = entries.get(curriculum.bookId) ?? [];
+      matching.push(curriculum);
+      entries.set(curriculum.bookId, matching);
+      return entries;
+    },
+    new Map()
+  );
 
 export function getCurriculumEntries(): readonly BookCurriculum[] {
   return curriculumEntries;
@@ -433,6 +257,31 @@ export function getBookUnits(bookId: string): readonly BookUnit[] {
   return curriculum && isCurriculumStructureSafe(curriculum, book.pages)
     ? curriculum.units
     : [];
+}
+
+export function getFirstTutorablePage(
+  bookId: string
+): number | undefined {
+  const book = getBook(bookId);
+  const curriculum = getBookCurriculum(bookId);
+  if (
+    !book ||
+    !curriculum ||
+    !isCurriculumStructureSafe(curriculum, book.pages)
+  ) {
+    return undefined;
+  }
+
+  for (const unit of curriculum.units) {
+    const learnSection = unit.sections.find(
+      (section) => section.stage === "learn"
+    );
+    if (learnSection) {
+      return learnSection.startPage;
+    }
+  }
+
+  return undefined;
 }
 
 export function getPageActivity(

@@ -53,7 +53,7 @@ afterAll(async () => {
 });
 
 describe("POST /api/tutor", () => {
-  it("devuelve guía, cita validada y nunca habilita la solución", async () => {
+  it("no consulta RAG mientras no haya un ejercicio seleccionado", async () => {
     const response = await POST(
       new Request("http://aimauta.test/api/tutor", {
         method: "POST",
@@ -72,8 +72,8 @@ describe("POST /api/tutor", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     await expect(response.json()).resolves.toMatchObject({
-      mode: "guided-fallback",
-      citations: [{ sourceId: "S1", page: 13 }],
+      mode: "exercise-locked",
+      citations: [],
       policy: { canRevealSolution: false }
     });
   });

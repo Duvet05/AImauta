@@ -74,9 +74,9 @@ describe("POST /api/internal/turn", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     await expect(response.json()).resolves.toMatchObject({
-      mode: "guided-fallback",
+      mode: "exercise-locked",
       session: { attemptCount: 0, turnCount: 1 },
-      citations: [{ sourceId: "S1", page: 13 }]
+      citations: []
     });
   });
 });

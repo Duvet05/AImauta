@@ -3,7 +3,7 @@ import type { LearningStage } from "@/lib/curriculum";
 
 export type TurnPolicy = {
   hintLevel: 0 | 1 | 2 | 3;
-  canRevealSolution: false;
+  canRevealSolution: boolean;
   maxOutputTokens: number;
   stage: LearningStage;
 };
@@ -18,10 +18,17 @@ export type GuidanceMove =
 export function getTurnPolicy(input: {
   hintLevel: 0 | 1 | 2 | 3;
   stage: LearningStage;
+  attemptCount?: number;
+  turnCount?: number;
 }): TurnPolicy {
+  const canRevealSolution =
+    input.stage !== "assessment" &&
+    input.hintLevel === 3 &&
+    (input.attemptCount ?? 0) >= 3 &&
+    (input.turnCount ?? 0) >= 5;
   return {
     hintLevel: input.stage === "assessment" ? 0 : input.hintLevel,
-    canRevealSolution: false,
+    canRevealSolution,
     maxOutputTokens: 12,
     stage: input.stage
   };
@@ -61,7 +68,8 @@ Responde con una sola de estas etiquetas exactas, sin puntuación ni texto extra
 - DIVIDE: separar el proceso en pasos sin anticipar ninguno.
 
 REGLAS INNEGOCIABLES
-- No reveles ni calcules la respuesta final. can_reveal_solution=false.
+- No reveles ni calcules la respuesta final. El servidor controla por separado
+  si una respuesta revisada puede mostrarse.
 - Usa como máximo el nivel de ayuda ${input.policy.hintLevel} de 3.
 - Toda afirmación sobre el libro debe estar respaldada por EVIDENCE.
 - Si falta evidencia, pide observar o abrir la página pertinente; no inventes.
