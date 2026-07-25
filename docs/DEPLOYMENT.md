@@ -721,10 +721,10 @@ La IP autorizada se obtiene con `tailscale ip -4`; no se copia un valor antiguo
 de esta guía. Antes de habilitar la unidad se verifica la huella fuera de banda
 y se prueba que la llave no puede abrir shell ni un segundo puerto.
 
-Este perfil habilita PDF y tutor de texto con el router LLM configurado. La
-vista previa local se
-habilita con `AIMAUTA_AVATAR_ENABLED=true` y sigue oculta salvo en una URL de
-aprendizaje con `?avatar=1`.
+Este perfil habilita PDF y tutor de texto con el router LLM configurado. El
+avatar se muestra en las páginas de aprendizaje cuando
+`AIMAUTA_AVATAR_ENABLED` tiene el valor exacto `true`; cualquier otro valor
+falla cerrado.
 
 La voz queda disponible después de configurar el proyecto LiveKit Cloud,
 desplegar el worker y cambiar `AIMAUTA_VOICE_TUTOR_ENABLED` al valor exacto

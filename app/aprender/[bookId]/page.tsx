@@ -10,15 +10,11 @@ import {
 } from "@/lib/curriculum";
 import {
   isAvatarEnabled,
-  isAvatarPreviewRequested,
   isVoiceTutorEnabled,
 } from "@/lib/feature-flags";
 
 type LearningPageProps = {
   params: Promise<{ bookId: string }>;
-  searchParams: Promise<{
-    avatar?: string | string[];
-  }>;
 };
 
 export async function generateMetadata({
@@ -34,10 +30,9 @@ export async function generateMetadata({
 
 export default async function LearningPage({
   params,
-  searchParams,
 }: LearningPageProps) {
   await connection();
-  const [{ bookId }, query] = await Promise.all([params, searchParams]);
+  const { bookId } = await params;
   const book = await getBook(bookId);
 
   if (!book) {
@@ -48,11 +43,8 @@ export default async function LearningPage({
     getFirstTutorablePage(book.id) ?? 1,
     book.pages,
   );
-  const avatarPreviewRequested = isAvatarPreviewRequested(query.avatar);
-  const avatarPreviewEnabled =
-    isAvatarEnabled() && avatarPreviewRequested;
-  const voiceTutorEnabled =
-    isVoiceTutorEnabled() && avatarPreviewRequested;
+  const avatarPreviewEnabled = isAvatarEnabled();
+  const voiceTutorEnabled = isVoiceTutorEnabled();
 
   return (
     <main
