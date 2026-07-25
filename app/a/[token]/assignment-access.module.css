@@ -1,0 +1,147 @@
+.page {
+  min-height: 100vh;
+  padding: clamp(1.25rem, 4vw, 3.5rem);
+  color: #17342d;
+  background:
+    radial-gradient(circle at top right, rgba(238, 179, 68, 0.2), transparent 32rem),
+    #f5f3e9;
+}
+
+.shell {
+  width: min(52rem, 100%);
+  margin: 0 auto;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: inherit;
+  font-size: 1.15rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.card {
+  margin-top: clamp(2rem, 6vw, 5rem);
+  padding: clamp(1.3rem, 4vw, 2.8rem);
+  border: 1px solid rgba(23, 52, 45, 0.14);
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1.4rem 4rem rgba(28, 54, 46, 0.1);
+}
+
+.eyebrow {
+  margin: 0 0 0.65rem;
+  color: #8c5f0d;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.card h1 {
+  margin: 0;
+  font-size: clamp(1.8rem, 5vw, 3rem);
+  line-height: 1.08;
+}
+
+.instructions {
+  margin: 1rem 0 0;
+  color: #50645e;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 1.35rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.meta li {
+  padding: 0.48rem 0.72rem;
+  border-radius: 999px;
+  color: #315249;
+  background: #eef3ed;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.items {
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 1.7rem;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.9rem;
+  min-height: 4.9rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(23, 52, 45, 0.12);
+  border-radius: 0.85rem;
+  color: inherit;
+  background: #fff;
+  text-decoration: none;
+  transition:
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.item:hover {
+  border-color: #b47916;
+  transform: translateY(-1px);
+}
+
+.number {
+  display: grid;
+  width: 2.35rem;
+  height: 2.35rem;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: #174d3e;
+  font-weight: 800;
+}
+
+.item strong,
+.item small {
+  display: block;
+}
+
+.item small {
+  margin-top: 0.25rem;
+  color: #667a74;
+}
+
+.arrow {
+  color: #95640e;
+  font-size: 1.35rem;
+}
+
+.privacy {
+  margin: 1.5rem 0 0;
+  color: #667a74;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.error {
+  color: #7b2d23;
+}
+
+@media (max-width: 520px) {
+  .item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .arrow {
+    display: none;
+  }
+}

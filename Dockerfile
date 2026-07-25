@@ -13,6 +13,12 @@ COPY prisma.config.ts ./
 COPY prisma ./prisma
 RUN npm ci
 
+FROM dependencies AS migrator
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1
+USER node
+CMD ["./node_modules/.bin/prisma", "migrate", "deploy"]
+
 FROM dependencies AS builder
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY . .

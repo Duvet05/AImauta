@@ -1,6 +1,34 @@
 name: aimauta-web
 
 services:
+  migrate:
+    image: "aimauta-migrate:${AIMAUTA_RELEASE:-local}"
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: migrator
+    network_mode: host
+    restart: "no"
+    read_only: true
+    user: "node"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1
+    env_file:
+      - "${AIMAUTA_WEB_ENV_FILE:-/home/hii1sc/aimauta-runtime/web.env}"
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
   app:
     image: "aimauta-web:${AIMAUTA_RELEASE:-local}"
     platform: linux/amd64
@@ -20,6 +48,9 @@ services:
     cpus: 2
     env_file:
       - "${AIMAUTA_WEB_ENV_FILE:-/home/hii1sc/aimauta-runtime/web.env}"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     environment:
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
