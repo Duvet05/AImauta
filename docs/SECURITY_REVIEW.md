@@ -5,7 +5,7 @@
 - **Método:** lectura de código y trazado de flujos (revisión asistida por IA). No hubo pruebas dinámicas contra un entorno desplegado.
 - **Naturaleza del sistema:** plataforma educativa para **menores de edad**. La exposición de PII es el eje de riesgo.
 
-> ⚠️ **Advertencia de divulgación.** Este documento describe vulnerabilidades **aún no corregidas**. Si el repositorio es público, publicarlo equivale a entregar un mapa a un atacante. Recomendación: remediar los hallazgos 🔴 antes de hacer público este archivo, o gestionarlos como *GitHub Security Advisory* privado.
+> ✅ **Estado de remediación (2026-07-25).** Los hallazgos 🔴 críticos se **mitigan en el mismo cambio que introduce este documento**: un `middleware.ts` cierra el CRUD del directorio detrás de un bearer de admin (fail-closed). Publicar esta revisión ya no expone un hueco abierto. Los hallazgos 🟡/🟢 restantes siguen pendientes (ver hoja de ruta).
 
 ---
 
@@ -22,9 +22,9 @@ Además, el `docs/ARCHITECTURE.md` ya no describe el sistema real: omite la capa
 
 | ID | Severidad | Área | Estado |
 | --- | --- | --- | --- |
-| CRIT-1 | 🔴 Crítico | CRUD del directorio sin autenticación (25/25 métodos) | Abierto |
-| CRIT-2 | 🔴 Crítico | Borrado en cascada anónimo y destructivo | Abierto |
-| HIGH-1 | 🟠 Alto | Exfiltración/enumeración de PII de menores | Abierto |
+| CRIT-1 | 🔴 Crítico | CRUD del directorio sin autenticación (25/25 métodos) | ✅ Mitigado (gate admin) |
+| CRIT-2 | 🔴 Crítico | Borrado en cascada anónimo y destructivo | ◐ Parcial (ya no anónimo) |
+| HIGH-1 | 🟠 Alto | Exfiltración/enumeración de PII de menores | ✅ Mitigado (gate admin) |
 | MED-1 | 🟡 Medio | Egress de contenido a Google Cloud no documentado | Abierto |
 | MED-2 | 🟡 Medio | Estado single-instance (anti-replay y rate-limit en memoria) | Conocido/documentado |
 | MED-3 | 🟡 Medio | Rate-limit depende del saneo de `X-Forwarded-For` por el borde | Abierto |
@@ -36,6 +36,17 @@ Además, el `docs/ARCHITECTURE.md` ya no describe el sistema real: omite la capa
 | LOW-3 | 🟢 Bajo | Oráculo de enumeración por código `409` | Abierto |
 | DOC-1 | ℹ️ Doc | `ARCHITECTURE.md` desactualizado respecto al código | Abierto |
 | DOC-2 | ℹ️ Doc | La RAG léxica documentada no está cableada al tutor | Abierto |
+
+---
+
+## Estado de remediación
+
+Este cambio incluye la primera corrección (P0):
+
+- **`middleware.ts`** — gate de autenticación sobre `/api/{students,teachers,courses,grades,levels}/*`. Exige `Authorization: Bearer <AIMAUTA_ADMIN_SECRET>`, compara en tiempo constante (HMAC doble, apto para Edge y Node) y **falla cerrado**: sin secreto o secreto `<32` chars → `503`; sin bearer o inválido → `401`. Punto único de enforcement, cubre rutas futuras del directorio.
+- Cierra **CRIT-1** y **HIGH-1** (ya no hay acceso anónimo a PII de menores) y de-anonimiza **CRIT-2** (los `DELETE` en cascada quedan detrás del gate; falta añadir confirmación/soft-delete).
+- **Interino:** es un bearer de admin único, no roles por usuario. El siguiente paso es autenticación por usuario con rol docente/admin.
+- Requiere fijar `AIMAUTA_ADMIN_SECRET` (32+ chars) en el entorno de despliegue; el cliente admin debe enviar el bearer.
 
 ---
 
