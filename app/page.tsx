@@ -215,17 +215,18 @@ export default async function CatalogPage() {
 
       <section className="teacher-section shell" aria-labelledby="docentes">
         <div className="teacher-copy">
-          <p className="eyebrow eyebrow-pending">En desarrollo</p>
+          <p className="eyebrow eyebrow-pending">Backend QR en piloto</p>
           <h2 id="docentes">Para el aula</h2>
           <p className="teacher-lead">
-            El docente podrá seleccionar ejercicios, armar una tarea y
-            compartirla con un enlace o un código QR. Sin instalar nada: el
-            estudiante escanea y empieza.
+            La integración docente ya puede seleccionar ejercicios, armar una
+            tarea y compartirla con un enlace o un código QR. Sin instalar nada:
+            el estudiante escanea y empieza. El panel visual para docentes sigue
+            en desarrollo.
           </p>
           <p className="teacher-lead">
-            Al terminar, el panel no muestra solo quién acertó. Muestra dónde
-            se atascó el aula, qué pistas ayudaron y quién necesita una
-            explicación adicional en la próxima clase.
+            El piloto conserva métricas anónimas por ejecución: objetivos
+            completados, turnos, intentos y pista máxima. No guarda nombres,
+            respuestas ni conversaciones del estudiante.
           </p>
           <p className="teacher-promise">
             AImauta no reemplaza al profesor. Extiende su capacidad de
@@ -233,10 +234,10 @@ export default async function CatalogPage() {
           </p>
         </div>
         <ul className="teacher-list">
-          <li>Asignar ejercicios por enlace o QR</li>
-          <li>Ver intentos, pistas y autonomía por estudiante</li>
-          <li>Identificar los ejercicios más difíciles del aula</li>
-          <li>Revisar y desactivar contenido antes de asignarlo</li>
+          <li>Asignar fichas, páginas o ejercicios por enlace o QR</li>
+          <li>Descargar el QR en SVG, PNG o PDF</li>
+          <li>Revisar progreso agregado sin identificar estudiantes</li>
+          <li>Rotar o revocar accesos cuando sea necesario</li>
         </ul>
       </section>
 

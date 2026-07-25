@@ -1,5 +1,5 @@
-// Prisma schema for the school directory (level -> grade -> course -> student/teacher).
-// Unrelated to the book catalog taxonomy in lib/catalog.ts.
+// Prisma persistence for the school directory and anonymous QR assignments.
+// Book metadata remains versioned in lib/catalog.ts rather than relational.
 
 generator client {
   provider = "prisma-client"
@@ -43,6 +43,7 @@ model Course {
   grade       Grade        @relation(fields: [gradeId], references: [id], onDelete: Cascade)
   teachers    Teacher[]    @relation("TeacherCourses")
   enrollments Enrollment[]
+  assignments Assignment[]
 
   @@unique([gradeId, name])
   @@index([gradeId])
@@ -69,6 +70,7 @@ model Teacher {
 
   courses       Course[]       @relation("TeacherCourses")
   progressNotes ProgressNote[]
+  assignments   Assignment[]
 }
 
 // A student's participation in one course. Per-student grades and teacher
@@ -95,15 +97,15 @@ model Enrollment {
 // not a foreign key: units live in the versioned book-catalog config
 // (lib/curriculum.ts / config/curricula.v3.json), not in this database.
 model Evaluation {
-  id           String    @id @default(cuid())
+  id           String   @id @default(cuid())
   enrollmentId String
   title        String?
   score        Float?
   maxScore     Float?
   unitId       String?
-  evaluatedAt  DateTime  @default(now())
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  evaluatedAt  DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   enrollment    Enrollment     @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
   progressNotes ProgressNote[]
@@ -149,4 +151,136 @@ model ProgressNote {
 
   @@index([enrollmentId])
   @@index([teacherId])
+}
+
+enum AssignmentKind {
+  TASK
+  WORKSHEET
+  PAGE
+  EXERCISE
+  REINFORCEMENT
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  REVOKED
+  ARCHIVED
+}
+
+enum AssignmentItemKind {
+  UNIT
+  PAGE
+  EXERCISE
+}
+
+enum AssignmentRunStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum AssignmentItemProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+// A teacher-authored activity shared through an opaque QR/link token. The raw
+// token is never stored in plaintext: publicTokenHash resolves public access,
+// while publicTokenCiphertext is only decrypted by authenticated staff routes
+// when the QR needs to be downloaded again.
+model Assignment {
+  id                    String           @id @default(cuid())
+  publicTokenHash       String           @unique
+  publicTokenCiphertext String
+  kind                  AssignmentKind
+  status                AssignmentStatus @default(ACTIVE)
+  title                 String
+  instructions          String?
+  teacherId             String
+  courseId              String?
+  groupLabel            String?
+  availableFrom         DateTime?
+  expiresAt             DateTime
+  maxHintLevel          Int              @default(3)
+  requiredItemCount     Int
+  minimumTurnsPerItem   Int              @default(1)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  teacher Teacher          @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  course  Course?          @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  items   AssignmentItem[]
+  runs    AssignmentRun[]
+
+  @@index([teacherId, createdAt])
+  @@index([courseId])
+  @@index([status, expiresAt])
+}
+
+// Immutable snapshot of one launch target. Content identifiers are accompanied
+// by the PDF checksum, curriculum version and exercise revision so stale QRs
+// fail closed after a reviewed content release changes.
+model AssignmentItem {
+  id                String             @id @default(cuid())
+  assignmentId      String
+  position          Int
+  kind              AssignmentItemKind
+  bookId            String
+  bookSha256        String
+  curriculumVersion String
+  unitId            String?
+  pages             Int[]
+  exerciseId        String?
+  exerciseRevision  Int?
+  label             String
+  title             String
+  createdAt         DateTime           @default(now())
+
+  assignment Assignment               @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  progress   AssignmentItemProgress[]
+
+  @@unique([assignmentId, position])
+  @@unique([assignmentId, id])
+  @@index([bookId])
+}
+
+// An anonymous learner run. Possession of the separate resume token authorizes
+// access to this run; no name, email, conversation or attempt text is stored.
+model AssignmentRun {
+  id                     String              @id @default(cuid())
+  assignmentId           String
+  resumeTokenHash        String              @unique
+  status                 AssignmentRunStatus @default(IN_PROGRESS)
+  receiptTokenHash       String?             @unique
+  receiptTokenCiphertext String?
+  startedAt              DateTime            @default(now())
+  lastActivityAt         DateTime            @default(now())
+  completedAt            DateTime?
+
+  assignment Assignment               @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  progress   AssignmentItemProgress[]
+
+  @@unique([assignmentId, id])
+  @@index([assignmentId, startedAt])
+  @@index([status, lastActivityAt])
+}
+
+model AssignmentItemProgress {
+  id               String                       @id @default(cuid())
+  assignmentId     String
+  runId            String
+  assignmentItemId String
+  status           AssignmentItemProgressStatus @default(NOT_STARTED)
+  turnCount        Int                          @default(0)
+  attemptCount     Int                          @default(0)
+  hintLevel        Int                          @default(0)
+  startedAt        DateTime?
+  completedAt      DateTime?
+  updatedAt        DateTime                     @updatedAt
+
+  run  AssignmentRun  @relation(fields: [assignmentId, runId], references: [assignmentId, id], onDelete: Cascade)
+  item AssignmentItem @relation(fields: [assignmentId, assignmentItemId], references: [assignmentId, id], onDelete: Cascade)
+
+  @@unique([runId, assignmentItemId])
+  @@index([assignmentId, assignmentItemId])
 }

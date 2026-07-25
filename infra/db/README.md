@@ -1,10 +1,10 @@
 # Base de datos local (Postgres para Prisma)
 
 Este directorio levanta un Postgres de **desarrollo local** para el directorio
-escolar de Prisma (`Level → Grade → Course → Student/Teacher`, ver
-[`prisma/schema.prisma`](../../prisma/schema.prisma)). No es la topología de
-producción: sin réplicas, sin política de respaldo, sin TLS. El puerto solo se
-publica en `127.0.0.1`.
+escolar de Prisma (`Level → Grade → Course → Student/Teacher`) y las tareas QR
+anónimas, ver [`prisma/schema.prisma`](../../prisma/schema.prisma). No es la
+topología de producción: sin réplicas, sin política de respaldo, sin TLS. El
+puerto solo se publica en `127.0.0.1`.
 
 ## Uso
 

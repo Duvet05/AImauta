@@ -35,9 +35,13 @@ trap cleanup EXIT HUP INT TERM
 
 session_secret=$(openssl rand -hex 32)
 agent_secret=$(openssl rand -hex 32)
+assignment_admin_secret=$(openssl rand -hex 32)
+assignment_token_secret=$(openssl rand -hex 32)
 
 {
   printf '%s\n' \
+    "AIMAUTA_PUBLIC_URL=" \
+    "DATABASE_URL=" \
     "AIMAUTA_CONTENT_DIR=/srv/aimauta/content" \
     "AIMAUTA_INDEX_DIR=/srv/aimauta/indexes" \
     "AIMAUTA_MANIFEST_DIR=/srv/aimauta/manifests" \
@@ -47,6 +51,8 @@ agent_secret=$(openssl rand -hex 32)
     "AIMAUTA_TRUST_PROXY_HEADERS=true" \
     "AIMAUTA_SESSION_SECRET=$session_secret" \
     "AIMAUTA_AGENT_SECRET=$agent_secret" \
+    "AIMAUTA_ASSIGNMENT_ADMIN_SECRET=$assignment_admin_secret" \
+    "AIMAUTA_ASSIGNMENT_TOKEN_SECRET=$assignment_token_secret" \
     "OLLAMA_BASE_URL=http://127.0.0.1:11435" \
     "OLLAMA_MODEL=gemma4:e4b-it-qat" \
     "OLLAMA_TIMEOUT_MS=45000" \

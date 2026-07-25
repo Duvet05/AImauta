@@ -33,7 +33,8 @@ PowerEdge: Next.js ─────────────────► tutor-
   ├─ catálogo y currículo                  ▲           ├─ Silero VAD
   ├─ sesiones HMAC                         │           ├─ Inference STT
   ├─ PDF e índice RAG                      └───────────┤  /api/internal/turn
-  └─ API LiveKit                                       └─ Inference TTS
+  ├─ API LiveKit                                       └─ Inference TTS
+  └─ tareas QR ───────────────► PostgreSQL
        │
        └─ túnel SSH 127.0.0.1:11435 ──► Aule 127.0.0.1:11434
                                           Ollama + Gemma
@@ -55,6 +56,11 @@ La aplicación usa Next.js con App Router y TypeScript. El catálogo vive en
 | `POST /api/tutor` | navegador | procesar un turno de texto |
 | `POST /api/livekit/token` | navegador | crear la sala y emitir un JWT de participante |
 | `POST /api/internal/turn` | worker | procesar un turno de voz mediante el mismo tutor |
+| `POST /api/assignments` | integración docente | crear una tarea con snapshot del contenido |
+| `GET /api/assignments/:id/qr` | integración docente | descargar el QR en SVG, PNG o PDF |
+| `POST /api/assignments/public/:token/runs` | navegador | iniciar una ejecución anónima |
+| `POST /api/assignment-runs/current/items/:id/session` | navegador | abrir una sesión limitada al objetivo |
+| `POST /api/assignment-runs/current/items/:id/complete` | navegador | finalizar un objetivo y, cuando corresponda, emitir comprobante |
 
 El visor integra PDF.js en el navegador: renderiza en `canvas`, añade una capa
 de texto seleccionable, ofrece zoom, ajuste al ancho y navegación por teclado,
@@ -118,9 +124,10 @@ El estado firmado contiene:
 - nivel de pista entre 0 y 3;
 - revisión monotónica;
 - instante de creación y expiración;
-- un resumen HMAC del último intento, nunca el texto completo.
+- hasta doce resúmenes HMAC de intentos sustantivos distintos, nunca el texto
+  completo.
 
-El navegador conserva el token v2 en memoria y lo presenta en cada cambio de
+El navegador conserva el token v5 en memoria y lo presenta en cada cambio de
 página o turno. En cada verificación, el servidor:
 
 1. comprueba estructura, firma, versión y expiración;
@@ -134,7 +141,9 @@ consume la revisión actual y emite la siguiente, lo que serializa cambios de
 página y turnos concurrentes. El límite es de 40 turnos por sesión.
 Este diseño es intencionalmente **single-instance**: al reiniciar el proceso se
 pierde el registro, y varias réplicas no pueden coordinar revisiones sin un
-almacén compartido. Por tanto, no existe todavía progreso durable.
+almacén compartido. Esto afecta al anti-replay y a la continuidad del token
+pedagógico de dos horas. Las tareas QR conservan por separado su estado y sus
+agregados anónimos en PostgreSQL.
 
 Al cambiar de página se reinician intentos, turnos y nivel de pista. En un turno
 de texto se cuentan solamente intentos no vacíos distintos; una transcripción
@@ -144,6 +153,40 @@ gradualmente y nunca supera el nivel 3.
 El token es íntegro, pero no está cifrado. Debe tratarse como una credencial
 efímera: no se registra, no se incluye en analítica y no se entrega a servicios
 ajenos al flujo de LiveKit.
+
+## Tareas QR durables y anónimas
+
+`Assignment` fija docente, curso o etiqueta de grupo, disponibilidad,
+vencimiento, nivel máximo de ayuda y criterio de finalización. Sus
+`AssignmentItem` son snapshots inmutables de una ficha, página o ejercicio:
+incluyen checksum del PDF, versión curricular y revisión de ejercicio. Una
+incoherencia posterior con el contenido publicado invalida el acceso de forma
+cerrada.
+
+El QR lleva un token público aleatorio de 256 bits. PostgreSQL conserva su hash
+para resolverlo y una copia AES-256-GCM para permitir que una ruta
+administrativa vuelva a renderizarlo. Crear una ejecución emite otro token
+aleatorio, que el navegador presenta por Bearer y nunca por URL. Las
+ejecuciones y sus objetivos no contienen identidad del estudiante.
+
+Al emitir una sesión pedagógica desde una tarea, el payload HMAC incorpora:
+
+- ID de tarea, ejecución y objetivo;
+- conjunto exacto de páginas permitidas;
+- ejercicio y revisión, cuando el docente fijó uno;
+- nivel máximo de ayuda entre 0 y 3.
+
+`moveLearningSession` vuelve a comprobar esas restricciones en cada navegación.
+`tutor-service` escribe después de cada turno únicamente conteos y pista máxima
+en `AssignmentItemProgress`; el texto del intento y la conversación siguen
+siendo efímeros. Completar el número requerido de objetivos emite un tercer
+token opaco para un comprobante anónimo.
+
+Las rutas de gestión exigen temporalmente
+`AIMAUTA_ASSIGNMENT_ADMIN_SECRET`. Es una credencial de integración
+server-to-server, no autenticación personal de docentes, y no puede exponerse
+en el frontend. El contrato y los límites del piloto se detallan en
+[`QR_ASSIGNMENTS.md`](QR_ASSIGNMENTS.md).
 
 ### Límites de admisión
 
@@ -156,6 +199,10 @@ memoria:
 | accesos de `/api/livekit/token` | sesión | 6 por minuto |
 | navegación de `/api/session` | sesión | 60 por minuto |
 | sesiones nuevas de `/api/session` | fingerprint del cliente | 12 por minuto |
+| apertura de enlace QR | fingerprint + tarea | 120 por minuto |
+| ejecuciones QR nuevas | fingerprint + tarea | 60 por minuto |
+| reanudación QR | token de ejecución | 120 por minuto |
+| sesión/finalización de objetivo QR | token de ejecución | 30 por minuto |
 
 El fingerprint de creación usa un hash de la dirección proporcionada por un
 proxy confiable; sin esa integración, todas las altas comparten un bucket

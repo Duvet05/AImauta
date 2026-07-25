@@ -12,12 +12,14 @@ import {
   type PageActivity
 } from "@/lib/curriculum";
 
-const TOKEN_VERSION = 4;
+const TOKEN_VERSION = 5;
 const TOKEN_TTL_SECONDS = 2 * 60 * 60;
 const MAX_TURNS_PER_SESSION = 40;
 const MAX_TRACKED_SESSIONS = 20_000;
 const MAX_DISTINCT_ATTEMPTS = 12;
+const MAX_ASSIGNMENT_PROGRESS_BASE = 2_147_483_600;
 const safeExerciseIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const safeAssignmentIdPattern = /^[a-z0-9]{10,64}$/;
 const attemptDigestPattern = /^[A-Za-z0-9_-]{16}$/;
 
 type RevisionStore = Map<
@@ -37,7 +39,7 @@ type LearningSessionProcessState = {
 // This remains intentionally process-local; multi-process deployments need a
 // shared atomic store.
 const PROCESS_STATE_KEY = Symbol.for(
-  "org.aimauta.learning-session.process-state.v4"
+  "org.aimauta.learning-session.process-state.v5"
 );
 
 function learningSessionProcessState(): LearningSessionProcessState {
@@ -72,6 +74,18 @@ const processState = learningSessionProcessState();
 const ephemeralSecret = processState.ephemeralSecret;
 const revisions = processState.revisions;
 
+export type LearningAssignmentBinding = {
+  assignmentId: string;
+  runId: string;
+  itemId: string;
+  allowedPages: readonly number[];
+  exerciseId: string | null;
+  exerciseRevision: number | null;
+  maxHintLevel: 0 | 1 | 2 | 3;
+  turnCountBase: number;
+  attemptCountBase: number;
+};
+
 export type LearningSessionState = {
   sessionId: string;
   bookId: string;
@@ -88,6 +102,7 @@ export type LearningSessionState = {
   createdAt: number;
   expiresAt: number;
   attemptDigests: readonly string[];
+  assignment: LearningAssignmentBinding | null;
 };
 
 export type LearningExerciseBinding = {
@@ -112,6 +127,7 @@ export class LearningSessionError extends Error {
       | "book"
       | "page"
       | "exercise"
+      | "assignment"
       | "limit"
       | "stale"
   ) {
@@ -192,6 +208,80 @@ function validateExerciseBinding(
   }
 }
 
+function assignmentBindingIsValid(
+  assignment: LearningAssignmentBinding | null | undefined,
+  page: number,
+  exerciseId: string | null,
+  exerciseRevision: number | null
+): boolean {
+  if (assignment === null) {
+    return true;
+  }
+  if (assignment === undefined || typeof assignment !== "object") {
+    return false;
+  }
+  if (
+    !safeAssignmentIdPattern.test(assignment.assignmentId) ||
+    !safeAssignmentIdPattern.test(assignment.runId) ||
+    !safeAssignmentIdPattern.test(assignment.itemId) ||
+    !Array.isArray(assignment.allowedPages) ||
+    assignment.allowedPages.length < 1 ||
+    assignment.allowedPages.length > 500 ||
+    assignment.allowedPages.some(
+      (allowedPage) =>
+        !Number.isSafeInteger(allowedPage) || allowedPage < 1
+    ) ||
+    new Set(assignment.allowedPages).size !== assignment.allowedPages.length ||
+    !assignment.allowedPages.includes(page) ||
+    !Number.isSafeInteger(assignment.maxHintLevel) ||
+    assignment.maxHintLevel < 0 ||
+    assignment.maxHintLevel > 3 ||
+    !Number.isSafeInteger(assignment.turnCountBase) ||
+    assignment.turnCountBase < 0 ||
+    assignment.turnCountBase > MAX_ASSIGNMENT_PROGRESS_BASE ||
+    !Number.isSafeInteger(assignment.attemptCountBase) ||
+    assignment.attemptCountBase < 0 ||
+    assignment.attemptCountBase > MAX_ASSIGNMENT_PROGRESS_BASE ||
+    assignment.attemptCountBase > assignment.turnCountBase ||
+    !(
+      (assignment.exerciseId === null &&
+        assignment.exerciseRevision === null) ||
+      (typeof assignment.exerciseId === "string" &&
+        safeExerciseIdPattern.test(assignment.exerciseId) &&
+        Number.isSafeInteger(assignment.exerciseRevision) &&
+        Number(assignment.exerciseRevision) > 0)
+    )
+  ) {
+    return false;
+  }
+  return (
+    assignment.exerciseId === null ||
+    (assignment.exerciseId === exerciseId &&
+      assignment.exerciseRevision === exerciseRevision)
+  );
+}
+
+function validateAssignmentBinding(
+  assignment: LearningAssignmentBinding | null,
+  page: number,
+  exerciseId: string | null,
+  exerciseRevision: number | null
+): void {
+  if (
+    !assignmentBindingIsValid(
+      assignment,
+      page,
+      exerciseId,
+      exerciseRevision
+    )
+  ) {
+    throw new LearningSessionError(
+      "La navegación no pertenece a la tarea asignada.",
+      "assignment"
+    );
+  }
+}
+
 function publicState(payload: LearningSessionPayload): LearningSessionState {
   return {
     sessionId: payload.sessionId,
@@ -208,7 +298,13 @@ function publicState(payload: LearningSessionPayload): LearningSessionState {
     revision: payload.revision,
     createdAt: payload.createdAt,
     expiresAt: payload.expiresAt,
-    attemptDigests: [...payload.attemptDigests]
+    attemptDigests: [...payload.attemptDigests],
+    assignment: payload.assignment
+      ? {
+          ...payload.assignment,
+          allowedPages: [...payload.assignment.allowedPages]
+        }
+      : null
   };
 }
 
@@ -252,11 +348,32 @@ export function issueLearningSession(input: {
   bookId: string;
   page: number;
   exercise?: LearningExerciseBinding | null;
+  assignment?: LearningAssignmentBinding | null;
+  initialHintLevel?: 0 | 1 | 2 | 3;
   now?: number;
 }): { token: string; state: LearningSessionState; activity: PageActivity } {
   const activity = validateBookAndPage(input.bookId, input.page);
   const exercise = input.exercise ?? null;
+  const assignment = input.assignment ?? null;
   validateExerciseBinding(exercise, activity, input.page);
+  validateAssignmentBinding(
+    assignment,
+    input.page,
+    exercise?.id ?? null,
+    exercise?.revision ?? null
+  );
+  const initialHintLevel = input.initialHintLevel ?? 0;
+  if (
+    !Number.isSafeInteger(initialHintLevel) ||
+    initialHintLevel < 0 ||
+    initialHintLevel > (assignment?.maxHintLevel ?? 3) ||
+    (activity.stage === "assessment" && initialHintLevel !== 0)
+  ) {
+    throw new LearningSessionError(
+      "El nivel inicial de ayuda no es válido.",
+      "assignment"
+    );
+  }
   const now = input.now ?? Math.floor(Date.now() / 1000);
   const payload: LearningSessionPayload = {
     version: TOKEN_VERSION,
@@ -270,11 +387,12 @@ export function issueLearningSession(input: {
     attemptCount: 0,
     turnCount: 0,
     totalTurnCount: 0,
-    hintLevel: 0,
+    hintLevel: initialHintLevel,
     revision: 0,
     createdAt: now,
     expiresAt: now + TOKEN_TTL_SECONDS,
-    attemptDigests: []
+    attemptDigests: [],
+    assignment
   };
   const token = serializeLearningSession(payload);
   trackIssued(payload);
@@ -338,6 +456,12 @@ export function verifyLearningSession(
     !Number.isInteger(payload.totalTurnCount) ||
     !Number.isInteger(payload.hintLevel) ||
     !Number.isInteger(payload.revision) ||
+    !assignmentBindingIsValid(
+      payload.assignment,
+      payload.page,
+      payload.exerciseId,
+      payload.exerciseRevision
+    ) ||
     !Array.isArray(payload.attemptDigests) ||
     payload.attemptDigests.length > MAX_DISTINCT_ATTEMPTS ||
     payload.attemptDigests.some(
@@ -352,6 +476,8 @@ export function verifyLearningSession(
     payload.totalTurnCount < 0 ||
     payload.hintLevel < 0 ||
     payload.hintLevel > 3 ||
+    (payload.assignment !== null &&
+      payload.hintLevel > payload.assignment.maxHintLevel) ||
     payload.revision < 0 ||
     typeof payload.createdAt !== "number" ||
     typeof payload.expiresAt !== "number"
@@ -375,13 +501,14 @@ function hintLevelFor(input: {
   attemptCount: number;
   turnCount: number;
   stage: LearningStage;
+  maximum: 0 | 1 | 2 | 3;
 }): 0 | 1 | 2 | 3 {
   if (input.stage === "assessment") {
     return 0;
   }
   const withAttempt = input.attemptCount > 0 ? 1 : 0;
   return Math.min(
-    3,
+    input.maximum,
     withAttempt + Math.floor(input.turnCount / 2)
   ) as 0 | 1 | 2 | 3;
 }
@@ -396,16 +523,26 @@ function evolve(
     revision: current.revision + 1
   };
   const activity = validateBookAndPage(nextState.bookId, nextState.page);
+  validateAssignmentBinding(
+    nextState.assignment,
+    nextState.page,
+    nextState.exerciseId,
+    nextState.exerciseRevision
+  );
   const payload: LearningSessionPayload = {
     ...nextState,
     version: TOKEN_VERSION,
     unitId: activity.unitId,
     stage: activity.stage,
-    hintLevel: hintLevelFor({
-      attemptCount: nextState.attemptCount,
-      turnCount: nextState.turnCount,
-      stage: activity.stage
-    })
+    hintLevel: Math.max(
+      nextState.hintLevel,
+      hintLevelFor({
+        attemptCount: nextState.attemptCount,
+        turnCount: nextState.turnCount,
+        stage: activity.stage,
+        maximum: nextState.assignment?.maxHintLevel ?? 3
+      })
+    ) as 0 | 1 | 2 | 3
   };
   const tracked = revisions.get(current.sessionId);
   if (tracked && tracked.revision !== current.revision) {
@@ -431,6 +568,12 @@ export function moveLearningSession(
   const current = verifyLearningSession(token);
   const activity = validateBookAndPage(current.bookId, page);
   validateExerciseBinding(exercise, activity, page);
+  validateAssignmentBinding(
+    current.assignment,
+    page,
+    exercise?.id ?? null,
+    exercise?.revision ?? null
+  );
   const sameExercise =
     exercise !== null &&
     current.exerciseId === exercise.id &&

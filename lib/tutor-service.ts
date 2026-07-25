@@ -1,4 +1,5 @@
 import { getPageActivity } from "@/lib/curriculum";
+import { recordAssignmentLearningProgress } from "@/lib/assignment-service";
 import {
   LearningSessionError,
   recordLearningTurn,
@@ -57,6 +58,7 @@ export async function guideLearningTurn(input: {
       token: input.sessionToken,
       attempt: input.attempt
     });
+    await recordAssignmentLearningProgress(current.state);
     return {
       message:
         verifiedActivity.stage === "assessment" &&
@@ -83,6 +85,7 @@ export async function guideLearningTurn(input: {
       token: input.sessionToken,
       attempt: input.attempt
     });
+    await recordAssignmentLearningProgress(current.state);
     return {
       message:
         "Selecciona primero uno de los ejercicios marcados sobre el PDF. Sin un ejercicio publicado, AImauta no consulta el índice ni genera pistas.",
@@ -128,6 +131,8 @@ export async function guideLearningTurn(input: {
       (item) =>
         item.exerciseId === exercise.id &&
         exercisePages.includes(item.page) &&
+        (!verified.assignment ||
+          verified.assignment.allowedPages.includes(item.page)) &&
         getPageActivity(verified.bookId, item.page).stage !== "assessment"
     )
     .map((item, index) => ({ ...item, sourceId: `S${index + 1}` }));
@@ -149,6 +154,7 @@ export async function guideLearningTurn(input: {
       ])
     ].join("\n")
   });
+  await recordAssignmentLearningProgress(current.state);
   const policy = getTurnPolicy({
     hintLevel: current.state.hintLevel,
     stage: current.state.stage,

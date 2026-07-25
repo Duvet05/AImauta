@@ -199,10 +199,12 @@ PowerEdge 127.0.0.1:11435
 
 ## Secretos dedicados
 
-Generar en PowerEdge dos valores aleatorios e independientes, cada uno de al
+Generar en PowerEdge cuatro valores aleatorios e independientes, cada uno de al
 menos 32 caracteres:
 
 ```bash
+openssl rand -base64 48
+openssl rand -base64 48
 openssl rand -base64 48
 openssl rand -base64 48
 ```
@@ -210,12 +212,23 @@ openssl rand -base64 48
 - `AIMAUTA_SESSION_SECRET` firma el estado anónimo con HMAC.
 - `AIMAUTA_AGENT_SECRET` autentica únicamente al worker ante
   `/api/internal/turn`.
+- `AIMAUTA_ASSIGNMENT_ADMIN_SECRET` protege las rutas temporales de integración
+  docente y nunca llega al navegador.
+- `AIMAUTA_ASSIGNMENT_TOKEN_SECRET` cifra los tokens públicos y comprobantes
+  que deben poder volver a descargarse.
 
-El token v2 incluye una revisión monotónica y el contador de turnos. Next.js
+El token v5 incluye una revisión monotónica, el contador de turnos y, cuando
+corresponde, el alcance exacto de la tarea QR. Next.js
 conserva en memoria la revisión vigente para rechazar replay y comprueba en el
 token el límite de 40 turnos. El registro se pierde al reiniciar y no funciona
 entre réplicas sin un almacén compartido; el despliegue documentado es de una
-sola instancia y no ofrece progreso durable.
+sola instancia. PostgreSQL conserva por separado las tareas QR, ejecuciones y
+agregados anónimos.
+
+Los cuatro secretos propios deben ser distintos. En especial,
+`AIMAUTA_ASSIGNMENT_TOKEN_SECRET` no se rota como una variable ordinaria:
+cambiarlo sin migrar los ciphertext existentes impide volver a recuperar
+enlaces y comprobantes almacenados.
 
 El proyecto LiveKit Cloud genera un par exclusivo para AImauta. Se copia
 directamente a archivos `0600` fuera del repositorio y nunca se pega en una
@@ -290,6 +303,9 @@ El archivo que Compose carga realmente es
 sin sustituir sus secretos existentes:
 
 ```dotenv
+AIMAUTA_PUBLIC_URL=https://host-publico-aimauta.example
+DATABASE_URL=postgresql://aimauta:secreto@127.0.0.1:5432/aimauta?schema=public
+
 AIMAUTA_CONTENT_DIR=/srv/aimauta/content
 AIMAUTA_INDEX_DIR=/srv/aimauta/indexes
 AIMAUTA_MANIFEST_DIR=/srv/aimauta/manifests
@@ -297,6 +313,8 @@ AIMAUTA_REMOTE_CONTENT_PROXY=false
 
 AIMAUTA_SESSION_SECRET=valor-aleatorio-exclusivo-de-sesion
 AIMAUTA_AGENT_SECRET=valor-aleatorio-exclusivo-del-worker
+AIMAUTA_ASSIGNMENT_ADMIN_SECRET=valor-aleatorio-exclusivo-de-integracion
+AIMAUTA_ASSIGNMENT_TOKEN_SECRET=valor-aleatorio-exclusivo-de-cifrado
 AIMAUTA_TRUST_PROXY_HEADERS=true
 
 OLLAMA_BASE_URL=http://127.0.0.1:11435
@@ -325,6 +343,11 @@ chmod 600 \
 
 `AIMAUTA_REMOTE_CONTENT_PROXY=false` obliga al visor a usar el PDF local
 sincronizado y verificado.
+
+`AIMAUTA_PUBLIC_URL` es el origen HTTPS que verá el estudiante y no puede
+incluir ruta, query, fragmento ni credenciales. `DATABASE_URL` apunta al
+PostgreSQL administrado de AImauta; con `network_mode: host`, el contenedor
+alcanza el listener de loopback del host.
 
 El despliegue público documentado exige que el proxy elimine
 `CF-Connecting-IP`, `X-Real-IP` y `X-Forwarded-For` recibidas del cliente y
@@ -494,6 +517,39 @@ despliega una revisión si falla una comprobación. La imagen de producción se
 construye después desde el release limpio y recibe la misma etiqueta de commit
 que la imagen web.
 
+## Migraciones de PostgreSQL
+
+La imagen `aimauta-migrate:<commit>` contiene Prisma y únicamente los archivos
+necesarios para ejecutar `prisma migrate deploy`. Compose la ejecuta como un
+servicio one-shot, sin privilegios y con filesystem de solo lectura. La
+aplicación depende de que ese servicio termine correctamente; si una migración
+falla, Next.js no se inicia con el esquema incompleto.
+
+Antes de promover un release que incluya migraciones:
+
+1. confirmar un backup recuperable de PostgreSQL;
+2. revisar el SQL versionado bajo `prisma/migrations`;
+3. construir las imágenes `aimauta-migrate` y `aimauta-web` del mismo commit;
+4. ejecutar `docker compose up` y comprobar que `migrate` terminó con código 0;
+5. validar `npx prisma migrate status` desde el checkout con el mismo
+   `DATABASE_URL`, sin imprimir la cadena.
+
+En desarrollo o staging puede comprobarse el ciclo QR completo después de
+aplicar la migración:
+
+```bash
+npm run assignments:smoke
+```
+
+Ese smoke crea una tarea y una ejecución efímeras, verifica el comprobante y
+elimina el fixture. No se usa como sustituto de las pruebas ni se ejecuta por
+primera vez sobre producción.
+
+Una reversión de imagen no revierte automáticamente el esquema. La migración
+inicial de tareas QR es aditiva y el release anterior ignora sus tablas; futuras
+migraciones deben declarar explícitamente su compatibilidad y procedimiento de
+rollback antes de promocionarse.
+
 ## Inicio de servicios
 
 ### Perfil web público en PowerEdge
@@ -537,6 +593,12 @@ AIMAUTA_RELEASE="$release_id" \
   AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
   docker compose -f "$release_dir/infra/web/compose.yaml" \
   up -d --no-build --force-recreate
+
+AIMAUTA_RELEASE="$release_id" \
+  AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \
+  AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
+  docker compose -f "$release_dir/infra/web/compose.yaml" \
+  ps --all migrate app edge
 
 # Los túneles son configuración administrada por el host.
 systemctl --user is-active \
@@ -707,6 +769,9 @@ Validar desde un navegador HTTPS:
 9. comprobar que la metadata de sala no contiene `session_token`, que el worker
    acepta solamente `student-<sessionId>` y que no existe grabación, Egress ni
    exportación de telemetría de la sesión.
+10. en staging, crear una tarea con la integración protegida, descargar su QR,
+    escanearlo en otro navegador, completar el criterio y verificar que el
+    comprobante no expone identidad ni texto del intento.
 
 La validación no debe imprimir tokens pedagógicos, transcripciones,
 `AIMAUTA_AGENT_SECRET` ni credenciales de LiveKit.
@@ -794,6 +859,7 @@ docker build \
   "$release_dir/services/voice-agent"
 
 docker image inspect \
+  "aimauta-migrate:${release_id}" \
   "aimauta-web:${release_id}" \
   "aimauta-voice-agent:${release_id}" >/dev/null
 ```
@@ -805,7 +871,8 @@ release activo permanece intacto.
 
 La recreación de Next.js descarta las sesiones pedagógicas guardadas en memoria.
 La sustitución del worker termina sesiones de voz activas; se realiza en una
-ventana sin participantes.
+ventana sin participantes. Compose ejecuta primero el migrador del mismo
+`release_id` y no inicia la aplicación si aquel falla.
 
 ```bash
 AIMAUTA_RELEASE="$release_id" \
@@ -843,7 +910,7 @@ Ejecutar toda la sección [Validación posterior](#validación-posterior) y
 confirmar además:
 
 ```bash
-docker compose -f "$release_dir/infra/web/compose.yaml" ps
+docker compose -f "$release_dir/infra/web/compose.yaml" ps --all
 docker inspect aimauta-web-app-1 \
   --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}} {{.Config.Image}}'
 docker inspect aimauta-voice-agent --format '{{.Config.Image}}'

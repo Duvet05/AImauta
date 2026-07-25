@@ -1,5 +1,6 @@
 import { Prisma } from "@/lib/generated/prisma/client";
 import { DatabaseUnavailableError } from "@/lib/prisma";
+import { RateLimitError } from "@/lib/rate-limit";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -24,7 +25,31 @@ export function errorResponse(error: unknown): Response {
   if (error instanceof DatabaseUnavailableError) {
     return jsonResponse({ error: error.message }, 503);
   }
+  if (error instanceof RateLimitError) {
+    return Response.json(
+      { error: error.message },
+      {
+        status: 429,
+        headers: {
+          "Cache-Control": "no-store",
+          "Retry-After": String(error.retryAfterSeconds)
+        }
+      }
+    );
+  }
+  if (error instanceof Prisma.PrismaClientInitializationError) {
+    return jsonResponse(
+      { error: "La base de datos no está disponible." },
+      503
+    );
+  }
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (["P1001", "P1002", "P1008", "P1017"].includes(error.code)) {
+      return jsonResponse(
+        { error: "La base de datos no está disponible." },
+        503
+      );
+    }
     if (error.code === "P2002") {
       return jsonResponse(
         { error: "Ya existe un registro con esos valores únicos." },

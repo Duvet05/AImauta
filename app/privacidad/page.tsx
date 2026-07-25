@@ -64,9 +64,9 @@ export default function PrivacidadPage() {
               <li>Correo electrónico personal del menor</li>
             </ul>
             <p>
-              Para identificar un trabajo dentro de un aula basta con un alias,
-              un código de estudiante o un número de lista asignado por el
-              docente.
+              En el flujo QR actual tampoco se pide alias, código de estudiante
+              ni número de lista. Cada ejecución usa únicamente un
+              identificador técnico aleatorio.
             </p>
           </section>
 
@@ -74,17 +74,18 @@ export default function PrivacidadPage() {
             <h2>3. Qué datos sí tratamos</h2>
             <ul>
               <li>
-                <strong>Identificador de actividad.</strong> Un alias o código
-                que permite al docente reconocer el trabajo dentro de su aula.
+                <strong>Identificador de actividad.</strong> Un código aleatorio
+                que vincula el enlace, la tarea y una ejecución anónima.
               </li>
               <li>
                 <strong>Intentos y respuestas del ejercicio.</strong> Lo que el
                 estudiante escribe al resolver la actividad, necesario para que
-                el tutor pueda orientarlo.
+                el tutor pueda orientarlo. En el piloto QR este texto se procesa
+                durante el turno, pero no se guarda en PostgreSQL.
               </li>
               <li>
-                <strong>Datos de progreso.</strong> Número de intentos, pistas
-                utilizadas, nivel de autonomía alcanzado y tiempo de trabajo.
+                <strong>Datos de progreso.</strong> Estado de finalización,
+                cantidad de turnos e intentos, pista máxima y marcas de tiempo.
               </li>
               <li>
                 <strong>Datos técnicos mínimos de sesión.</strong> Un token
@@ -110,16 +111,15 @@ export default function PrivacidadPage() {
           <section>
             <h2>5. Quién puede ver el progreso</h2>
             <p>
-              El desempeño de un estudiante no es público. Un enlace compartido
-              no revela conversaciones completas, errores detallados,
-              comparaciones con compañeros ni diagnósticos de aprendizaje.
+              El enlace compartido no revela conversaciones, texto de intentos,
+              errores detallados, comparaciones con compañeros ni diagnósticos
+              de aprendizaje.
             </p>
             <p>
-              El detalle pedagógico está disponible para el docente responsable
-              de la actividad y, cuando corresponda, para quien ejerza la patria
-              potestad del estudiante. Los comprobantes de finalización muestran
-              solo la información necesaria y comprensible para confirmar que la
-              actividad se realizó.
+              La integración docente protegida muestra métricas por ejecución
+              anónima y agregados por objetivo. Los comprobantes usan un enlace
+              separado y muestran solo título, fecha y conteos necesarios para
+              confirmar la finalización; no identifican a un estudiante.
             </p>
           </section>
 
@@ -131,23 +131,20 @@ export default function PrivacidadPage() {
               lento&raquo; o &laquo;riesgo alto&raquo;.
             </p>
             <p>
-              La información se presenta en forma de observaciones accionables
-              referidas a una dificultad concreta y a un momento determinado,
-              orientadas a decidir qué conviene reforzar. El panel del docente
-              responde preguntas pedagógicas —dónde se atascó el aula, qué
-              pistas funcionaron, qué ejercicio conviene revisar en clase— y no
-              está concebido como un mecanismo de vigilancia del comportamiento
-              del estudiante.
+              La integración piloto presenta conteos por objetivo y ejecución
+              anónima. El futuro panel docente deberá convertir esos agregados
+              en observaciones pedagógicas accionables y no en etiquetas,
+              perfiles individuales ni mecanismos de vigilancia.
             </p>
           </section>
 
           <section>
             <h2>7. Conservación</h2>
             <p>
-              Los datos de una actividad se conservan durante el periodo lectivo
-              en que fue asignada y por un plazo razonable posterior que permita
-              al docente cerrar su evaluación. Cumplido ese plazo, la
-              información se elimina o se anonimiza de forma irreversible.
+              El piloto conserva tareas y métricas anónimas hasta que el
+              responsable las archive o elimine. Todavía no existe un proceso
+              automático de retención; antes de operar con un centro educativo
+              se debe acordar y configurar un plazo de eliminación.
             </p>
             <p>
               No conservamos de manera indefinida conversaciones completas,

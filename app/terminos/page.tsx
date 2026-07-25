@@ -156,16 +156,15 @@ export default function TerminosPage() {
             <h2>7. Situaciones que exceden el ámbito educativo</h2>
             <p>
               AImauta no brinda orientación psicológica, social, legal ni
-              familiar, y no constituye un canal de emergencia. Si un estudiante
-              comunica una situación de violencia, riesgo o desprotección, la
-              plataforma no la tratará como una conversación educativa ordinaria
-              y aplicará un protocolo de derivación hacia los canales de
-              atención competentes.
+              familiar, y no constituye un canal de emergencia. El tutor del
+              piloto está limitado a los ejercicios publicados y no debe usarse
+              para comunicar situaciones de violencia, riesgo o desprotección.
             </p>
             <p>
-              Ante una situación de peligro inmediato, comuníquese con los
-              servicios de emergencia o con la Línea 100 del Ministerio de la
-              Mujer y Poblaciones Vulnerables.
+              La versión piloto no detecta ni deriva automáticamente
+              emergencias. Ante una situación de peligro inmediato, el
+              estudiante debe acudir a una persona adulta responsable o a los
+              servicios oficiales de emergencia de su localidad.
             </p>
           </section>
 
