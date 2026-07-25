@@ -1058,10 +1058,35 @@ svg {
 /* Problema */
 
 .problem-section {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   gap: 3.5rem;
+  overflow: hidden;
   padding-block: 6.5rem 1rem;
+  isolation: isolate;
+}
+
+.problem-section::after {
+  position: absolute;
+  z-index: 0;
+  top: 2.5rem;
+  left: 38%;
+  width: clamp(8rem, 15vw, 11rem);
+  aspect-ratio: 743.2 / 922.74;
+  content: "";
+  opacity: 0.055;
+  background: url("/svg/quipu.svg") center / contain no-repeat;
+  filter: saturate(0.55);
+  mask-image: linear-gradient(to bottom, black 62%, transparent 100%);
+  pointer-events: none;
+  transform: rotate(6deg);
+}
+
+.problem-copy,
+.problem-body {
+  position: relative;
+  z-index: 1;
 }
 
 .problem-copy h2 {
@@ -2103,6 +2128,15 @@ svg {
 
   .problem-section {
     padding-block: 4.5rem 1rem;
+  }
+
+  .problem-section::after {
+    top: 1.5rem;
+    right: -1.8rem;
+    left: auto;
+    width: 8.5rem;
+    opacity: 0.04;
+    transform: rotate(9deg);
   }
 
   .problem-copy h2 {
