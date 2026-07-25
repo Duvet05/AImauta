@@ -223,9 +223,9 @@ async def test_entrypoint_keeps_http_open_until_job_shutdown(monkeypatch) -> Non
             livekit_api_secret="livekit-secret",
             stt_model="deepgram/nova-3",
             stt_language="es-419",
-            tts_model="deepgram/aura-2",
-            tts_voice="selena",
-            tts_language="es-419",
+            tts_model="inworld/inworld-tts-2",
+            tts_voice="Diego",
+            tts_language="es",
         ),
     )
 
@@ -255,9 +255,9 @@ async def test_entrypoint_keeps_http_open_until_job_shutdown(monkeypatch) -> Non
         },
     }
     assert tts_kwargs == {
-        "model": "deepgram/aura-2",
-        "voice": "selena",
-        "language": "es-419",
+        "model": "inworld/inworld-tts-2",
+        "voice": "Diego",
+        "language": "es",
         "api_key": "livekit-key",
         "api_secret": "livekit-secret",
     }

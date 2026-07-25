@@ -590,12 +590,12 @@ export function PdfViewer({
             <div>
               <strong>Usando el visor del navegador</strong>
               <span>
-                El visor accesible no pudo continuar. Puedes seguir leyendo
+                El visor interactivo no pudo continuar. Puedes seguir leyendo
                 aquí o volver a intentarlo.
               </span>
             </div>
             <button type="button" onClick={retryPdfJs}>
-              Reintentar PDF.js
+              Reintentar visor interactivo
             </button>
           </div>
           <iframe

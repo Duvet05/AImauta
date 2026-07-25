@@ -21,9 +21,9 @@ class Settings(BaseSettings):
     max_session_seconds: int = Field(default=600, ge=60, le=900)
     stt_model: str = "deepgram/nova-3"
     stt_language: str = "es-419"
-    tts_model: str = "deepgram/aura-2"
-    tts_voice: str = "selena"
-    tts_language: str = "es-419"
+    tts_model: str = "inworld/inworld-tts-2"
+    tts_voice: str = "Diego"
+    tts_language: str = "es"
 
     @field_validator("livekit_url")
     @classmethod

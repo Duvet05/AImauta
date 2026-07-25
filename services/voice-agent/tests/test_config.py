@@ -22,14 +22,14 @@ def test_accepts_loopback_http_backend() -> None:
     assert configured.turn_endpoint == "http://127.0.0.1:3309/api/internal/turn"
 
 
-def test_uses_livekit_inference_defaults_without_deepgram_key() -> None:
+def test_uses_livekit_inference_defaults_without_provider_keys() -> None:
     configured = settings()
 
     assert configured.stt_model == "deepgram/nova-3"
     assert configured.stt_language == "es-419"
-    assert configured.tts_model == "deepgram/aura-2"
-    assert configured.tts_voice == "selena"
-    assert configured.tts_language == "es-419"
+    assert configured.tts_model == "inworld/inworld-tts-2"
+    assert configured.tts_voice == "Diego"
+    assert configured.tts_language == "es"
 
 
 def test_pinned_sdk_accepts_livekit_inference_contract() -> None:

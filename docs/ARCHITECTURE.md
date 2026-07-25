@@ -455,6 +455,6 @@ entregan al navegador.
 La aplicación no persiste conversaciones, progreso ni analítica individual. El
 registro anti-replay conserva únicamente el estado mínimo de la sesión en
 memoria y desaparece al reiniciar. LiveKit Cloud procesa el audio necesario
-para transportarlo y LiveKit Inference usa Deepgram para STT/TTS con retención
-cero por defecto; antes de un piloto con menores se deben definir
-consentimiento, acuerdos, retención y eliminación aplicables.
+para transportarlo y LiveKit Inference usa Deepgram para STT e Inworld para
+TTS con retención cero por defecto; antes de un piloto con menores se deben
+definir consentimiento, acuerdos, retención y eliminación aplicables.
