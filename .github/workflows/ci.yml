@@ -63,6 +63,12 @@ jobs:
       - name: Build production image
         run: docker build --tag aimauta-web:ci .
 
+      - name: Test internal RAG service image
+        run: docker build --target test --tag aimauta-rag-test:ci services/rag-service
+
+      - name: Build internal RAG service image
+        run: docker build --tag aimauta-rag:ci services/rag-service
+
       - name: Test voice worker image
         run: docker build --target test --tag aimauta-voice-agent-test:ci services/voice-agent
 

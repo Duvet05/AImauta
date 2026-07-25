@@ -35,7 +35,7 @@ Además, el `docs/ARCHITECTURE.md` ya no describe el sistema real: omite la capa
 | LOW-2 | 🟢 Bajo | Ruta PDF abre sin `O_NOFOLLOW` (asimetría de hardening) | Abierto |
 | LOW-3 | 🟢 Bajo | Oráculo de enumeración por código `409` | Abierto |
 | DOC-1 | ℹ️ Doc | `ARCHITECTURE.md` desactualizado respecto al código | Abierto |
-| DOC-2 | ℹ️ Doc | La RAG léxica documentada no está cableada al tutor | Abierto |
+| DOC-2 | ℹ️ Doc | La RAG léxica documentada no estaba cableada al tutor | ✅ Mitigado |
 
 ---
 
@@ -131,16 +131,24 @@ El CI es completo (catalog:validate, typecheck, lint, vitest, build, pytest del 
 ## Divergencias documentación ↔ código
 
 - **DOC-1 —** `ARCHITECTURE.md` omite: la capa Prisma/PostgreSQL y su PII; todo el subsistema de ejercicios y su ruta `GET /api/materials/:bookId/exercises`; el egress a Google (MED-1); la re-verificación de integridad SHA-256 por request de la ruta PDF (`lib/file-integrity.ts`).
-- **DOC-2 — remediado:** el tutor usa exclusivamente evidencia revisada ligada
-  a checksum, revisión y regiones dentro del bundle atómico; la recuperación
-  genérica por página ya no se presenta como fuente exacta del ejercicio.
+- **DOC-2 — Mitigado.** Las sesiones sin ejercicio publicado consultan el
+  servicio RAG loopback con página, unidad, etapa, checksum y versión curricular
+  exactos, y degradan al recuperador TypeScript local. Esa ruta nunca libera una
+  solución. Los ejercicios publicados conservan `retrieveExerciseEvidence` y
+  la solución humana revisada como contrato separado.
 - **Dos fuentes de verdad —** el catálogo vive en `/config` y se copia crudo a `ConfigSnapshot` en BD; la app sigue leyendo los archivos → posible drift. `Evaluation.unitId` es string suelto, no FK (decisión deliberada, documentar).
 
 ---
 
 ## Fortalezas confirmadas (preservar)
 
-- **Tutor:** guard de salida cerrado — Gemma elige **1 de 5 etiquetas**; cualquier desviación se descarta y cae a plantilla determinista (`lib/pedagogy.ts`, `lib/tutor-service.ts`). HMAC-SHA-256 con `timingSafeEqual` y anti-replay monotónico. Auth interna fail-closed con comparación en tiempo constante. El router Ollama en `lib/llm.ts` sólo acepta loopback, modelo fijado, respuesta acotada y sin redirecciones; una caída activa el respaldo determinista o un fallback cloud explícito.
+- **Tutor:** guard de salida cerrado — OpenAI o xAI elige **1 de 5 etiquetas**;
+  cualquier desviación se descarta y cae a plantilla determinista
+  (`lib/pedagogy.ts`, `lib/tutor-service.ts`). HMAC-SHA-256 con
+  `timingSafeEqual` y anti-replay monotónico. Auth interna fail-closed con
+  comparación en tiempo constante. El router sólo acepta OpenAI `gpt-4.1`
+  como primario y xAI `grok-4.3` como fallback; Ollama queda fuera del runtime
+  de tutoría hasta una migración posterior.
 - **Ejercicios:** separación pública/privada estricta, `O_NOFOLLOW`, integridad fail-closed y **revisión humana obligatoria**. El bundle privado activa público, solución y evidencia regional con un solo `rename`, lock recuperable y rollback.
 - **Config/flags/ops:** flags fail-closed con el servidor como autoridad sobre `?avatar=1` (`lib/feature-flags.ts`, `app/api/livekit/token/route.ts:24`); sin defaults inseguros; contenedores read-only/no-root/no-new-privileges; imágenes pinneadas por digest; ingesta sin superficie HTTP; manejo de errores que no filtra internals (`lib/http.ts:20-46`).
 
@@ -156,4 +164,4 @@ El CI es completo (catalog:validate, typecheck, lint, vitest, build, pytest del 
 | P1 | Añadir CSP + endurecer HSTS; readiness real en `/health` | MED-4, LOW-1 |
 | P1 | CI: secret-scanning + dependency-review + `exercises:validate`; `audit` a `moderate` | MED-5 |
 | P2 | Mover anti-replay + rate-limit a store compartido | MED-2, MED-3 |
-| P2 | Escapar/validar nombres; resolver drift `/config`↔`ConfigSnapshot`; cablear o retirar RAG léxica | MED-6, DOC-2 |
+| P2 | Escapar/validar nombres; resolver drift `/config`↔`ConfigSnapshot` | MED-6 |

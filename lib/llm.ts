@@ -12,7 +12,7 @@ import {
   type TurnPolicy,
 } from "@/lib/pedagogy";
 
-export type TutorLlmProvider = "ollama" | "openai" | "xai";
+export type TutorLlmProvider = "openai" | "xai";
 
 export type TutorLlmResult = {
   content: string;
@@ -28,7 +28,7 @@ type TutorLlmInput = {
 };
 
 type ProviderConfig = {
-  apiKey?: string;
+  apiKey: string;
   endpoint: string;
   model: string;
   provider: TutorLlmProvider;
@@ -50,7 +50,6 @@ const HARD_MAX_CONCURRENCY = 2;
 const HARD_MAX_ATTEMPTS_PER_MINUTE = 20;
 const HARD_MAX_OUTPUT_TOKENS = 16;
 const MAX_PROVIDER_RESPONSE_BYTES = 64 * 1024;
-const APPROVED_OLLAMA_MODEL = "gemma4:e4b-it-qat";
 
 class ProviderRequestError extends Error {
   constructor(
@@ -140,91 +139,26 @@ function consumeMinuteAttempt(now = Date.now()): boolean {
 }
 
 function providerOrder(): TutorLlmProvider[] {
-  const allowed = new Set<TutorLlmProvider>([
-    "ollama",
-    "openai",
-    "xai",
-  ]);
   const primary = (
-    process.env.LLM_PROVIDER ?? "ollama"
+    process.env.LLM_PROVIDER ?? "openai"
   ).trim().toLowerCase();
-  if (!allowed.has(primary as TutorLlmProvider)) {
+  if (primary !== "openai") {
     return [];
   }
-  const fallbacks = (
-    process.env.LLM_FALLBACK_PROVIDERS ??
+  const fallback = (
     process.env.LLM_FALLBACK_PROVIDER ??
+    process.env.LLM_FALLBACK_PROVIDERS ??
     ""
   )
-    .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter(
-      (value): value is TutorLlmProvider =>
-        allowed.has(value as TutorLlmProvider) && value !== primary,
-    );
-  return [
-    primary as TutorLlmProvider,
-    ...new Set(fallbacks),
-  ].slice(0, 3);
-}
-
-function isLoopbackHostname(hostname: string): boolean {
-  if (hostname === "localhost" || hostname === "[::1]") {
-    return true;
-  }
-  const octets = hostname.split(".");
-  return (
-    octets.length === 4 &&
-    octets.every(
-      (octet) =>
-        /^\d{1,3}$/u.test(octet) &&
-        Number(octet) >= 0 &&
-        Number(octet) <= 255,
-    ) &&
-    Number(octets[0]) === 127
-  );
-}
-
-function ollamaEndpoint(): string | null {
-  let baseUrl: URL;
-  try {
-    baseUrl = new URL(
-      process.env.OLLAMA_BASE_URL?.trim() ??
-        "http://127.0.0.1:11435",
-    );
-  } catch {
-    return null;
-  }
-  if (
-    (baseUrl.protocol !== "http:" && baseUrl.protocol !== "https:") ||
-    !isLoopbackHostname(baseUrl.hostname) ||
-    baseUrl.username ||
-    baseUrl.password ||
-    baseUrl.pathname !== "/" ||
-    baseUrl.search ||
-    baseUrl.hash
-  ) {
-    return null;
-  }
-  return `${baseUrl.origin}/api/chat`;
+    .split(",")[0]
+    ?.trim()
+    .toLowerCase();
+  return fallback === "xai" ? ["openai", "xai"] : ["openai"];
 }
 
 function providerConfig(
   provider: TutorLlmProvider,
 ): ProviderConfig | null {
-  if (provider === "ollama") {
-    const model =
-      process.env.OLLAMA_MODEL?.trim() ?? APPROVED_OLLAMA_MODEL;
-    const endpoint = ollamaEndpoint();
-    if (model !== APPROVED_OLLAMA_MODEL || !endpoint) {
-      return null;
-    }
-    return {
-      endpoint,
-      model,
-      provider,
-    };
-  }
   if (provider === "openai") {
     const apiKey = process.env.OPENAI_API_KEY;
     const model = process.env.OPENAI_MODEL;
@@ -252,14 +186,7 @@ function providerConfig(
   };
 }
 
-function requestTimeoutMs(provider: TutorLlmProvider): number {
-  if (provider === "ollama") {
-    return boundedPositiveInteger(
-      "OLLAMA_TIMEOUT_MS",
-      45_000,
-      45_000,
-    );
-  }
+function requestTimeoutMs(): number {
   const legacyTimeout = process.env.LLM_TIMEOUT_MS;
   if (
     !process.env.AIMAUTA_LLM_TIMEOUT_MS &&
@@ -398,32 +325,6 @@ async function readBoundedJson(response: Response): Promise<unknown> {
   }
 }
 
-function ollamaResult(
-  payload: unknown,
-  config: ProviderConfig,
-): {
-  content: string;
-  inputTokens?: number;
-  outputTokens?: number;
-} | null {
-  if (
-    !isRecord(payload) ||
-    payload.model !== config.model ||
-    payload.done !== true ||
-    !isRecord(payload.message) ||
-    payload.message.role !== "assistant" ||
-    typeof payload.message.content !== "string" ||
-    !payload.message.content.trim()
-  ) {
-    return null;
-  }
-  return {
-    content: payload.message.content.trim(),
-    inputTokens: tokenCount(payload.prompt_eval_count),
-    outputTokens: tokenCount(payload.eval_count),
-  };
-}
-
 function tokenCount(value: unknown): number | undefined {
   return Number.isSafeInteger(value) &&
     Number(value) >= 0 &&
@@ -470,53 +371,32 @@ async function askProvider(
   let actualInputTokens: number | undefined;
   let actualOutputTokens: number | undefined;
   try {
-    let body: Record<string, unknown>;
-    if (config.provider === "ollama") {
-      body = {
-        model: config.model,
-        stream: false,
-        think: false,
-        keep_alive: "10m",
-        messages: [
-          { role: "system", content: input.systemPrompt },
-          { role: "user", content: prompt },
-        ],
-        options: {
-          temperature: 0,
-          num_ctx: 4_096,
-          num_predict: maxOutputTokens,
-        },
-      };
+    const body: Record<string, unknown> = {
+      model: config.model,
+      input: [
+        { role: "system", content: input.systemPrompt },
+        { role: "user", content: prompt },
+      ],
+      max_output_tokens: maxOutputTokens,
+      store: false,
+    };
+    if (config.provider === "openai") {
+      body.safety_identifier = safetyIdentifier(input.sessionId);
     } else {
-      body = {
-        model: config.model,
-        input: [
-          { role: "system", content: input.systemPrompt },
-          { role: "user", content: prompt },
-        ],
-        max_output_tokens: maxOutputTokens,
-        store: false,
-      };
-      if (config.provider === "openai") {
-        body.safety_identifier = safetyIdentifier(input.sessionId);
-      } else {
-        body.reasoning = { effort: "none" };
-      }
+      body.reasoning = { effort: "none" };
     }
 
     let response: Response;
     try {
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${config.apiKey}`,
       };
-      if (config.apiKey) {
-        headers.Authorization = `Bearer ${config.apiKey}`;
-      }
       response = await fetch(config.endpoint, {
         method: "POST",
         headers,
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(requestTimeoutMs(config.provider)),
+        signal: AbortSignal.timeout(requestTimeoutMs()),
         redirect: "error",
       });
     } catch {
@@ -532,20 +412,11 @@ async function askProvider(
     } catch {
       throw new ProviderRequestError(config.provider, null);
     }
-    const localResult =
-      config.provider === "ollama"
-        ? ollamaResult(payload, config)
-        : null;
-    const content =
-      localResult?.content ??
-      (config.provider === "ollama" ? null : responseText(payload));
+    const content = responseText(payload);
     if (!content) {
       throw new ProviderRequestError(config.provider, null);
     }
-    if (localResult) {
-      actualInputTokens = localResult.inputTokens;
-      actualOutputTokens = localResult.outputTokens;
-    } else if (isRecord(payload) && isRecord(payload.usage)) {
+    if (isRecord(payload) && isRecord(payload.usage)) {
       actualInputTokens = tokenCount(payload.usage.input_tokens);
       actualOutputTokens = tokenCount(payload.usage.output_tokens);
     }

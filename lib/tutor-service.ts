@@ -14,9 +14,15 @@ import {
   getTurnPolicy,
   isSafeTutorMessage,
   parseGuidanceMove,
-  renderGuidanceMove
+  renderGuidanceMove,
+  type TurnPolicy
 } from "@/lib/pedagogy";
-import { retrieveExerciseEvidence } from "@/lib/retrieval";
+import { retrieveRagServiceEvidence } from "@/lib/rag-service";
+import {
+  retrieveEvidence,
+  retrieveExerciseEvidence,
+  type Evidence
+} from "@/lib/retrieval";
 import { consumeRateLimit } from "@/lib/rate-limit";
 
 export type TutorTurnResult = {
@@ -27,7 +33,6 @@ export type TutorTurnResult = {
     chunkId: string;
   }>;
   mode:
-    | "ollama"
     | "openai"
     | "xai"
     | "guided-fallback"
@@ -42,6 +47,93 @@ export type TutorTurnResult = {
     canRevealSolution: boolean;
   };
 };
+
+type GuidedMode = Extract<
+  TutorTurnResult["mode"],
+  "openai" | "xai" | "guided-fallback"
+>;
+
+async function createGuidedMessage(input: {
+  sessionId: string;
+  page: number;
+  attemptCount: number;
+  message: string;
+  attempt: string;
+  evidence: readonly Evidence[];
+  policy: TurnPolicy;
+}): Promise<{ message: string; mode: GuidedMode }> {
+  const systemPrompt = buildTutorSystemPrompt({
+    page: input.page,
+    policy: input.policy,
+    evidence: input.evidence,
+    attemptCount: input.attemptCount
+  });
+
+  let tutorMessage: string | null = null;
+  let mode: GuidedMode = "guided-fallback";
+  try {
+    const inference = await askTutorModel({
+      sessionId: input.sessionId,
+      systemPrompt,
+      studentMessage: input.message,
+      attempt: input.attempt,
+      policy: input.policy
+    });
+    const rawMove = inference?.content ?? null;
+    const move = rawMove ? parseGuidanceMove(rawMove) : null;
+    if (move) {
+      tutorMessage = renderGuidanceMove({
+        move,
+        attempted: input.attempt.trim().length >= 3
+      });
+    }
+    if (tutorMessage && isSafeTutorMessage(tutorMessage)) {
+      mode = inference?.provider ?? "guided-fallback";
+    } else {
+      tutorMessage = null;
+    }
+  } catch {
+    // Provider, quota and budget failures use the deterministic guide.
+  }
+
+  return {
+    message:
+      tutorMessage ??
+      fallbackGuide({
+        page: input.page,
+        attempt: input.attempt,
+        evidence: input.evidence,
+        policy: input.policy
+      }),
+    mode
+  };
+}
+
+async function retrievePageEvidence(input: {
+  bookId: string;
+  page: number;
+  question: string;
+  attempt: string;
+}): Promise<Evidence[]> {
+  const request = {
+    bookId: input.bookId,
+    question: input.question,
+    attempt: input.attempt,
+    page: input.page,
+    allowedPages: [input.page]
+  };
+  const remoteEvidence = await retrieveRagServiceEvidence(request);
+  if (remoteEvidence !== null) {
+    return remoteEvidence;
+  }
+
+  try {
+    return await retrieveEvidence(request);
+  } catch {
+    // A malformed or unavailable local index must fail closed.
+    return [];
+  }
+}
 
 export async function guideLearningTurn(input: {
   sessionToken: string;
@@ -87,21 +179,74 @@ export async function guideLearningTurn(input: {
     verified.exerciseId === null ||
     verified.exerciseRevision === null
   ) {
-    const current = recordLearningTurn({
-      token: input.sessionToken,
+    const evidence = await retrievePageEvidence({
+      bookId: verified.bookId,
+      page: verified.page,
+      question: input.message,
       attempt: input.attempt
     });
+    const current = recordLearningTurn({
+      token: input.sessionToken,
+      attempt: input.attempt,
+      attemptReference:
+        evidence.length > 0
+          ? evidence
+              .map((item) => item.text.slice(0, 1_200))
+              .join("\n")
+          : undefined
+    });
     await recordAssignmentLearningProgress(current.state);
+
+    if (evidence.length === 0) {
+      return {
+        message:
+          "No encuentro evidencia validada para orientar esta página. Selecciona un ejercicio marcado o avisa a tu docente.",
+        citations: [],
+        mode: "exercise-locked",
+        sessionToken: current.token,
+        session: current.state,
+        activity: current.activity,
+        policy: {
+          hintLevel: 0,
+          canRevealSolution: false
+        }
+      };
+    }
+
+    const basePolicy = getTurnPolicy({
+      hintLevel: current.state.hintLevel,
+      stage: current.state.stage,
+      attemptCount: current.state.attemptCount,
+      turnCount: current.state.turnCount
+    });
+    const policy: TurnPolicy = {
+      ...basePolicy,
+      // Only a reviewed exercise solution can ever unlock a final answer.
+      canRevealSolution: false
+    };
+    const guided = await createGuidedMessage({
+      sessionId: current.state.sessionId,
+      page: current.state.page,
+      attemptCount: current.state.attemptCount,
+      message: input.message,
+      attempt: input.attempt,
+      evidence,
+      policy
+    });
+
     return {
-      message:
-        "Selecciona primero uno de los ejercicios marcados sobre el cuaderno. Hasta entonces, AImauta no consulta el material ni da pistas.",
-      citations: [],
-      mode: "exercise-locked",
+      message: guided.message,
+      citations: evidence.map((item) => ({
+        sourceId: item.sourceId,
+        page: item.page,
+        chunkId: item.id
+      })),
+      mode: guided.mode,
       sessionToken: current.token,
       session: current.state,
       activity: current.activity,
       policy: {
-        hintLevel: 0,
+        hintLevel: policy.hintLevel,
         canRevealSolution: false
       }
     };
@@ -205,46 +350,17 @@ export async function guideLearningTurn(input: {
       }
     };
   }
-  const systemPrompt = buildTutorSystemPrompt({
-    page: current.state.page,
-    policy,
-    evidence,
-    attemptCount: current.state.attemptCount
-  });
 
-  let tutorMessage: string | null = null;
-  let mode: TutorTurnResult["mode"] = "guided-fallback";
-  try {
-    const inference = await askTutorModel({
-      sessionId: current.state.sessionId,
-      systemPrompt,
-      studentMessage: input.message,
-      attempt: input.attempt,
-      policy
-    });
-    const rawMove = inference?.content ?? null;
-    const move = rawMove ? parseGuidanceMove(rawMove) : null;
-    if (move) {
-      tutorMessage = renderGuidanceMove({
-        move,
-        attempted: input.attempt.trim().length >= 3
-      });
-    }
-    if (tutorMessage && isSafeTutorMessage(tutorMessage)) {
-      mode = inference?.provider ?? "guided-fallback";
-    } else {
-      tutorMessage = null;
-    }
-  } catch (error) {
-    console.error("Tutor inference unavailable", error);
-  }
-
-  tutorMessage ??= fallbackGuide({
+  const guided = await createGuidedMessage({
+    sessionId: current.state.sessionId,
     page: current.state.page,
+    attemptCount: current.state.attemptCount,
+    message: input.message,
     attempt: input.attempt,
     evidence,
     policy
   });
+  let tutorMessage = guided.message;
   const approvedHint = reviewedSolution.hints.find(
     (hint) => hint.level === policy.hintLevel
   );
@@ -257,7 +373,7 @@ export async function guideLearningTurn(input: {
   return {
     message: tutorMessage,
     citations,
-    mode,
+    mode: guided.mode,
     sessionToken: current.token,
     session: current.state,
     activity: current.activity,
