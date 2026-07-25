@@ -8,6 +8,7 @@ import { getBooks } from "@/lib/catalog";
 const learningJourney = [
   {
     title: "Intenta",
+<<<<<<< HEAD
     description:
       "Abre la ficha y explica qué entendiste o dónde te trabaste.",
     image: "/svg/amauta-thinks.svg",
@@ -29,6 +30,25 @@ const learningJourney = [
     description:
       "Vuelves al ejercicio y llegas a la respuesta por tu cuenta.",
     image: "/svg/amauta-celebrates.svg",
+=======
+    description: "Abre la ficha y explica su razonamiento.",
+    image: "/brand/characters/amauta-thinks.webp",
+  },
+  {
+    title: "Consulta",
+    description: "El tutor recupera evidencia de la página exacta.",
+    image: "/brand/characters/amauta-points.webp",
+  },
+  {
+    title: "Recibe pista",
+    description: "Una pregunta o pista breve, con su fuente.",
+    image: "/brand/characters/amauta-hint.webp",
+  },
+  {
+    title: "Resuelve",
+    description: "Llega a la respuesta por sí mismo.",
+    image: "/brand/characters/amauta-celebrates.webp",
+>>>>>>> 55c993ad15eb849404a24bf3ba059eae2aa68afa
   },
 ] as const;
 
@@ -184,7 +204,11 @@ export default async function CatalogPage() {
             </p>
           </div>
 
+<<<<<<< HEAD
           <ol className="learning-journey-list">
+=======
+          <ol className="learning-journey-list" role="list">
+>>>>>>> 55c993ad15eb849404a24bf3ba059eae2aa68afa
             {learningJourney.map((step, index) => (
               <li className="learning-step" key={step.title}>
                 <article className="learning-step-card">
@@ -196,8 +220,12 @@ export default async function CatalogPage() {
                       src={step.image}
                       alt=""
                       fill
+<<<<<<< HEAD
                       sizes="(max-width: 680px) 112px, (max-width: 1100px) 42vw, 250px"
                       unoptimized
+=======
+                      sizes="(max-width: 680px) 112px, (max-width: 980px) 42vw, 250px"
+>>>>>>> 55c993ad15eb849404a24bf3ba059eae2aa68afa
                     />
                   </div>
                   <div className="learning-step-copy">

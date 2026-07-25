@@ -3,8 +3,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireTeacherSession } from "@/app/docente/guard";
+import { AssignmentComposer } from "@/components/assignment-composer";
+import { AssignmentList } from "@/components/assignment-list";
 import { BrandMark } from "@/components/brand-mark";
 import { ProgressNoteForm } from "@/components/progress-note-form";
+import { assignmentShareForAdmin } from "@/lib/assignment-service";
+import { getBooks } from "@/lib/catalog";
 import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = {
@@ -19,12 +23,6 @@ const statusLabels = {
   ON_TRACK: { label: "En camino", tone: "ontrack" },
   NEEDS_SUPPORT: { label: "Necesita apoyo", tone: "support" },
   AT_RISK: { label: "Requiere atención", tone: "risk" },
-} as const;
-
-const assignmentStatusLabels = {
-  ACTIVE: "Activa",
-  REVOKED: "Revocada",
-  ARCHIVED: "Archivada",
 } as const;
 
 export default async function CursoPage({
@@ -78,6 +76,53 @@ export default async function CursoPage({
       `${right.student.lastName} ${right.student.firstName}`,
       "es-PE",
     ),
+  );
+  const books = getBooks();
+  const assignments = await Promise.all(
+    course.assignments.map(async (assignment) => {
+      const canManage = activeTeacher?.id === assignment.teacherId;
+      let shareUrl: string | null = null;
+      if (canManage) {
+        try {
+          shareUrl = (
+            await assignmentShareForAdmin({
+              id: assignment.id,
+              teacherId: assignment.teacherId,
+            })
+          ).shareUrl;
+        } catch {
+          // Never manufacture a link when token integrity or configuration
+          // fails. The row remains visible and can still be revoked.
+        }
+      }
+
+      const pages = [
+        ...new Set(assignment.items.flatMap((item) => item.pages)),
+      ].sort((left, right) => left - right);
+
+      return {
+        id: assignment.id,
+        title: assignment.title,
+        status: assignment.status,
+        expiresAt: assignment.expiresAt.toISOString(),
+        pages,
+        runCount: assignment._count.runs,
+        url: shareUrl,
+        qrUrl: shareUrl
+          ? `/docente/api/assignments/${encodeURIComponent(
+              assignment.id,
+            )}/qr?teacherId=${encodeURIComponent(
+              assignment.teacherId,
+            )}&format=svg`
+          : null,
+        manageTeacherId: canManage ? assignment.teacherId : null,
+        items: assignment.items.map((item) => ({
+          id: item.id,
+          label: item.label,
+          title: item.title,
+        })),
+      };
+    }),
   );
 
   return (
@@ -162,63 +207,33 @@ export default async function CursoPage({
 
         <section className="panel-section" aria-labelledby="tareas">
           <h2 id="tareas">Tareas compartidas por QR</h2>
-          {course.assignments.length === 0 ? (
+          {assignments.length === 0 ? (
             <p className="panel-note">
-              Aún no hay tareas en este curso. Se crean desde la API de
-              actividades y aparecerán aquí con su avance.
+              Aún no hay tareas en este curso. Crea la primera abajo.
             </p>
           ) : (
-            <ul className="assignment-list">
-              {course.assignments.map((assignment) => (
-                <li
-                  key={assignment.id}
-                  className={`assignment-row${
-                    assignment.status === "ACTIVE" ? "" : " assignment-closed"
-                  }`}
-                >
-                  <div className="assignment-head">
-                    <div>
-                      <strong>{assignment.title}</strong>
-                      <span className="assignment-meta">
-                        {assignment.items.length}{" "}
-                        {assignment.items.length === 1
-                          ? "objetivo"
-                          : "objetivos"}{" "}
-                        · {assignment._count.runs}{" "}
-                        {assignment._count.runs === 1
-                          ? "intento registrado"
-                          : "intentos registrados"}{" "}
-                        · vence{" "}
-                        {new Intl.DateTimeFormat("es-PE", {
-                          dateStyle: "medium",
-                          timeZone: "America/Lima",
-                        }).format(assignment.expiresAt)}
-                      </span>
-                    </div>
-                    <span className="status-pill status-none">
-                      {assignmentStatusLabels[assignment.status]}
-                    </span>
-                  </div>
-
-                  {assignment.items.length > 0 ? (
-                    <ul className="completion-list">
-                      {assignment.items.map((item) => (
-                        <li key={item.id}>
-                          <strong>{item.label}</strong>
-                          <span>{item.title}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
+            <AssignmentList assignments={assignments} />
           )}
           <p className="panel-note panel-note-privacy">
             Los intentos son anónimos: la plataforma no guarda quién resolvió
             cada tarea, solo cuántas veces se trabajó y hasta dónde se llegó.
           </p>
         </section>
+
+        {activeTeacher ? (
+          <section className="panel-section" aria-labelledby="nueva-tarea">
+            <h2 id="nueva-tarea">Asignar una tarea nueva</h2>
+            <AssignmentComposer
+              teacherId={activeTeacher.id}
+              courseId={course.id}
+              books={books.map((book) => ({
+                id: book.id,
+                title: book.title,
+                pages: book.pages,
+              }))}
+            />
+          </section>
+        ) : null}
       </div>
     </main>
   );

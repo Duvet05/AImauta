@@ -32,3 +32,22 @@ export async function requireTeacherSession(): Promise<void> {
     throw error;
   }
 }
+
+/**
+ * Route handlers cannot use `redirect()` as an authentication response for
+ * images/downloads. This variant keeps the same fail-closed check and lets the
+ * caller return a plain 401 without disclosing whether the secret is missing.
+ */
+export async function hasTeacherSession(): Promise<boolean> {
+  const store = await cookies();
+  const value = store.get(teacherSessionCookieName)?.value;
+
+  try {
+    return isValidTeacherSession(value);
+  } catch (error) {
+    if (error instanceof TeacherAuthConfigurationError) {
+      return false;
+    }
+    throw error;
+  }
+}
