@@ -29,6 +29,38 @@ services:
         max-size: 10m
         max-file: "3"
 
+  rag:
+    image: "aimauta-rag:${AIMAUTA_RELEASE:-local}"
+    platform: linux/amd64
+    build:
+      context: ../../services/rag-service
+      dockerfile: Dockerfile
+      target: production
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    user: "65532:65532"
+    group_add:
+      - "${AIMAUTA_RUNTIME_GID:-1000}"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 0.5
+    environment:
+      AIMAUTA_INDEX_DIR: /srv/aimauta/indexes
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m,mode=1777
+    volumes:
+      - "${AIMAUTA_RUNTIME_DIR:-/home/hii1sc/aimauta-runtime}/indexes:/srv/aimauta/indexes:ro"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
   app:
     image: "aimauta-web:${AIMAUTA_RELEASE:-local}"
     platform: linux/amd64
@@ -52,11 +84,15 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      rag:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
       HOSTNAME: 127.0.0.1
       PORT: "3309"
+      AIMAUTA_RAG_SERVICE_URL: http://127.0.0.1:3310
+      AIMAUTA_RAG_SERVICE_TIMEOUT_MS: "1200"
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
     volumes:

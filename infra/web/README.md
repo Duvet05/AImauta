@@ -1,11 +1,15 @@
 # Despliegue web
 
-La aplicación web usa dos contenedores permanentes sin privilegios y un
+La aplicación web usa tres contenedores permanentes sin privilegios y un
 contenedor one-shot de migración, todos con sistema de archivos de solo lectura
 y red del host:
 
 - el migrador ejecuta `prisma migrate deploy` y debe terminar correctamente
   antes de iniciar Next.js;
+- el RAG interno se liga exclusivamente a `127.0.0.1:3310`, lee los índices
+  verificados en modo read-only y no recibe claves de modelo; su grupo
+  suplementario usa `AIMAUTA_RUNTIME_GID` (por defecto `1000`) para conservar
+  los archivos en `0640`/directorios en `0750`;
 - Next.js se liga exclusivamente a `127.0.0.1:3309`, llama al router LLM
   OpenAI → xAI configurado y conserva el túnel opcional de Ollama en
   `127.0.0.1:11435` para la migración posterior a Gemma; el router actual no
@@ -114,6 +118,7 @@ AIMAUTA_RELEASE="$release_id" \
   AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
   docker compose -f "$release_dir/infra/web/compose.yaml" config --quiet
 curl --fail http://127.0.0.1:3308/_edge-health
+curl --fail http://127.0.0.1:3310/health
 ```
 
 Este perfil publica texto y PDF. La vista previa silenciosa del avatar queda

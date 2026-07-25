@@ -151,23 +151,21 @@ export default function PrivacidadPage() {
               audios, imágenes ni datos de navegación.
             </p>
             <p>
-              Para producir una pista, AImauta procesa de forma predeterminada
-              el texto acotado de la pregunta, el intento y la evidencia
-              curricular con Gemma 4 en infraestructura privada. Si el
-              responsable habilita explícitamente un fallback de nube, ese
-              mismo contenido puede enviarse temporalmente a OpenAI o xAI. No
-              se adjuntan el token QR, el token firmado de sesión, notas ni
+              Para producir una pista, AImauta envía temporalmente a OpenAI o,
+              si el servicio principal falla, a xAI el texto acotado de la
+              pregunta, el intento y fragmentos del material curricular. No
+              adjunta el token QR, el token firmado de sesión, notas ni
               identificadores del directorio escolar. Como el intento es texto
               libre, podría contener un dato personal que el propio estudiante
               escriba; se debe evitar incluirlo.
             </p>
             <p>
-              En los fallbacks de nube, las solicitudes se realizan con
-              almacenamiento de respuesta desactivado. Aun así, sus
-              configuraciones estándar pueden conservar contenido hasta 30
-              días para monitoreo de abuso. Un acuerdo o configuración de
-              retención cero debe verificarse por separado antes de habilitar
-              esos fallbacks en un piloto institucional. Consulte los{" "}
+              Las solicitudes se realizan con almacenamiento de respuesta
+              desactivado. Aun así, las configuraciones estándar de ambos
+              proveedores pueden conservar contenido hasta 30 días para
+              monitoreo de abuso. Un acuerdo o configuración de retención cero
+              debe verificarse por separado antes de un piloto institucional.
+              Consulte los{" "}
               <a href="https://developers.openai.com/api/docs/guides/your-data">
                 controles de datos de OpenAI
               </a>{" "}

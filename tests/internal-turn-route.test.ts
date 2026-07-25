@@ -31,12 +31,16 @@ beforeAll(async () => {
   process.env.AIMAUTA_AGENT_SECRET = agentSecret;
   delete process.env.OLLAMA_BASE_URL;
   delete process.env.OLLAMA_MODEL;
+  delete process.env.AIMAUTA_RAG_SERVICE_URL;
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.XAI_API_KEY;
 });
 
 afterAll(async () => {
   delete process.env.AIMAUTA_INDEX_DIR;
   delete process.env.AIMAUTA_SESSION_SECRET;
   delete process.env.AIMAUTA_AGENT_SECRET;
+  delete process.env.AIMAUTA_RAG_SERVICE_URL;
   await rm(indexDir, { recursive: true, force: true });
 });
 
@@ -74,9 +78,9 @@ describe("POST /api/internal/turn", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     await expect(response.json()).resolves.toMatchObject({
-      mode: "exercise-locked",
+      mode: "guided-fallback",
       session: { attemptCount: 0, turnCount: 1 },
-      citations: []
+      citations: [{ sourceId: "S1", page: 13 }]
     });
   });
 });

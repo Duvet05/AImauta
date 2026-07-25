@@ -29,7 +29,7 @@ afterAll(async () => {
 });
 
 describe("fallos previos a inferencia", () => {
-  it("no abre un índice roto cuando falta seleccionar ejercicio", async () => {
+  it("falla cerrado si el servicio y el índice local no aportan evidencia", async () => {
     const issued = issueLearningSession({
       bookId: "fichas-matematica-1-secundaria",
       page: 13

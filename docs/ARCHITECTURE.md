@@ -44,23 +44,30 @@ El sistema se organiza en tres planos con fronteras de confianza distintas:
 PowerEdge: Next.js (standalone) ─────────┤                  │
   ├─ catálogo y currículo (/config)      ▼                  ▼
   ├─ sesiones HMAC (en memoria)     tutor-service ◄─── worker de voz (Silero VAD)
-  ├─ PDF + índices + ejercicios          ▲                  └─ POST /api/internal/turn
+  ├─ PDF + ejercicios                    ▲                  └─ POST /api/internal/turn
+  ├─ RAG interno 127.0.0.1:3310 ─────────┘
+  │    └─ índices v2 read-only
   ├─ directorio + tareas QR ─ Prisma ─► PostgreSQL            (sin LLM propio)
   ├─ API LiveKit                         │
-  ├─ túnel SSH 127.0.0.1:11435 ─────────┴─► Aule 127.0.0.1:11434
-  │                                            (Gemma 4 primario)
-  └─ HTTPS opcional ───────────────────────► OpenAI → xAI (fallback)
+  ├─ HTTPS ──────────────────────────────┴─► OpenAI → xAI
+  └─ túnel SSH opcional 127.0.0.1:11435 ──► Aule 127.0.0.1:11434
+                                              (Gemma posterior)
 
 Pipeline offline (operador):  PDF MINEDU ─► content:sync/index ─► ingest
                               ─► Gemma 4 Ollama (Google opcional explícito)
                               ─► revisión humana ─► promote ─► runtime
 ```
 
-PowerEdge conserva la autoridad pedagógica, el contenido y el worker. El router
-usa Gemma 4 en Ollama/Aule como primario por el túnel privado; OpenAI y xAI son
-fallbacks opcionales y explícitos. LiveKit Cloud transporta el audio y ejecuta STT/TTS
-por *Inference*. La ingesta de ejercicios (offline) envía imágenes de página a
-la API de Google.
+PowerEdge conserva la autoridad pedagógica, el contenido, el recuperador y el
+worker. El servicio RAG separado adapta el límite HTTP del prototipo de Marcelo,
+pero abre únicamente los índices v2 verificados de AImauta y escucha solo en
+`127.0.0.1:3310`; no recibe claves de modelo, PDFs arbitrarios ni datos
+persistentes del estudiante. El router temporal usa OpenAI como primario y xAI
+como fallback. El túnel privado a
+Ollama/Aule se conserva para una migración posterior a Gemma, pero el router
+actual no lo selecciona. LiveKit Cloud transporta el audio y ejecuta STT/TTS
+por *Inference*. La ingesta de ejercicios es offline y usa Gemma 4 por el
+túnel privado; Google permanece como modo alternativo explícito.
 
 ## Aplicación web y contratos HTTP
 
@@ -239,7 +246,8 @@ detallan en [`QR_ASSIGNMENTS.md`](QR_ASSIGNMENTS.md).
 
 1. verifica la sesión firmada y aplica el límite de admisión;
 2. aplica el bloqueo de evaluación (`assessment-locked`);
-3. recupera evidencia del ejercicio publicado de la página, antes de consumir la revisión;
+3. recupera evidencia con alcance exacto de página o del ejercicio publicado,
+   antes de consumir la revisión;
 4. evoluciona la sesión y calcula la política;
 5. pide al router LLM elegir **una de cinco etiquetas cerradas**;
 6. renderiza en servidor la pregunta aprobada, o usa una guía determinista de respaldo;
@@ -255,25 +263,25 @@ en `<EVIDENCE_UNTRUSTED>…</EVIDENCE_UNTRUSTED>` para que sus instrucciones no
 sustituyan la política; el guard estructural neutraliza cualquier inyección que
 sobreviva.
 
-> **Nota de implementación.** La evidencia del turno proviene del **ejercicio
-> publicado**: una transcripción revisada ligada a checksum, revisión y regiones
-> del PDF dentro del bundle atómico. Existe además una recuperación léxica
-> por página (`lib/retrieval.ts`, `rankChunks`, ventana ±2 páginas, excluye
-> `Evaluamos` y `teacherOnly`), preparada como ruta alternativa pero hoy usada
-> solo en pruebas; puede sustituir el ranking sin cambiar el contrato del tutor.
+> **Nota de implementación.** Con un **ejercicio publicado**, la evidencia
+> procede de su transcripción revisada ligada a checksum, revisión y regiones
+> del PDF dentro del bundle atómico; solo esa ruta puede liberar una respuesta
+> humana revisada tras agotar las pistas. En una tarea de página o ficha sin ejercicio,
+> Next.js consulta `services/rag-service` por loopback con checksum, versión
+> curricular, unidad, etapa y página exactos; si está indisponible usa el mismo
+> índice validado localmente. Esta segunda ruta siempre mantiene
+> `canRevealSolution=false`. Ambas excluyen `Evaluamos` y `teacherOnly`.
 
-### Router Gemma-first y presupuesto de inferencia
+### Router temporal y presupuesto de inferencia
 
-`lib/llm.ts` admite una cadena cerrada: Ollama
-`gemma4:e4b-it-qat` como primario y, sólo si se configuran, OpenAI `gpt-4.1` y
-xAI `grok-4.3` como fallbacks. Los endpoints y modelos están permitidos
-explícitamente en código; una variable que intente seleccionar otro proveedor,
-modelo o un Ollama no-loopback no genera tráfico. No hay reintentos por
-proveedor.
+`lib/llm.ts` admite una cadena cerrada: OpenAI `gpt-4.1` como primario y, si se
+configuró, xAI `grok-4.3` como único fallback. Los endpoints y modelos están
+permitidos explícitamente en código; una variable que intente seleccionar otro
+proveedor o modelo —incluido Ollama— no genera tráfico. No hay reintentos: un
+turno realiza como máximo un intento en OpenAI y uno en xAI.
 
-Gemma recibe una petición local `/api/chat` con `think: false`, salida acotada
-y redirecciones bloqueadas. Los proveedores cloud reciben una petición mínima
-por Responses API con `store: false`. OpenAI recibe como `safety_identifier` únicamente un hash
+Ambos proveedores reciben una petición mínima por Responses API con
+`store: false`. OpenAI recibe como `safety_identifier` únicamente un hash
 unidireccional del UUID efímero de sesión; xAI se invoca sin razonamiento
 extendido. El backend no adjunta el token HMAC, el token QR, notas ni
 identificadores del directorio escolar. Sí se procesan el texto libre que el
@@ -408,7 +416,7 @@ por evolucionar la misma sesión.
 
 ```text
 Silero VAD ─► LiveKit Inference · Deepgram Nova-3 (STT)
-   └─► POST /api/internal/turn ─► tutor-service ─► Gemma → nube opcional o respaldo
+   └─► POST /api/internal/turn ─► tutor-service ─► OpenAI → xAI o respaldo
    ◄─────────────────── respuesta aprobada
 ◄─ LiveKit Inference · Inworld TTS-2, voz «Diego» (TTS)
 ```
@@ -456,6 +464,14 @@ páginas, versión curricular, licencia, etapa/ficha por fragmento, marca
 dos PDFs se importan solo del Repositorio Institucional del MINEDU;
 `librosescolaresperu.com` participa solo en el descubrimiento.
 
+`services/rag-service` sirve recuperación léxica sobre esos mismos índices, no
+sobre los PDFs de prueba del prototipo. El cliente solo acepta el endpoint fijo
+`http://127.0.0.1:3310`, limita cada respuesta a 64 KiB y vuelve a verificar
+linaje, alcance curricular y esquema. El contenedor es no-root, read-only, sin
+capacidades y con el directorio de índices montado en solo lectura. Si el
+servicio cae, la aplicación usa el recuperador TypeScript local; si tampoco hay
+evidencia válida, no llama al LLM y falla cerrado.
+
 ## Integración continua
 
 `.github/workflows/ci.yml` — un job `validate` en PRs y push a `main`, acciones
@@ -464,24 +480,26 @@ dos PDFs se importan solo del Repositorio Institucional del MINEDU;
 `npm ci` → `catalog:validate` → `typecheck` → `lint` → `test` (vitest) →
 `npm audit --omit=dev --audit-level=high` → `build` → validación de manifiestos
 de despliegue (`docker compose config` + `nginx -t`) → build de la imagen web →
-build+`pytest` de la imagen del worker de voz → smoke del contrato de inferencia
-(instancia STT Deepgram + TTS Inworld con credenciales de prueba).
+test+build de la imagen RAG → build+`pytest` de la imagen del worker de voz →
+smoke del contrato de inferencia (instancia STT Deepgram + TTS Inworld con
+credenciales de prueba).
 
 ## Despliegue y topología operativa
 
-Un host **PowerEdge** corre dos contenedores host-network, rootfs read-only,
-`cap_drop`, `no-new-privileges`, no-root: Next.js (`127.0.0.1:3309`) y nginx
-(`127.0.0.1:3308`). La única exposición pública es **Tailscale Funnel** →
-`:3308`. La build de contenido, la indexación y el worker corren en PowerEdge; la
-Mac solo edita y versiona.
+Un host **PowerEdge** corre tres contenedores permanentes host-network, rootfs
+read-only, `cap_drop`, `no-new-privileges`, no-root: Next.js
+(`127.0.0.1:3309`), RAG (`127.0.0.1:3310`) y nginx
+(`127.0.0.1:3308`), además del worker de voz cuando está activo. La única
+exposición pública es **Tailscale Funnel** → `:3308`. La build de contenido y
+la indexación corren en PowerEdge; la Mac solo edita y versiona.
 
 Secretos obligatorios en producción (≥32 chars, independientes):
 `AIMAUTA_SESSION_SECRET`, `AIMAUTA_AGENT_SECRET`, `AIMAUTA_ADMIN_SECRET`,
 `AIMAUTA_ASSIGNMENT_ADMIN_SECRET` y `AIMAUTA_ASSIGNMENT_TOKEN_SECRET`; además
-se requieren `DATABASE_URL` y la configuración loopback de Ollama en un archivo
-runtime separado. Las credenciales OpenAI/xAI sólo son necesarias al habilitar
-fallbacks. Con voz activa se añaden las variables `LIVEKIT_*`. Ollama corre en
-`Aule` y se alcanza por un
+se requieren `DATABASE_URL` y las credenciales OpenAI/xAI en un archivo
+runtime separado. Con voz activa se añaden las variables `LIVEKIT_*`. Ollama
+permanece disponible en `Aule` para la ingesta privada y la migración posterior
+del tutor, y se alcanza por un
 **túnel SSH local loopback** (`127.0.0.1:11435` → `127.0.0.1:11434`); nunca
 escucha en `0.0.0.0` ni por Funnel. Detalle operativo en
 [`DEPLOYMENT.md`](DEPLOYMENT.md).
@@ -495,15 +513,16 @@ Internet público
 
 PowerEdge (runtime público)
   ├─ Next.js: autoridad de sesión, currículo, tutor y directorio
+  ├─ RAG interno: recuperación validada, sin claves ni persistencia
   ├─ PostgreSQL: directorio escolar, tareas QR y presupuesto LLM
   ├─ worker de voz: adaptador sin LLM
   └─ PDFs autorizados, índices y manifiestos reproducibles
 
 Egress externo del runtime
-  └─ OpenAI → xAI sólo si se habilitan como fallback
+  └─ OpenAI principal → xAI fallback: selección pedagógica cerrada
 
-Canal privado PowerEdge–Aule
-  └─ SSH sobre la tailnet: Gemma 4 en 127.0.0.1:11435 → Ollama 127.0.0.1:11434
+Canal privado opcional PowerEdge–Aule
+  └─ SSH sobre la tailnet: 127.0.0.1:11435 → Ollama 127.0.0.1:11434
 
 Egress externo (pipeline offline, no runtime)
   └─ Google generativelanguage.googleapis.com sólo en modo ingesta explícito

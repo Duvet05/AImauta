@@ -3,20 +3,20 @@
 ## Regla de ejecución
 
 Las dependencias, la sincronización de PDFs, la generación de índices, las
-pruebas, la compilación de Next.js y la construcción de la imagen del worker se
-ejecutan exclusivamente en PowerEdge. La Mac se usa para edición y control de
-versiones; no se ejecutan allí `npm ci`, builds, pruebas, instalaciones de
-Python ni `docker build`.
+pruebas, la compilación de Next.js y la construcción de las imágenes RAG y de
+voz se ejecutan exclusivamente en PowerEdge. La Mac se usa para edición y
+control de versiones; no se ejecutan allí `npm ci`, builds, pruebas,
+instalaciones de Python ni `docker build`.
 
 Todos los comandos de esta guía se ejecutan en PowerEdge, salvo que se indique
 expresamente que corresponden a Aule o a una consola de proveedor.
 
 ## Topología
 
-- **PowerEdge:** Next.js, PDFs, índices/RAG y worker de voz autohospedado.
-- **Tutor LLM:** Gemma 4 en Ollama/Aule por túnel loopback privado.
-- **Fallbacks opcionales:** OpenAI y xAI, deshabilitados salvo configuración
-  explícita.
+- **PowerEdge:** Next.js, PDFs, servicio RAG interno y worker de voz
+  autohospedados.
+- **Proveedores LLM temporales:** OpenAI principal y xAI como fallback.
+- **Aule opcional:** Ollama con Gemma, escuchando solamente en loopback.
 - **LiveKit Cloud:** señalización, SFU, TURN, dispatch, Deepgram STT e
   Inworld TTS.
 - **Tailscale + SSH:** canal privado PowerEdge–Aule para Ollama.
@@ -54,8 +54,9 @@ están dentro del repositorio ni de un release.
   Compose v2.
 - Python 3.12 o 3.13 en PowerEdge para ejecutar las pruebas del worker.
 - Tailscale y acceso SSH por llave desde PowerEdge hacia Aule.
-- Ollama y `gemma4:e4b-it-qat` instalados en Aule.
-- Opcionalmente, claves dedicadas de OpenAI/xAI para fallback.
+- Claves dedicadas de OpenAI y xAI mientras se prepara Gemma 4.
+- Opcionalmente, Ollama y `gemma4:e4b-it-qat` instalados en Aule para la
+  ingesta privada y la migración posterior del tutor.
 - Un proyecto LiveKit Cloud y un par API dedicados a AImauta.
 - Un proxy HTTPS administrado delante de Next.js.
 
@@ -120,8 +121,9 @@ mv "$staging_dir" "$release_dir"
 chmod -R a-w "$release_dir"
 ```
 
-El nombre del directorio y las etiquetas de ambas imágenes deben usar el mismo
-`release_id`. `git archive` impide copiar `.env`, `infra/db/db.env`,
+El nombre del directorio y las etiquetas de todas las imágenes AImauta deben
+usar el mismo `release_id`. `git archive` impide copiar `.env`,
+`infra/db/db.env`,
 `node_modules`, cachés, archivos no versionados o cambios sin commit. No se
 edita un release creado; una corrección exige otro commit y otro directorio.
 
@@ -187,11 +189,14 @@ curl --fail http://127.0.0.1:11435/api/tags
 curl --fail http://127.0.0.1:3308/_edge-health
 ```
 
-La aplicación usa:
+La ingesta privada y la futura migración del tutor pueden usar:
 
 ```dotenv
 OLLAMA_BASE_URL=http://127.0.0.1:11435
 ```
+
+El router actual de tutoría no selecciona Ollama aunque estas variables estén
+presentes; OpenAI sigue siendo primario hasta completar la migración posterior.
 
 No se usa Tailscale Funnel para Ollama, no se abre el puerto 11434 en el proxy
 público y no se configura `OLLAMA_HOST=0.0.0.0`. El enlace queda:
@@ -347,11 +352,8 @@ contenedor de Next.js; el migrador y el build no las necesitan:
 
 ```dotenv
 # /home/hii1sc/aimauta-runtime/model-providers.env
-LLM_PROVIDER=ollama
-LLM_FALLBACK_PROVIDERS=
-OLLAMA_BASE_URL=http://127.0.0.1:11435
-OLLAMA_MODEL=gemma4:e4b-it-qat
-OLLAMA_TIMEOUT_MS=45000
+LLM_PROVIDER=openai
+LLM_FALLBACK_PROVIDER=xai
 OPENAI_API_KEY=clave-de-un-proyecto-openai-dedicado
 OPENAI_MODEL=gpt-4.1
 XAI_API_KEY=clave-de-un-equipo-xai-dedicado
@@ -359,10 +361,9 @@ XAI_MODEL=grok-4.3
 ```
 
 No se admite seleccionar otro modelo mediante variables de entorno: la lista
-permitida queda cerrada en código. Ollama sólo admite `localhost`, `127.0.0.0/8`
-o `::1`, bloquea redirecciones y valida que la respuesta corresponda
-exactamente a `gemma4:e4b-it-qat`. Los fallbacks de nube sólo se intentan si se
-nombran y tienen sus credenciales dedicadas.
+permitida del tutor queda cerrada en código a OpenAI `gpt-4.1` y xAI
+`grok-4.3`; Ollama no se selecciona todavía. El fallback sólo se intenta si se
+nombra y tiene su credencial dedicada.
 
 `LIVEKIT_API_URL` usa el mismo host del proyecto con esquema HTTPS para
 RoomService y AgentDispatch. La URL WSS llega al navegador; la API key y el
@@ -385,7 +386,7 @@ incluir ruta, query, fragmento ni credenciales. `DATABASE_URL` apunta al
 PostgreSQL administrado de AImauta; con `network_mode: host`, el contenedor
 alcanza el listener de loopback del host.
 
-Los límites diarios se comparten entre Gemma, OpenAI y xAI y se reservan en
+Los límites diarios se comparten entre OpenAI y xAI y se reservan en
 PostgreSQL antes de cada llamada. Las variables permiten reducir los máximos
 compilados de 300 intentos, 150 000 tokens de entrada y 6 000 tokens de salida
 por día, nunca aumentarlos. Cada fallback cuenta como un segundo intento; no hay
@@ -522,6 +523,27 @@ de 40 turnos, los rate limits, el índice v2, la exclusión de `Evaluamos` y
 material docente en RAG, los movimientos pedagógicos cerrados, el endpoint
 interno y la indisponibilidad controlada de LiveKit.
 
+### Servicio RAG interno
+
+La imagen ejecuta sus pruebas unitarias durante el target `test` y luego se
+construye sin herramientas de instalación:
+
+```bash
+cd /home/hii1sc/aimauta-production
+docker build --target test \
+  -t aimauta-rag-test:local services/rag-service
+docker build -t aimauta-rag:local services/rag-service
+```
+
+El servicio no usa un archivo de entorno ni recibe claves LLM. Compose lo fija
+a `127.0.0.1:3310`, monta únicamente
+`/home/hii1sc/aimauta-runtime/indexes` en read-only y limita memoria, CPU,
+procesos y concurrencia. `AIMAUTA_RUNTIME_GID` debe coincidir con el grupo que
+posee los índices (por defecto `1000` en este PowerEdge), de modo que continúen
+en `0640` y los directorios en `0750`. El cliente Next.js rechaza cualquier URL
+distinta de ese loopback exacto y Compose no inicia la aplicación hasta que el
+health de RAG esté sano.
+
 `npm run audit:production` debe terminar sin alertas. Las alertas exclusivas de
 herramientas de desarrollo se revisan por separado; no se ejecuta
 `npm audit fix --force`, porque puede degradar dependencias mayores o romper la
@@ -614,8 +636,9 @@ Internet → Tailscale Funnel HTTPS en Aule
          → reverse SSH Aule 127.0.0.1:3308
          → Nginx PowerEdge 127.0.0.1:3308
          → Next.js PowerEdge 127.0.0.1:3309
-         → Gemma 4 · Ollama Aule 127.0.0.1:11434
-         → OpenAI → xAI (fallbacks opcionales)
+         → RAG interno PowerEdge 127.0.0.1:3310
+         → OpenAI → xAI
+         → Ollama Aule 127.0.0.1:11434 (opcional)
 ```
 
 Nginx aplica límite de cuerpo, solicitudes y conexiones, bloquea externamente
@@ -654,7 +677,7 @@ AIMAUTA_RELEASE="$release_id" \
   AIMAUTA_MODEL_ENV_FILE=/home/hii1sc/aimauta-runtime/model-providers.env \
   AIMAUTA_RUNTIME_DIR=/home/hii1sc/aimauta-runtime \
   docker compose -f "$release_dir/infra/web/compose.yaml" \
-  ps --all migrate app edge
+  ps --all migrate rag app edge
 
 # Los túneles son configuración administrada por el host.
 systemctl --user is-active \
@@ -793,6 +816,7 @@ Comprobaciones locales en PowerEdge:
 
 ```bash
 curl --fail http://127.0.0.1:3309/
+curl --fail http://127.0.0.1:3310/health
 curl --fail --head \
   http://127.0.0.1:3309/api/materials/fichas-matematica-1-secundaria/pdf
 curl --fail --head \
@@ -921,6 +945,7 @@ docker build \
 docker image inspect \
   "aimauta-migrate:${release_id}" \
   "aimauta-web:${release_id}" \
+  "aimauta-rag:${release_id}" \
   "aimauta-voice-agent:${release_id}" >/dev/null
 ```
 
@@ -974,6 +999,7 @@ confirmar además:
 docker compose -f "$release_dir/infra/web/compose.yaml" ps --all
 docker inspect aimauta-web-app-1 \
   --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}} {{.Config.Image}}'
+docker inspect aimauta-web-rag-1 --format '{{.Config.Image}}'
 docker inspect aimauta-voice-agent --format '{{.Config.Image}}'
 systemctl --user is-active \
   aimauta-aule-ollama-tunnel.service \
@@ -988,7 +1014,9 @@ siga siendo compatible:
 previous_id=abcdef0
 previous_dir="/home/hii1sc/aimauta-releases/${previous_id}"
 test -d "$previous_dir"
-docker image inspect "aimauta-web:${previous_id}" >/dev/null
+docker image inspect \
+  "aimauta-web:${previous_id}" \
+  "aimauta-rag:${previous_id}" >/dev/null
 
 AIMAUTA_RELEASE="$previous_id" \
   AIMAUTA_WEB_ENV_FILE=/home/hii1sc/aimauta-runtime/web.env \

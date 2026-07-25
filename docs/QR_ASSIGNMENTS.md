@@ -155,7 +155,9 @@ crea otra tarea.
 3. El navegador guarda ese token localmente y lo usa como Bearer.
 4. `POST /api/assignment-runs/current/items/:itemId/session` abre una sesión
    pedagógica vinculada al objetivo.
-5. `/api/tutor` persiste únicamente las métricas anónimas del nuevo estado.
+5. `/api/tutor` consulta por loopback la evidencia de la página o ficha; en un
+   ejercicio usa su revisión publicada. Persiste únicamente las métricas
+   anónimas del nuevo estado.
 6. `POST /api/assignment-runs/current/items/:itemId/complete` valida el mínimo
    de turnos y completa el objetivo.
 7. Al alcanzar `requiredItemCount`, la respuesta incluye un enlace
