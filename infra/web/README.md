@@ -1,8 +1,11 @@
 # Despliegue web
 
-La aplicación web se ejecuta como dos contenedores sin privilegios, con sistema
-de archivos de solo lectura y red del host:
+La aplicación web usa dos contenedores permanentes sin privilegios y un
+contenedor one-shot de migración, todos con sistema de archivos de solo lectura
+y red del host:
 
+- el migrador ejecuta `prisma migrate deploy` y debe terminar correctamente
+  antes de iniciar Next.js;
 - Next.js se liga exclusivamente a `127.0.0.1:3309` y alcanza el túnel privado
   de Ollama en `127.0.0.1:11435`;
 - Nginx se liga exclusivamente a `127.0.0.1:3308` y es el único destino del
@@ -73,7 +76,10 @@ tailscale funnel --yes --bg --https=8443 http://127.0.0.1:3308
 ```
 
 El archivo de entorno se crea una sola vez, con permisos `0600`, sin imprimir
-los secretos. Los PDF, índices y manifiestos se montan en modo de solo lectura.
+los secretos. Antes del primer inicio se completan `DATABASE_URL` y
+`AIMAUTA_PUBLIC_URL`; el inicializador deja ambos vacíos deliberadamente para
+no inventar el DSN ni el dominio público. Los PDF, índices y manifiestos se
+montan en modo de solo lectura.
 `restart: unless-stopped` mantiene los contenedores después de reinicios del
 daemon. El usuario de PowerEdge debe tener `Linger=yes` para que el túnel
 systemd continúe sin una sesión SSH. En esta máquina las unidades instaladas

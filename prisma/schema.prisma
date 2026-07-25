@@ -1,5 +1,5 @@
-// Prisma schema for the school directory (level -> grade -> course -> student/teacher).
-// Unrelated to the book catalog taxonomy in lib/catalog.ts.
+// Prisma persistence for the school directory and anonymous QR assignments.
+// Book metadata remains versioned in lib/catalog.ts rather than relational.
 
 generator client {
   provider = "prisma-client"
@@ -58,7 +58,6 @@ model Student {
   updatedAt DateTime @updatedAt
 
   enrollments Enrollment[]
-  completions AssignmentCompletion[]
 }
 
 model Teacher {
@@ -92,72 +91,6 @@ model Enrollment {
   @@unique([studentId, courseId])
   @@index([studentId])
   @@index([courseId])
-}
-
-// A task a teacher hands out to a course, pointing at pages of a book in the
-// versioned catalog (bookId/unitId are plain strings for the same reason as
-// Evaluation.unitId: the catalog lives in /config, not in this database).
-//
-// `token` is the only thing that travels in the shared link and QR code. It
-// carries no personal data, so a forwarded code never leaks who it was for,
-// and it can be expired or revoked without touching academic records.
-model Assignment {
-  id           String    @id @default(cuid())
-  token        String    @unique
-  teacherId    String
-  courseId     String
-  bookId       String
-  unitId       String?
-  title        String
-  instructions String?
-  firstPage    Int
-  lastPage     Int
-  active       Boolean   @default(true)
-  expiresAt    DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  teacher     Teacher                @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  course      Course                 @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  completions AssignmentCompletion[]
-
-  @@index([teacherId])
-  @@index([courseId])
-}
-
-// Evidence that someone finished an assignment. Deliberately holds no PII: the
-// student is identified by the alias or roll number the teacher already uses in
-// class, and `studentId` stays null for anonymous QR access.
-//
-// `shareToken` addresses the celebration image. It is separate from
-// Assignment.token so that sharing an achievement never exposes the task link,
-// and so a single completion can be revoked on its own.
-model AssignmentCompletion {
-  id           String   @id @default(cuid())
-  shareToken   String   @unique
-  assignmentId String
-  studentId    String?
-  studentAlias String
-  attemptCount Int      @default(0)
-  hintsUsed    Int      @default(0)
-  autonomy     Autonomy @default(GUIDED)
-  completedAt  DateTime @default(now())
-
-  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  student    Student?   @relation(fields: [studentId], references: [id], onDelete: SetNull)
-
-  @@unique([assignmentId, studentAlias])
-  @@index([assignmentId])
-  @@index([studentId])
-}
-
-// How much support the student needed to finish. Derived from hints used and
-// attempts made, never shown to the student as a score or a ranking: it exists
-// so the teacher can see who to check on, not to label anyone.
-enum Autonomy {
-  INDEPENDENT
-  GUIDED
-  SUPPORTED
 }
 
 // One graded evaluation for a student in a course. unitId is a plain string,
@@ -218,4 +151,136 @@ model ProgressNote {
 
   @@index([enrollmentId])
   @@index([teacherId])
+}
+
+enum AssignmentKind {
+  TASK
+  WORKSHEET
+  PAGE
+  EXERCISE
+  REINFORCEMENT
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  REVOKED
+  ARCHIVED
+}
+
+enum AssignmentItemKind {
+  UNIT
+  PAGE
+  EXERCISE
+}
+
+enum AssignmentRunStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum AssignmentItemProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+// A teacher-authored activity shared through an opaque QR/link token. The raw
+// token is never stored in plaintext: publicTokenHash resolves public access,
+// while publicTokenCiphertext is only decrypted by authenticated staff routes
+// when the QR needs to be downloaded again.
+model Assignment {
+  id                    String           @id @default(cuid())
+  publicTokenHash       String           @unique
+  publicTokenCiphertext String
+  kind                  AssignmentKind
+  status                AssignmentStatus @default(ACTIVE)
+  title                 String
+  instructions          String?
+  teacherId             String
+  courseId              String?
+  groupLabel            String?
+  availableFrom         DateTime?
+  expiresAt             DateTime
+  maxHintLevel          Int              @default(3)
+  requiredItemCount     Int
+  minimumTurnsPerItem   Int              @default(1)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  teacher Teacher          @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  course  Course?          @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  items   AssignmentItem[]
+  runs    AssignmentRun[]
+
+  @@index([teacherId, createdAt])
+  @@index([courseId])
+  @@index([status, expiresAt])
+}
+
+// Immutable snapshot of one launch target. Content identifiers are accompanied
+// by the PDF checksum, curriculum version and exercise revision so stale QRs
+// fail closed after a reviewed content release changes.
+model AssignmentItem {
+  id                String             @id @default(cuid())
+  assignmentId      String
+  position          Int
+  kind              AssignmentItemKind
+  bookId            String
+  bookSha256        String
+  curriculumVersion String
+  unitId            String?
+  pages             Int[]
+  exerciseId        String?
+  exerciseRevision  Int?
+  label             String
+  title             String
+  createdAt         DateTime           @default(now())
+
+  assignment Assignment               @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  progress   AssignmentItemProgress[]
+
+  @@unique([assignmentId, position])
+  @@unique([assignmentId, id])
+  @@index([bookId])
+}
+
+// An anonymous learner run. Possession of the separate resume token authorizes
+// access to this run; no name, email, conversation or attempt text is stored.
+model AssignmentRun {
+  id                     String              @id @default(cuid())
+  assignmentId           String
+  resumeTokenHash        String              @unique
+  status                 AssignmentRunStatus @default(IN_PROGRESS)
+  receiptTokenHash       String?             @unique
+  receiptTokenCiphertext String?
+  startedAt              DateTime            @default(now())
+  lastActivityAt         DateTime            @default(now())
+  completedAt            DateTime?
+
+  assignment Assignment               @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  progress   AssignmentItemProgress[]
+
+  @@unique([assignmentId, id])
+  @@index([assignmentId, startedAt])
+  @@index([status, lastActivityAt])
+}
+
+model AssignmentItemProgress {
+  id               String                       @id @default(cuid())
+  assignmentId     String
+  runId            String
+  assignmentItemId String
+  status           AssignmentItemProgressStatus @default(NOT_STARTED)
+  turnCount        Int                          @default(0)
+  attemptCount     Int                          @default(0)
+  hintLevel        Int                          @default(0)
+  startedAt        DateTime?
+  completedAt      DateTime?
+  updatedAt        DateTime                     @updatedAt
+
+  run  AssignmentRun  @relation(fields: [assignmentId, runId], references: [assignmentId, id], onDelete: Cascade)
+  item AssignmentItem @relation(fields: [assignmentId, assignmentItemId], references: [assignmentId, id], onDelete: Cascade)
+
+  @@unique([runId, assignmentItemId])
+  @@index([assignmentId, assignmentItemId])
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -50,6 +49,13 @@ type SessionResponse = {
   activity: PageActivity;
 };
 
+type AssignmentLaunch = {
+  publicToken: string;
+  itemId: string;
+  landingPath: string;
+  assignmentTitle: string;
+};
+
 type TutorResponse = {
   message: string;
   citations?: Citation[];
@@ -69,6 +75,7 @@ type TutorResponse = {
 };
 
 type LearningWorkspaceProps = {
+  assignmentLaunch?: AssignmentLaunch;
   avatarPreviewEnabled: boolean;
   book: Book;
   firstPage: number;
@@ -386,6 +393,7 @@ function welcomeMessage(activity?: PageActivity): ConversationMessage {
 }
 
 export function LearningWorkspace({
+  assignmentLaunch,
   avatarPreviewEnabled,
   book,
   firstPage,
@@ -413,6 +421,9 @@ export function LearningWorkspace({
     useState<ExerciseAvailability>("loading");
   const [exerciseRequestRevision, setExerciseRequestRevision] = useState(0);
   const [viewerMode, setViewerMode] = useState<ViewerMode>("pdfjs");
+  const [isCompletingAssignment, setIsCompletingAssignment] = useState(false);
+  const [assignmentItemCompleted, setAssignmentItemCompleted] = useState(false);
+  const [completionReceiptUrl, setCompletionReceiptUrl] = useState("");
   const conversationRef = useRef<HTMLDivElement>(null);
   const sessionTokenRef = useRef("");
   const canonicalSessionRef = useRef<LearningSessionState | null>(null);
@@ -423,6 +434,8 @@ export function LearningWorkspace({
   const tutorAbortRef = useRef<AbortController | null>(null);
   const attemptDraftsRef = useRef<Record<string, string>>({});
   const previousSelectionRef = useRef<ExerciseSelection | null>(null);
+  const assignmentResumeTokenRef = useRef("");
+  const exercisesRef = useRef<PublicExercise[]>([]);
 
   const currentDraftKey = `${activity?.unitId ?? "orientation"}:${selectedExercise?.exerciseId ?? "none"}:${selectedExercise?.exerciseRevision ?? 0}`;
   const activeExercise =
@@ -444,7 +457,8 @@ export function LearningWorkspace({
     activeExercise !== null &&
     exerciseAvailability === "available" &&
     viewerMode === "pdfjs" &&
-    !isSyncingPage;
+    !isSyncingPage &&
+    !assignmentItemCompleted;
   const isAssessment =
     activity?.stage === "assessment" && activity.unitId !== null;
   const modeCopy = exerciseModeCopy({
@@ -465,6 +479,24 @@ export function LearningWorkspace({
     setSession(result.state);
     setActivity(result.activity);
     setPage(result.state.page);
+    if (result.state.exerciseId && result.state.exerciseRevision) {
+      const exercise = exercisesRef.current.find(
+        (candidate) =>
+          candidate.id === result.state.exerciseId &&
+          candidate.revision === result.state.exerciseRevision,
+      );
+      const region = exercise?.regions.find(
+        (candidate) => candidate.page === result.state.page,
+      );
+      if (exercise && region) {
+        setSelectedExercise({
+          exerciseId: exercise.id,
+          exerciseRevision: exercise.revision,
+          regionId: region.id,
+          page: result.state.page,
+        });
+      }
+    }
   }, []);
 
   const requestSession = useCallback(
@@ -474,29 +506,126 @@ export function LearningWorkspace({
       signal?: AbortSignal,
       selection?: ExerciseSelection | null,
     ): Promise<SessionResponse> => {
-      const response = await fetch("/api/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bookId: book.id,
-          page: targetPage,
-          exerciseId: selection?.exerciseId ?? null,
-          exerciseRevision: selection?.exerciseRevision ?? null,
-          exerciseRegionId: selection?.regionId ?? null,
-          ...(token ? { sessionToken: token } : {}),
-        }),
-        signal,
-      });
-      const body = (await response.json().catch(() => ({}))) as
-        | Partial<SessionResponse> & { error?: string };
+      const requestStandardSession = async (
+        currentToken?: string,
+      ): Promise<SessionResponse> => {
+        const response = await fetch("/api/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            bookId: book.id,
+            page: targetPage,
+            exerciseId: selection?.exerciseId ?? null,
+            exerciseRevision: selection?.exerciseRevision ?? null,
+            exerciseRegionId: selection?.regionId ?? null,
+            ...(currentToken ? { sessionToken: currentToken } : {}),
+          }),
+          signal,
+        });
+        const body = (await response.json().catch(() => ({}))) as
+          | Partial<SessionResponse> & { error?: string };
 
-      if (!response.ok || !body.token || !body.state || !body.activity) {
-        throw new Error(body.error || "No se pudo preparar la sesión.");
+        if (!response.ok || !body.token || !body.state || !body.activity) {
+          throw new Error(body.error || "No se pudo preparar la sesión.");
+        }
+        return body as SessionResponse;
+      };
+
+      if (token || !assignmentLaunch) {
+        return requestStandardSession(token);
       }
 
-      return body as SessionResponse;
+      const storageKey =
+        `aimauta.assignment-run.v1:${assignmentLaunch.publicToken}`;
+      let resumeToken = assignmentResumeTokenRef.current;
+      if (!resumeToken) {
+        try {
+          resumeToken = window.localStorage.getItem(storageKey) ?? "";
+        } catch {
+          resumeToken = "";
+        }
+      }
+
+      for (let attemptNumber = 0; attemptNumber < 2; attemptNumber += 1) {
+        if (!resumeToken) {
+          const createResponse = await fetch(
+            `/api/assignments/public/${encodeURIComponent(assignmentLaunch.publicToken)}/runs`,
+            { method: "POST", signal },
+          );
+          const created = (await createResponse.json().catch(() => ({}))) as {
+            resumeToken?: string;
+            error?: string;
+          };
+          if (!createResponse.ok || !created.resumeToken) {
+            throw new Error(
+              created.error || "No se pudo iniciar la actividad asignada.",
+            );
+          }
+          resumeToken = created.resumeToken;
+          assignmentResumeTokenRef.current = resumeToken;
+          try {
+            window.localStorage.setItem(storageKey, resumeToken);
+          } catch {
+            // La sesión sigue activa en memoria si el navegador bloquea storage.
+          }
+        }
+
+        const startResponse = await fetch(
+          `/api/assignment-runs/current/items/${encodeURIComponent(assignmentLaunch.itemId)}/session`,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${resumeToken}` },
+            signal,
+          },
+        );
+        const started = (await startResponse.json().catch(() => ({}))) as {
+          session?: SessionResponse;
+          error?: string;
+        };
+        if (
+          startResponse.ok &&
+          started.session?.token &&
+          started.session.state &&
+          started.session.activity
+        ) {
+          assignmentResumeTokenRef.current = resumeToken;
+          const assignedSession = started.session;
+          const selectionMatches =
+            selection === undefined ||
+            selection === null ||
+            (assignedSession.state.exerciseId === selection.exerciseId &&
+              assignedSession.state.exerciseRevision ===
+                selection.exerciseRevision);
+          if (
+            assignedSession.state.page === targetPage &&
+            selectionMatches
+          ) {
+            return assignedSession;
+          }
+          return requestStandardSession(assignedSession.token);
+        }
+
+        if (
+          attemptNumber === 0 &&
+          (startResponse.status === 401 || startResponse.status === 404)
+        ) {
+          resumeToken = "";
+          assignmentResumeTokenRef.current = "";
+          try {
+            window.localStorage.removeItem(storageKey);
+          } catch {
+            // No hay nada más que limpiar si storage no está disponible.
+          }
+          continue;
+        }
+        throw new Error(
+          started.error || "No se pudo abrir el objetivo asignado.",
+        );
+      }
+
+      throw new Error("No se pudo reanudar la actividad asignada.");
     },
-    [book.id],
+    [assignmentLaunch, book.id],
   );
 
   useEffect(() => {
@@ -527,6 +656,7 @@ export function LearningWorkspace({
       .then((result: PageExercisesResponse) => {
         if (controller.signal.aborted) return;
         if (result.publicationStatus === "not-published") {
+          exercisesRef.current = [];
           setExercises([]);
           setSelectedExercise(null);
           setExerciseAvailability("not-published");
@@ -534,13 +664,17 @@ export function LearningWorkspace({
         }
 
         const pageExercises = [...result.exercises];
+        exercisesRef.current = pageExercises;
         setExercises(pageExercises);
         setSelectedExercise((current) => {
-          if (!current) return null;
+          const boundSession = canonicalSessionRef.current;
           const exercise = pageExercises.find(
             (candidate) =>
-              candidate.id === current.exerciseId &&
-              candidate.revision === current.exerciseRevision,
+              candidate.id ===
+                (current?.exerciseId ?? boundSession?.exerciseId) &&
+              candidate.revision ===
+                (current?.exerciseRevision ??
+                  boundSession?.exerciseRevision),
           );
           const region = exercise?.regions.find(
             (candidate) => candidate.page === page,
@@ -560,6 +694,7 @@ export function LearningWorkspace({
       })
       .catch(() => {
         if (controller.signal.aborted) return;
+        exercisesRef.current = [];
         setExercises([]);
         setSelectedExercise(null);
         setExerciseAvailability("failed");
@@ -1009,23 +1144,82 @@ export function LearningWorkspace({
 
   function retryExercises() {
     setNotice("");
+    exercisesRef.current = [];
     setExercises([]);
     setSelectedExercise(null);
     setExerciseAvailability("loading");
     setExerciseRequestRevision((current) => current + 1);
   }
 
+  async function completeAssignedItem() {
+    if (
+      !assignmentLaunch ||
+      !assignmentResumeTokenRef.current ||
+      isCompletingAssignment ||
+      assignmentItemCompleted
+    ) {
+      return;
+    }
+    setIsCompletingAssignment(true);
+    setNotice("");
+    try {
+      const response = await fetch(
+        `/api/assignment-runs/current/items/${encodeURIComponent(assignmentLaunch.itemId)}/complete`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${assignmentResumeTokenRef.current}`,
+          },
+        },
+      );
+      const body = (await response.json().catch(() => ({}))) as {
+        receipt?: { url?: string } | null;
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(body.error || "No se pudo completar este objetivo.");
+      }
+      setAssignmentItemCompleted(true);
+      setCompletionReceiptUrl(body.receipt?.url ?? "");
+      setNotice(
+        body.receipt?.url
+          ? "Actividad completada. Ya puedes abrir o compartir tu comprobante."
+          : "Objetivo completado. Vuelve a la tarea para continuar con el siguiente.",
+      );
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "No se pudo completar este objetivo.",
+      );
+    } finally {
+      setIsCompletingAssignment(false);
+    }
+  }
+
   return (
     <div className="learning-shell">
       <header className="workspace-header">
-        <Link className="brand brand-small" href="/" aria-label="Volver a AImauta">
+        <a
+          className="brand brand-small"
+          href={assignmentLaunch?.landingPath ?? "/"}
+          aria-label={
+            assignmentLaunch ? "Volver a la tarea" : "Volver a AImauta"
+          }
+        >
           <BrandMark />
           <span>AImauta</span>
-        </Link>
+        </a>
         <div className="workspace-breadcrumb" aria-label="Ubicación actual">
           <span>{book.level}</span>
           <i aria-hidden="true">/</i>
           <strong>{book.subject}</strong>
+          {assignmentLaunch ? (
+            <>
+              <i aria-hidden="true">/</i>
+              <strong>{assignmentLaunch.assignmentTitle}</strong>
+            </>
+          ) : null}
         </div>
         <div className="guide-badge">
           <span
@@ -1193,7 +1387,30 @@ export function LearningWorkspace({
                 {modeCopy.reviewButtonLabel}
                 {tutorAvailable ? <SparkIcon /> : <LockButtonIcon />}
               </button>
+              {assignmentLaunch ? (
+                <button
+                  className="review-button"
+                  type="button"
+                  onClick={() => void completeAssignedItem()}
+                  disabled={
+                    !sessionToken ||
+                    isCompletingAssignment ||
+                    assignmentItemCompleted
+                  }
+                >
+                  {assignmentItemCompleted
+                    ? "Objetivo completado"
+                    : isCompletingAssignment
+                      ? "Guardando…"
+                      : "Completar objetivo"}
+                </button>
+              ) : null}
             </div>
+            {completionReceiptUrl ? (
+              <p className="workspace-notice" role="status">
+                <a href={completionReceiptUrl}>Abrir comprobante verificable</a>
+              </p>
+            ) : null}
           </section>
 
           <section className="tutor-section tutor-section-session">

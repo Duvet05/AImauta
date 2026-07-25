@@ -1,15 +1,10 @@
-import QRCode from "qrcode";
-
-import { prisma } from "@/lib/prisma";
-import { ApiError, errorResponse } from "@/lib/http";
-import { assignmentUrl } from "@/lib/site-url";
+import { parseAssignmentQrFormat, renderAssignmentQr } from "@/lib/assignment-qr";
+import { requireAssignmentAdmin } from "@/lib/assignment-security";
+import { assignmentShareForAdmin } from "@/lib/assignment-service";
+import { errorResponse, requiredString } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-// Renders the shareable code for a task. The QR encodes only the public task
-// URL, whose token carries no personal data, so a printed sheet left on a desk
-// reveals nothing about the class.
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -17,35 +12,42 @@ type RouteContext = {
 
 export async function GET(
   request: Request,
-  context: RouteContext,
+  context: RouteContext
 ): Promise<Response> {
   try {
+    requireAssignmentAdmin(request);
     const { id } = await context.params;
-    const assignment = await prisma.assignment.findUnique({
-      where: { id },
-      select: { token: true, active: true },
+    const { searchParams } = new URL(request.url);
+    const teacherId = requiredString(
+      searchParams.get("teacherId"),
+      "teacherId",
+      { maxLength: 100 }
+    );
+    const format = parseAssignmentQrFormat(searchParams.get("format"));
+    const share = await assignmentShareForAdmin({ id, teacherId });
+    const rendered = await renderAssignmentQr({
+      url: share.shareUrl,
+      format
     });
-    if (!assignment) {
-      throw new ApiError("La tarea no existe.", 404);
+    const safeId =
+      id.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64) || "actividad";
+    let responseBody: BodyInit;
+    if (typeof rendered.body === "string") {
+      responseBody = rendered.body;
+    } else {
+      const bytes = new Uint8Array(rendered.body.byteLength);
+      bytes.set(rendered.body);
+      responseBody = bytes.buffer;
     }
-
-    // Error correction level M keeps the code readable after printing and
-    // photographing, which is how most of these will actually be scanned.
-    const png = await QRCode.toBuffer(assignmentUrl(assignment.token), {
-      type: "png",
-      errorCorrectionLevel: "M",
-      margin: 2,
-      width: 512,
-      color: { dark: "#103C36FF", light: "#FFFDF7FF" },
-    });
-
-    return new Response(new Uint8Array(png), {
+    return new Response(responseBody, {
       headers: {
-        "Content-Type": "image/png",
-        "Content-Disposition": 'inline; filename="tarea-aimauta.png"',
         "Cache-Control": "no-store",
-        "X-Content-Type-Options": "nosniff",
-      },
+        "Content-Disposition":
+          `attachment; filename="aimauta-${safeId}.${rendered.extension}"`,
+        "Content-Security-Policy": "sandbox",
+        "Content-Type": rendered.contentType,
+        "X-Content-Type-Options": "nosniff"
+      }
     });
   } catch (error) {
     return errorResponse(error);
