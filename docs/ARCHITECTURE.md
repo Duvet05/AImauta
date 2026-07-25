@@ -47,19 +47,18 @@ PowerEdge: Next.js (standalone) ─────────┤                  
   ├─ PDF + índices + ejercicios          ▲                  └─ POST /api/internal/turn
   ├─ directorio + tareas QR ─ Prisma ─► PostgreSQL            (sin LLM propio)
   ├─ API LiveKit                         │
-  ├─ HTTPS ──────────────────────────────┴─► OpenAI → xAI
-  └─ túnel SSH opcional 127.0.0.1:11435 ──► Aule 127.0.0.1:11434
-                                              (Gemma posterior)
+  ├─ túnel SSH 127.0.0.1:11435 ─────────┴─► Aule 127.0.0.1:11434
+  │                                            (Gemma 4 primario)
+  └─ HTTPS opcional ───────────────────────► OpenAI → xAI (fallback)
 
-Pipeline offline (operador):  PDF MINEDU ─► content:sync/index ─► ingest ─► Google
-                              generativelanguage.googleapis.com (Gemma/Gemini)
+Pipeline offline (operador):  PDF MINEDU ─► content:sync/index ─► ingest
+                              ─► Gemma 4 Ollama (Google opcional explícito)
                               ─► revisión humana ─► promote ─► runtime
 ```
 
 PowerEdge conserva la autoridad pedagógica, el contenido y el worker. El router
-temporal usa OpenAI como primario y xAI como fallback. El túnel privado a
-Ollama/Aule se conserva para una migración posterior a Gemma, pero el router
-actual no lo selecciona. LiveKit Cloud transporta el audio y ejecuta STT/TTS
+usa Gemma 4 en Ollama/Aule como primario por el túnel privado; OpenAI y xAI son
+fallbacks opcionales y explícitos. LiveKit Cloud transporta el audio y ejecuta STT/TTS
 por *Inference*. La ingesta de ejercicios (offline) envía imágenes de página a
 la API de Google.
 
@@ -257,22 +256,24 @@ sustituyan la política; el guard estructural neutraliza cualquier inyección qu
 sobreviva.
 
 > **Nota de implementación.** La evidencia del turno proviene del **ejercicio
-> publicado** (`retrieveExerciseEvidence`: `label`/`title`/`prompt` con cita de
-> página), no del texto extraído del PDF. Existe además una recuperación léxica
+> publicado**: una transcripción revisada ligada a checksum, revisión y regiones
+> del PDF dentro del bundle atómico. Existe además una recuperación léxica
 > por página (`lib/retrieval.ts`, `rankChunks`, ventana ±2 páginas, excluye
 > `Evaluamos` y `teacherOnly`), preparada como ruta alternativa pero hoy usada
 > solo en pruebas; puede sustituir el ranking sin cambiar el contrato del tutor.
 
-### Router temporal y presupuesto de inferencia
+### Router Gemma-first y presupuesto de inferencia
 
-`lib/llm.ts` admite una cadena cerrada: OpenAI `gpt-4.1` como primario y, si se
-configuró, xAI `grok-4.3` como único fallback. Los endpoints y modelos están
-permitidos explícitamente en código; una variable que intente seleccionar otro
-proveedor o modelo no genera tráfico. No hay reintentos: un turno realiza como
-máximo un intento en OpenAI y uno en xAI.
+`lib/llm.ts` admite una cadena cerrada: Ollama
+`gemma4:e4b-it-qat` como primario y, sólo si se configuran, OpenAI `gpt-4.1` y
+xAI `grok-4.3` como fallbacks. Los endpoints y modelos están permitidos
+explícitamente en código; una variable que intente seleccionar otro proveedor,
+modelo o un Ollama no-loopback no genera tráfico. No hay reintentos por
+proveedor.
 
-Ambos proveedores reciben una petición mínima por Responses API con
-`store: false`. OpenAI recibe como `safety_identifier` únicamente un hash
+Gemma recibe una petición local `/api/chat` con `think: false`, salida acotada
+y redirecciones bloqueadas. Los proveedores cloud reciben una petición mínima
+por Responses API con `store: false`. OpenAI recibe como `safety_identifier` únicamente un hash
 unidireccional del UUID efímero de sesión; xAI se invoca sin razonamiento
 extendido. El backend no adjunta el token HMAC, el token QR, notas ni
 identificadores del directorio escolar. Sí se procesan el texto libre que el
@@ -286,7 +287,7 @@ ni estudiante. Los máximos compilados son 300 intentos, 150 000 tokens de
 entrada y 6 000 de salida por día. Las variables de entorno pueden reducirlos,
 pero nunca aumentarlos. Hay además un máximo de dos solicitudes concurrentes,
 20 intentos por minuto y 15 segundos de timeout. Si PostgreSQL, el presupuesto
-o ambos proveedores no están disponibles, `tutor-service` usa la guía
+o los proveedores no están disponibles, `tutor-service` usa la guía
 determinista sin eludir el límite.
 
 `store: false` evita crear estado de aplicación en la Responses API, pero no
@@ -314,26 +315,26 @@ Pipeline **offline**, en un operador no-root:
 
 ```text
 content:sync ─► content:index ─► exercises:ingest ─► [REVISIÓN HUMANA] ─► exercises:validate ─► exercises:promote
-   (SHA-256,       (índice v2      (Gemma/Gemini CLOUD:                       (0 pendientes,        (activación
-    %PDF-, size)    por página)     detecta y pre-resuelve)                    ≥1 published)         2 fases + rollback)
+   (SHA-256,       (índice v2      (Gemma 4 multimodal:                       (0 pendientes,        (bundle atómico
+    %PDF-, size)    por página)     detecta y pre-resuelve)                    ≥1 published)         + rollback)
 ```
 
-- **Ingesta (`lib/exercise-ingestion.ts`, `lib/gemma-ingest.ts`).** Abre el PDF
+- **Ingesta (`lib/exercise-ingestion.ts`, adaptadores Gemma).** Abre el PDF
   fijado por SHA-256, lo renderiza a **imágenes** en ventanas de 3 páginas y las
-  envía a la **API cloud de Google** (`generativelanguage.googleapis.com`,
-  modelo `gemma-4-26b-a4b-it`) con *function-calling* forzado (`mode:ANY`). Las
+  envía por defecto a Gemma 4 en Ollama loopback; Google
+  (`generativelanguage.googleapis.com`, `gemma-4-26b-a4b-it`) requiere selección
+  y clave explícitas. Las
   imágenes se marcan como contenido **no confiable**; la defensa dura es el
   esquema rígido de salida + `reviewRequired:true`. Sale como `*.draft.json`.
-- **Egress externo.** Esta es una dependencia de IA **offline**, distinta del
-  router cloud temporal del tutor y de la migración posterior a Ollama/Gemma.
-  Requiere `AIMAUTA_GEMINI_API_KEY_FILE`; el
-  endpoint no-Google solo se permite con opt-in explícito.
+- **Egress de ingesta.** Ollama permanece en el túnel loopback. El modo Google
+  es una alternativa offline explícita que requiere
+  `AIMAUTA_GEMINI_API_KEY_FILE`; un endpoint no-Google exige además opt-in.
 - **Revisión humana obligatoria** antes de `promote`. La confianza es del revisor.
-- **Separación de soluciones.** Las soluciones viven en un directorio/mount
-  aparte (`AIMAUTA_EXERCISE_SOLUTION_DIR`), archivo `<id>.private.json`, distinto
-  del manifiesto público. `lib/exercise-store.ts` **solo** abre `<id>.public.json`
-  (con `O_NOFOLLOW`) y proyecta campos por allow-list; la ruta `/exercises` no
-  puede filtrar soluciones. `getReviewedExerciseSolution` es server-only, exige
+- **Separación de soluciones.** El release autoritativo vive en el mount
+  privado (`AIMAUTA_EXERCISE_SOLUTION_DIR`) como `<id>.release.json` y activa
+  público/privado con un solo rename. `lib/exercise-store.ts` proyecta
+  exclusivamente la mitad pública; la ruta `/exercises` no puede filtrar
+  soluciones. `getReviewedExerciseSolution` es server-only, exige
   `reviewed:true` + revisión coincidente, y el `finalAnswer` solo se revela al
   alumno cuando `policy.canRevealSolution` es true (tras agotar las 3 pistas).
 - **Promoción (`exercise-release-promotion.ts`).** Transacción con lock:
@@ -407,7 +408,7 @@ por evolucionar la misma sesión.
 
 ```text
 Silero VAD ─► LiveKit Inference · Deepgram Nova-3 (STT)
-   └─► POST /api/internal/turn ─► tutor-service ─► OpenAI → xAI o respaldo
+   └─► POST /api/internal/turn ─► tutor-service ─► Gemma → nube opcional o respaldo
    ◄─────────────────── respuesta aprobada
 ◄─ LiveKit Inference · Inworld TTS-2, voz «Diego» (TTS)
 ```
@@ -477,9 +478,10 @@ Mac solo edita y versiona.
 Secretos obligatorios en producción (≥32 chars, independientes):
 `AIMAUTA_SESSION_SECRET`, `AIMAUTA_AGENT_SECRET`, `AIMAUTA_ADMIN_SECRET`,
 `AIMAUTA_ASSIGNMENT_ADMIN_SECRET` y `AIMAUTA_ASSIGNMENT_TOKEN_SECRET`; además
-se requieren `DATABASE_URL` y las credenciales OpenAI/xAI en un archivo
-runtime separado. Con voz activa se añaden las variables `LIVEKIT_*`. Ollama
-permanece opcional en `Aule` para la migración posterior y se alcanza por un
+se requieren `DATABASE_URL` y la configuración loopback de Ollama en un archivo
+runtime separado. Las credenciales OpenAI/xAI sólo son necesarias al habilitar
+fallbacks. Con voz activa se añaden las variables `LIVEKIT_*`. Ollama corre en
+`Aule` y se alcanza por un
 **túnel SSH local loopback** (`127.0.0.1:11435` → `127.0.0.1:11434`); nunca
 escucha en `0.0.0.0` ni por Funnel. Detalle operativo en
 [`DEPLOYMENT.md`](DEPLOYMENT.md).
@@ -498,13 +500,13 @@ PowerEdge (runtime público)
   └─ PDFs autorizados, índices y manifiestos reproducibles
 
 Egress externo del runtime
-  └─ OpenAI principal → xAI fallback: selección pedagógica cerrada
+  └─ OpenAI → xAI sólo si se habilitan como fallback
 
-Canal privado opcional PowerEdge–Aule
-  └─ SSH sobre la tailnet: 127.0.0.1:11435 → Ollama 127.0.0.1:11434
+Canal privado PowerEdge–Aule
+  └─ SSH sobre la tailnet: Gemma 4 en 127.0.0.1:11435 → Ollama 127.0.0.1:11434
 
 Egress externo (pipeline offline, no runtime)
-  └─ Google generativelanguage.googleapis.com: imágenes de página para la ingesta
+  └─ Google generativelanguage.googleapis.com sólo en modo ingesta explícito
 ```
 
 ## Límites de contenido y datos

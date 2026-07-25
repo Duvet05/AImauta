@@ -27,6 +27,7 @@ export type TutorTurnResult = {
     chunkId: string;
   }>;
   mode:
+    | "ollama"
     | "openai"
     | "xai"
     | "guided-fallback"

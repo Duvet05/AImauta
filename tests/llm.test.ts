@@ -36,6 +36,9 @@ const envKeys = [
   "OPENAI_MODEL",
   "XAI_API_KEY",
   "XAI_MODEL",
+  "OLLAMA_BASE_URL",
+  "OLLAMA_MODEL",
+  "OLLAMA_TIMEOUT_MS",
 ] as const;
 
 const tutorInput = {
@@ -72,6 +75,28 @@ function response(content: string): Response {
   );
 }
 
+function ollamaResponse(
+  content: string,
+  model = "gemma4:e4b-it-qat",
+): Response {
+  return new Response(
+    JSON.stringify({
+      model,
+      done: true,
+      message: {
+        role: "assistant",
+        content,
+      },
+      prompt_eval_count: 240,
+      eval_count: 2,
+    }),
+    {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    },
+  );
+}
+
 function configureProviders(): void {
   process.env.LLM_PROVIDER = "openai";
   process.env.LLM_FALLBACK_PROVIDER = "xai";
@@ -96,6 +121,96 @@ afterEach(() => {
 });
 
 describe("router LLM del tutor", () => {
+  it("usa Gemma 4 local por defecto sin credenciales ni razonamiento oculto", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(ollamaResponse("OBSERVA"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(askTutorModel(tutorInput)).resolves.toEqual({
+      content: "OBSERVA",
+      provider: "ollama",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "http://127.0.0.1:11435/api/chat",
+    );
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(request.headers).has("authorization")).toBe(false);
+    expect(request.redirect).toBe("error");
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      model: "gemma4:e4b-it-qat",
+      stream: false,
+      think: false,
+      messages: [
+        { role: "system" },
+        {
+          role: "user",
+          content:
+            "Mi pregunta: ¿Cómo empiezo?\nMi intento: Observaría los datos.",
+        },
+      ],
+      options: {
+        temperature: 0,
+        num_predict: 16,
+      },
+    });
+    expect(budget.settle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actualInputTokens: 240,
+        actualOutputTokens: 2,
+      }),
+    );
+  });
+
+  it("rechaza Ollama fuera de loopback antes de hacer tráfico", async () => {
+    process.env.LLM_PROVIDER = "ollama";
+    process.env.OLLAMA_BASE_URL = "http://10.0.0.8:11434";
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(askTutorModel(tutorInput)).resolves.toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rechaza una respuesta atribuida a otro modelo local", async () => {
+    process.env.LLM_PROVIDER = "ollama";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        ollamaResponse("OBSERVA", "gemma4:e2b-it-qat"),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(askTutorModel(tutorInput)).rejects.toThrow(
+      /ollama/u,
+    );
+  });
+
+  it("usa nube sólo como fallback explícito cuando Gemma no responde", async () => {
+    process.env.LLM_PROVIDER = "ollama";
+    process.env.LLM_FALLBACK_PROVIDERS = "openai,xai";
+    process.env.OPENAI_API_KEY = "openai-test-key";
+    process.env.OPENAI_MODEL = "gpt-4.1";
+    process.env.XAI_API_KEY = "xai-test-key";
+    process.env.XAI_MODEL = "grok-4.3";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(response("COMPARA"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(askTutorModel(tutorInput)).resolves.toEqual({
+      content: "COMPARA",
+      provider: "openai",
+    });
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "http://127.0.0.1:11435/api/chat",
+      "https://api.openai.com/v1/responses",
+    ]);
+    expect(budget.reserve).toHaveBeenCalledTimes(2);
+  });
+
   it("usa OpenAI gpt-4.1 como proveedor principal sin almacenar la respuesta", async () => {
     configureProviders();
     const fetchMock = vi.fn().mockResolvedValue(response("OBSERVA"));
@@ -176,7 +291,7 @@ describe("router LLM del tutor", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("usa xAI si falta la credencial primaria pero nunca habilita Ollama", async () => {
+  it("usa xAI si falta la credencial OpenAI configurada como primaria", async () => {
     process.env.LLM_PROVIDER = "openai";
     process.env.LLM_FALLBACK_PROVIDER = "xai";
     process.env.XAI_API_KEY = "xai-test-key";
