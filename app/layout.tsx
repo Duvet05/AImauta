@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     template: "%s | AImauta",
   },
   description:
-    "Un espacio de aprendizaje guiado para explorar materiales escolares y construir tus propias respuestas.",
+    "Tutoría guiada sobre materiales oficiales del MINEDU. AImauta parte de tu intento, orienta con preguntas y pistas graduales, y muestra la fuente de cada explicación.",
   icons: {
     icon: [
       {

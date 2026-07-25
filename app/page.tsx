@@ -17,29 +17,30 @@ export default async function CatalogPage() {
             <span>AImauta</span>
           </Link>
           <a className="quiet-link" href="#biblioteca">
-            Probar el piloto
+            Ver cuadernos
           </a>
         </nav>
 
         <div className="hero-content shell">
           <div className="hero-copy">
-            <p className="eyebrow">Piloto RAG · Matemática secundaria</p>
+            <p className="eyebrow">Tutoría guiada · Matemática de secundaria</p>
             <h1>
-              Lee una ficha, intenta resolverla
-              <span> y recibe una pista con fuente.</span>
+              No hace tu tarea.
+              <span> Te ayuda a entenderla.</span>
             </h1>
             <p className="hero-lead">
-              Este piloto incluye dos cuadernos de Matemática del MINEDU para
-              1.º y 2.º de secundaria. Abre una página de Construimos o
-              Comprobamos, escribe qué intentaste y AImauta te dará una pista
-              basada en el material, con la página citada.
+              Abre un cuaderno oficial del MINEDU, intenta el ejercicio y cuenta
+              qué pensaste. AImauta parte de tu intento y responde con preguntas
+              y pistas graduales —nunca con la respuesta hecha—, y siempre te
+              muestra la página del material de donde salió cada una.
             </p>
             <a className="primary-action" href="#biblioteca">
               Elegir un cuaderno
               <ArrowIcon />
             </a>
             <p className="pilot-boundary">
-              En Orientación y Evaluamos no hay pistas ni consulta al material.
+              Cuando llegas a una sección de evaluación, el tutor se apaga solo.
+              Esas respuestas son tuyas.
             </p>
           </div>
 
@@ -60,8 +61,8 @@ export default async function CatalogPage() {
               <div className="demo-card-top">
                 <span className="avatar avatar-tutor">AI</span>
                 <div>
-                  <strong>Pista basada en la ficha</strong>
-                  <small>Fuente: pág. 13</small>
+                  <strong>Pista de AImauta</strong>
+                  <small>Fuente: cuaderno, pág. 13</small>
                 </div>
                 <span className="status-dot" title="Disponible" />
               </div>
@@ -98,35 +99,108 @@ export default async function CatalogPage() {
         </div>
       </section>
 
+      <section className="problem-section shell" aria-labelledby="problema">
+        <div className="problem-copy">
+          <p className="eyebrow">El problema</p>
+          <h2 id="problema">
+            Un material disponible no es lo mismo que un estudiante
+            acompañado.
+          </h2>
+        </div>
+        <div className="problem-body">
+          <p>
+            El Perú produce materiales educativos de gran valor. Pero entregar
+            un libro o publicar un PDF no garantiza que un estudiante pueda
+            comprenderlo y usarlo por su cuenta.
+          </p>
+          <p>
+            Cuando se atasca, casi siempre necesita lo mismo: que alguien le
+            haga la pregunta adecuada. Qué datos reconoce, qué ya intentó, qué
+            relación encuentra, por qué eligió esa estrategia.
+          </p>
+          <p>
+            El docente no puede acompañar individualmente a toda su aula al
+            mismo tiempo, y muchas familias no cuentan con el tiempo o los
+            conocimientos para hacerlo en casa.
+          </p>
+          <p className="problem-turn">AImauta nace para cubrir ese espacio.</p>
+        </div>
+      </section>
+
       <section className="learning-principles shell" aria-label="Cómo funciona">
         <article>
           <span className="principle-number">01</span>
           <div>
-            <h2>Abre una ficha</h2>
-            <p>Elige Construimos o Comprobamos y lee el ejercicio en el PDF.</p>
+            <h2>Lee el ejercicio</h2>
+            <p>El cuaderno se abre completo, con el ejercicio a la vista.</p>
           </div>
         </article>
         <article>
           <span className="principle-number">02</span>
           <div>
-            <h2>Escribe tu intento</h2>
-            <p>Escribe cómo lo resolverías, aunque todavía tengas dudas.</p>
+            <h2>Cuenta qué intentaste</h2>
+            <p>
+              Explica tu estrategia o dónde te trabaste. No necesitas tenerlo
+              resuelto.
+            </p>
           </div>
         </article>
         <article>
           <span className="principle-number">03</span>
           <div>
-            <h2>Pide una pista y abre la cita</h2>
-            <p>AImauta orienta sin resolver y muestra la página que consultó.</p>
+            <h2>Avanza con una pista</h2>
+            <p>
+              Recibes una pregunta que te acerca, y la página exacta que la
+              respalda.
+            </p>
           </div>
         </article>
+      </section>
+
+      <section className="commitment-section shell" aria-labelledby="compromisos">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Cómo lo hacemos</p>
+            <h2 id="compromisos">Cuatro compromisos</h2>
+          </div>
+        </div>
+        <div className="commitment-grid">
+          <article>
+            <h3>Aprovecha lo que ya existe</h3>
+            <p>
+              Trabaja sobre materiales curriculares oficiales. No propone un
+              currículo paralelo ni pide crear contenido desde cero.
+            </p>
+          </article>
+          <article>
+            <h3>Cada orientación tiene origen</h3>
+            <p>
+              Toda pista queda vinculada al material y la página que la
+              respalda, y el estudiante puede abrirla para comprobarlo.
+            </p>
+          </article>
+          <article>
+            <h3>No funciona como solucionario</h3>
+            <p>
+              Empieza por preguntas. La respuesta completa no llega antes que
+              el razonamiento del estudiante.
+            </p>
+          </article>
+          <article>
+            <h3>Genera evidencia útil</h3>
+            <p>
+              Registra intentos, pistas usadas y autonomía alcanzada: no solo
+              si la respuesta fue correcta.
+            </p>
+          </article>
+        </div>
       </section>
 
       <section className="library-section shell" id="biblioteca">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Piloto disponible</p>
-            <h2>Matemática de 1.º y 2.º de secundaria</h2>
+            <p className="eyebrow">Empieza aquí</p>
+            <h2>Cuadernos listos para trabajar</h2>
           </div>
           <p>
             {books.length}{" "}
@@ -139,12 +213,59 @@ export default async function CatalogPage() {
         <CatalogLibrary books={books} />
       </section>
 
+      <section className="teacher-section shell" aria-labelledby="docentes">
+        <div className="teacher-copy">
+          <p className="eyebrow eyebrow-pending">En desarrollo</p>
+          <h2 id="docentes">Para el aula</h2>
+          <p className="teacher-lead">
+            El docente podrá seleccionar ejercicios, armar una tarea y
+            compartirla con un enlace o un código QR. Sin instalar nada: el
+            estudiante escanea y empieza.
+          </p>
+          <p className="teacher-lead">
+            Al terminar, el panel no muestra solo quién acertó. Muestra dónde
+            se atascó el aula, qué pistas ayudaron y quién necesita una
+            explicación adicional en la próxima clase.
+          </p>
+          <p className="teacher-promise">
+            AImauta no reemplaza al profesor. Extiende su capacidad de
+            acompañar.
+          </p>
+        </div>
+        <ul className="teacher-list">
+          <li>Asignar ejercicios por enlace o QR</li>
+          <li>Ver intentos, pistas y autonomía por estudiante</li>
+          <li>Identificar los ejercicios más difíciles del aula</li>
+          <li>Revisar y desactivar contenido antes de asignarlo</li>
+        </ul>
+      </section>
+
       <footer className="site-footer shell">
-        <Link className="brand brand-small" href="/" aria-label="AImauta, inicio">
-          <BrandMark />
-          <span>AImauta</span>
-        </Link>
-        <p>Cada pista muestra de dónde sale.</p>
+        <div className="footer-top">
+          <Link
+            className="brand brand-small"
+            href="/"
+            aria-label="AImauta, inicio"
+          >
+            <BrandMark />
+            <span>AImauta</span>
+          </Link>
+          <p>
+            AImauta convierte cada ejercicio en una conversación que enseña a
+            pensar.
+          </p>
+        </div>
+        <div className="footer-bottom">
+          <p className="footer-disclaimer">
+            Proyecto independiente. Utiliza materiales educativos del
+            repositorio institucional del MINEDU citando su fuente. No es una
+            plataforma oficial del MINEDU ni cuenta con su aval o patrocinio.
+          </p>
+          <nav className="footer-links" aria-label="Enlaces legales">
+            <Link href="/terminos">Términos de uso</Link>
+            <Link href="/privacidad">Privacidad y datos</Link>
+          </nav>
+        </div>
       </footer>
     </main>
   );
