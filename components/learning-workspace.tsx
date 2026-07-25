@@ -156,7 +156,7 @@ function exerciseModeCopy({
       banner: {
         title: "Evaluación: ayuda en pausa",
         body:
-          "Puedes leer y navegar por el PDF; los recuadros, el RAG y las pistas están desactivados.",
+          "Puedes leer y navegar por el cuaderno; los ejercicios y las pistas están desactivados.",
         tone: "neutral",
       },
     };
@@ -166,10 +166,10 @@ function exerciseModeCopy({
     return {
       quickstartTitle: "Visor en modo lectura",
       quickstartBody:
-        "Puedes leer el PDF, pero este visor alternativo no permite seleccionar ejercicios.",
+        "Puedes leer el cuaderno, pero en esta vista no se pueden seleccionar ejercicios.",
       focusTitle: "Visor en modo lectura",
       focusBody:
-        "Vuelve a PDF.js desde el visor para recuperar los recuadros interactivos.",
+        "Vuelve al visor interactivo para recuperar los ejercicios marcados.",
       focusTone: "neutral",
       focusIcon: "i",
       attemptEyebrow: "Notas de lectura",
@@ -178,15 +178,15 @@ function exerciseModeCopy({
         "Escribe una idea, un dato importante o el procedimiento que intentarías…",
       reviewButtonLabel: "Tutor no disponible",
       chatPlaceholder:
-        "El chat requiere PDF.js y un ejercicio interactivo seleccionado.",
+        "Para conversar necesitas el visor interactivo y un ejercicio seleccionado.",
       tutorPromise:
-        "En modo lectura, AImauta no consulta RAG ni entrega ayuda.",
+        "En modo lectura, AImauta no consulta el cuaderno ni da pistas.",
       tutorDisabledReason:
-        "El visor está en modo lectura; recarga PDF.js para seleccionar un ejercicio.",
+        "El visor está en modo lectura; recárgalo para seleccionar un ejercicio.",
       banner: {
         title: "Visor en modo lectura",
         body:
-          "El PDF sigue disponible, pero aquí no se pueden seleccionar ejercicios.",
+          "El cuaderno sigue disponible, pero aquí no se pueden seleccionar ejercicios.",
         tone: "neutral",
       },
     };
@@ -196,8 +196,8 @@ function exerciseModeCopy({
     return {
       quickstartTitle: "Preparando el modo interactivo",
       quickstartBody:
-        "El PDF ya está disponible; estamos comprobando si esta página tiene ejercicios revisados.",
-      focusTitle: "Buscando ejercicios interactivos…",
+        "El cuaderno ya está disponible; estamos comprobando si esta página tiene ejercicios.",
+      focusTitle: "Buscando ejercicios…",
       focusBody: "Puedes empezar a leer mientras termina la comprobación.",
       focusTone: "neutral",
       focusIcon: "…",
@@ -206,14 +206,14 @@ function exerciseModeCopy({
       attemptPlaceholder:
         "Escribe una idea, un dato importante o el procedimiento que intentarías…",
       reviewButtonLabel: "Comprobando ejercicios",
-      chatPlaceholder: "El chat se habilitará si hay un ejercicio publicado.",
+      chatPlaceholder: "Podrás conversar si esta página tiene un ejercicio.",
       tutorPromise:
-        "AImauta sólo abrirá el RAG cuando encuentre un ejercicio revisado.",
+        "AImauta dará pistas cuando encuentre un ejercicio revisado en esta página.",
       tutorDisabledReason:
-        "Estamos comprobando los ejercicios publicados de esta página.",
+        "Estamos comprobando los ejercicios de esta página.",
       banner: {
-        title: "Preparando ejercicios interactivos",
-        body: "El PDF ya está disponible; puedes empezar a leer.",
+        title: "Preparando los ejercicios",
+        body: "El cuaderno ya está disponible; puedes empezar a leer.",
         tone: "neutral",
         loading: true,
       },
@@ -224,10 +224,10 @@ function exerciseModeCopy({
     return {
       quickstartTitle: "Modo lectura seguro",
       quickstartBody:
-        "Este libro todavía no tiene ejercicios interactivos publicados. El PDF permanece disponible.",
-      focusTitle: "Ejercicios interactivos en preparación",
+        "Este cuaderno todavía no tiene ejercicios preparados. Puedes seguir leyéndolo.",
+      focusTitle: "Ejercicios en preparación",
       focusBody:
-        "No mostramos recuadros aproximados: el RAG se abrirá cuando exista una detección revisada.",
+        "No marcamos ejercicios aproximados: aparecerán cuando una persona los haya revisado.",
       focusTone: "neutral",
       focusIcon: "i",
       attemptEyebrow: "Notas de lectura",
@@ -236,15 +236,15 @@ function exerciseModeCopy({
         "Escribe una idea, un dato importante o el procedimiento que intentarías…",
       reviewButtonLabel: "Pistas no disponibles",
       chatPlaceholder:
-        "El chat se habilitará cuando haya ejercicios interactivos publicados.",
+        "Podrás conversar cuando este cuaderno tenga ejercicios preparados.",
       tutorPromise:
-        "Sin ejercicios revisados, AImauta no consulta RAG ni entrega ayuda.",
+        "Sin ejercicios revisados, AImauta no consulta el cuaderno ni da pistas.",
       tutorDisabledReason:
-        "Este material todavía no tiene ejercicios interactivos publicados.",
+        "Este cuaderno todavía no tiene ejercicios preparados.",
       banner: {
-        title: "Ejercicios interactivos en preparación",
+        title: "Ejercicios en preparación",
         body:
-          "Puedes leer y navegar por el PDF; los recuadros, el RAG y las pistas permanecen cerrados.",
+          "Puedes leer y navegar por el cuaderno; los ejercicios y las pistas siguen cerrados.",
         tone: "neutral",
         retryLabel: "Comprobar de nuevo",
       },
@@ -255,10 +255,10 @@ function exerciseModeCopy({
     return {
       quickstartTitle: "Modo lectura temporal",
       quickstartBody:
-        "No pudimos comprobar los ejercicios interactivos. El PDF sigue disponible.",
+        "No pudimos comprobar los ejercicios. El cuaderno sigue disponible.",
       focusTitle: "No pudimos cargar los ejercicios",
       focusBody:
-        "No mostraremos recuadros ni abriremos el RAG hasta recuperar una versión válida.",
+        "No marcaremos ejercicios ni daremos pistas hasta recuperar una versión válida.",
       focusTone: "warning",
       focusIcon: "!",
       attemptEyebrow: "Notas de lectura",
@@ -267,15 +267,15 @@ function exerciseModeCopy({
         "Escribe una idea, un dato importante o el procedimiento que intentarías…",
       reviewButtonLabel: "Pistas no disponibles",
       chatPlaceholder:
-        "El chat permanecerá cerrado hasta recuperar los ejercicios.",
+        "La conversación seguirá cerrada hasta recuperar los ejercicios.",
       tutorPromise:
-        "Ante un error, AImauta permanece cerrado y no usa datos incompletos.",
+        "Ante un error, AImauta prefiere callar antes que usar material incompleto.",
       tutorDisabledReason:
         "No pudimos cargar una versión válida de los ejercicios.",
       banner: {
         title: "Modo lectura temporal",
         body:
-          "No pudimos cargar los ejercicios interactivos. El PDF sigue disponible.",
+          "No pudimos cargar los ejercicios. El cuaderno sigue disponible.",
         tone: "warning",
         retryLabel: "Reintentar ejercicios",
       },
@@ -286,10 +286,10 @@ function exerciseModeCopy({
     return {
       quickstartTitle: "Modo lectura",
       quickstartBody:
-        "Esta página todavía no tiene ejercicios interactivos. Puedes seguir navegando por el PDF.",
+        "Esta página todavía no tiene ejercicios. Puedes seguir navegando por el cuaderno.",
       focusTitle: "Sin ejercicios en esta página",
       focusBody:
-        "Las pistas seguirán desactivadas; cambia de página para buscar un ejercicio publicado.",
+        "Las pistas seguirán desactivadas; cambia de página para buscar un ejercicio.",
       focusTone: "neutral",
       focusIcon: "i",
       attemptEyebrow: "Notas de lectura",
@@ -298,15 +298,15 @@ function exerciseModeCopy({
         "Escribe una idea, un dato importante o el procedimiento que intentarías…",
       reviewButtonLabel: "Pistas no disponibles",
       chatPlaceholder:
-        "Selecciona una página con un ejercicio interactivo para usar el chat.",
+        "Ve a una página con un ejercicio marcado para conversar.",
       tutorPromise:
-        "En esta página, AImauta no consulta RAG ni entrega ayuda.",
+        "En esta página, AImauta no consulta el cuaderno ni da pistas.",
       tutorDisabledReason:
-        "Esta página no tiene ejercicios interactivos publicados.",
+        "Esta página no tiene ejercicios preparados.",
       banner: {
         title: "Modo lectura",
         body:
-          "Esta página no tiene ejercicios interactivos; el PDF y su navegación siguen disponibles.",
+          "Esta página no tiene ejercicios; puedes seguir leyendo y navegando el cuaderno.",
         tone: "neutral",
       },
     };
@@ -314,34 +314,34 @@ function exerciseModeCopy({
 
   if (hasActiveExercise) {
     return {
-      quickstartTitle: "Pistas con fuentes activas",
+      quickstartTitle: "Listo para pedir una pista",
       quickstartBody:
-        "Escribe tu intento y pide una pista. Pulsa su cita para abrir la página usada.",
+        "Escribe tu intento y pide una pista. Pulsa su fuente para abrir la página que la respalda.",
       focusTitle: "Ejercicio activo",
       focusBody:
-        "El RAG y las pistas quedaron vinculados únicamente a este recuadro.",
+        "Las pistas quedaron vinculadas únicamente a este ejercicio.",
       focusTone: "active",
       focusIcon: "✓",
       attemptEyebrow: "Paso 1 · Tu razonamiento",
       attemptTitle: "Escribe qué intentaste",
       attemptPlaceholder:
         "Explica qué entendiste, qué datos usarías o cuál sería tu primer paso…",
-      reviewButtonLabel: "Pedir una pista con cita",
+      reviewButtonLabel: "Pedir una pista con fuente",
       chatPlaceholder: "Escribe tu duda sobre el ejercicio de esta página…",
       tutorPromise:
-        "La ayuda usa este ejercicio y cita sus páginas. La respuesta revisada aparece sólo después de tres pistas y varios intentos.",
+        "Cada pista sale de este ejercicio y muestra su página. La respuesta completa aparece sólo después de tres pistas y varios intentos.",
       tutorDisabledReason: "",
       banner: null,
     };
   }
 
   return {
-    quickstartTitle: "Activa el RAG en un ejercicio",
+    quickstartTitle: "Elige un ejercicio para empezar",
     quickstartBody:
-      "Pulsa la etiqueta de un recuadro rojo. Luego escribe tu intento y pide una pista con fuente.",
+      "Pulsa la etiqueta de un ejercicio marcado en rojo. Luego escribe tu intento y pide una pista.",
     focusTitle: "Elige un ejercicio",
     focusBody:
-      "Pulsa la etiqueta de un recuadro rojo sobre el PDF para vincular el RAG.",
+      "Pulsa la etiqueta de un ejercicio marcado en rojo sobre el cuaderno.",
     focusTone: "selectable",
     focusIcon: "▢",
     attemptEyebrow: "Trabajo individual",
@@ -350,9 +350,9 @@ function exerciseModeCopy({
       "Explica qué entendiste, qué datos usarías o cuál sería tu primer paso…",
     reviewButtonLabel: "Selecciona un ejercicio",
     chatPlaceholder:
-      "Selecciona primero un recuadro rojo para habilitar el chat.",
+      "Selecciona primero un ejercicio marcado en rojo.",
     tutorPromise:
-      "AImauta sólo consulta RAG después de seleccionar un ejercicio publicado.",
+      "AImauta consulta el cuaderno sólo después de que elijas un ejercicio.",
     tutorDisabledReason:
       "Selecciona primero un ejercicio marcado en rojo.",
     banner: null,
@@ -373,7 +373,7 @@ function welcomeMessage(activity?: PageActivity): ConversationMessage {
     return {
       id: crypto.randomUUID(),
       role: "tutor",
-      content: `Estás en la ficha ${activity.unitNumber}: ${activity.unitTitle}. Lee el material y escribe tu primer intento. Si la página tiene un ejercicio revisado, podrás seleccionarlo para pedir una pista con fuente.`,
+      content: `Estás en la ficha ${activity.unitNumber}: ${activity.unitTitle}. Lee el material y escribe tu primer intento. Si la página tiene un ejercicio marcado, podrás seleccionarlo para pedir una pista.`,
     };
   }
 
@@ -381,7 +381,7 @@ function welcomeMessage(activity?: PageActivity): ConversationMessage {
     id: "welcome",
     role: "tutor",
     content:
-      "Lee el material y escribe tu primer intento. AImauta sólo habilitará pistas con fuente cuando selecciones un ejercicio revisado.",
+      "Lee el material y escribe tu primer intento. Las pistas se habilitan cuando seleccionas un ejercicio marcado.",
   };
 }
 
@@ -1083,8 +1083,8 @@ export function LearningWorkspace({
 
         <aside className="coach-panel coach-panel-session" aria-label="Sesión guiada">
           <section className="session-context-section">
-            <div className="rag-quickstart" role="note">
-              <span aria-hidden="true">RAG</span>
+            <div className="guide-quickstart" role="note">
+              <span aria-hidden="true">GUÍA</span>
               <div>
                 <strong>{modeCopy.quickstartTitle}</strong>
                 <p>{modeCopy.quickstartBody}</p>

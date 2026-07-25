@@ -62,7 +62,7 @@ export async function guideLearningTurn(input: {
         verifiedActivity.stage === "assessment" &&
         verifiedActivity.unitId !== null
           ? "Estás en la etapa Evaluamos. Aquí AImauta guarda silencio para que puedas demostrar lo que aprendiste por tu cuenta."
-          : "Esta página no tiene tutor habilitado. AImauta no consultará el índice ni ofrecerá pistas aquí.",
+          : "En esta página AImauta no da pistas ni consulta el cuaderno.",
       citations: [],
       mode: "assessment-locked",
       sessionToken: current.token,
@@ -85,7 +85,7 @@ export async function guideLearningTurn(input: {
     });
     return {
       message:
-        "Selecciona primero uno de los ejercicios marcados sobre el PDF. Sin un ejercicio publicado, AImauta no consulta el índice ni genera pistas.",
+        "Selecciona primero uno de los ejercicios marcados sobre el cuaderno. Hasta entonces, AImauta no consulta el material ni da pistas.",
       citations: [],
       mode: "exercise-locked",
       sessionToken: current.token,
@@ -133,7 +133,7 @@ export async function guideLearningTurn(input: {
     .map((item, index) => ({ ...item, sourceId: `S${index + 1}` }));
   if (evidence.length === 0) {
     throw new LearningSessionError(
-      "El ejercicio seleccionado no tiene evidencia pública verificable.",
+      "El ejercicio seleccionado no tiene material de referencia disponible.",
       "exercise"
     );
   }
