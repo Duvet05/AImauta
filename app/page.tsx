@@ -51,6 +51,7 @@ export default async function CatalogPage() {
                 fill
                 priority
                 sizes="(max-width: 980px) 0px, 300px"
+                unoptimized
               />
             </div>
             <div className="demo-orbit demo-orbit-one" aria-hidden="true" />
@@ -82,6 +83,7 @@ export default async function CatalogPage() {
                 alt=""
                 fill
                 sizes="(max-width: 980px) 0px, 220px"
+                unoptimized
               />
             </div>
             <div className="demo-note demo-note-left" aria-hidden="true">

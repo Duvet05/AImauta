@@ -9,6 +9,7 @@ export function BrandMark() {
         alt=""
         width={48}
         height={48}
+        unoptimized
       />
     </span>
   );
