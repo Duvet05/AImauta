@@ -134,11 +134,13 @@ type ExerciseModeCopy = {
 function exerciseModeCopy({
   availability,
   isAssessment,
+  pageGuideAvailable,
   viewerMode,
   hasActiveExercise,
 }: {
   availability: ExerciseAvailability;
   isAssessment: boolean;
+  pageGuideAvailable: boolean;
   viewerMode: ViewerMode;
   hasActiveExercise: boolean;
 }): ExerciseModeCopy {
@@ -198,6 +200,41 @@ function exerciseModeCopy({
           "El cuaderno sigue disponible, pero aquí no se pueden seleccionar ejercicios.",
         tone: "neutral",
       },
+    };
+  }
+
+  if (pageGuideAvailable && !hasActiveExercise) {
+    return {
+      quickstartTitle: "Tutor por página listo",
+      quickstartBody:
+        "Escribe qué entendiste o qué intentaste. AImauta consultará únicamente la página visible y citará la fuente.",
+      focusTitle: "Página conectada al tutor",
+      focusBody:
+        availability === "available"
+          ? "Puedes pedir ayuda sobre la página o seleccionar un ejercicio marcado."
+          : "Puedes pedir ayuda sobre la página aunque sus ejercicios todavía no estén marcados.",
+      focusTone: "active",
+      focusIcon: "✓",
+      attemptEyebrow: "Paso 1 · Tu razonamiento",
+      attemptTitle: "Explica qué intentaste",
+      attemptPlaceholder:
+        "Escribe qué entendiste, qué datos usarías o en qué paso te trabaste…",
+      reviewButtonLabel: "Pedir una pista con fuente",
+      chatPlaceholder: "Pregunta sobre el contenido de esta página…",
+      tutorPromise:
+        "AImauta usa evidencia de la página visible y no revela una respuesta final sin revisión.",
+      tutorDisabledReason:
+        "El tutor por página no está disponible en este momento.",
+      banner:
+        availability === "failed"
+          ? {
+              title: "Tutor por página disponible",
+              body:
+                "Los marcadores no cargaron, pero puedes conversar usando la página visible.",
+              tone: "neutral",
+              retryLabel: "Reintentar marcadores",
+            }
+          : null,
     };
   }
 
@@ -456,8 +493,6 @@ export function LearningWorkspace({
         : "error";
   const tutorAvailable =
     pageTutorAvailable &&
-    activeExercise !== null &&
-    exerciseAvailability === "available" &&
     viewerMode === "pdfjs" &&
     !isSyncingPage &&
     !assignmentItemCompleted;
@@ -466,12 +501,12 @@ export function LearningWorkspace({
   const modeCopy = exerciseModeCopy({
     availability: exerciseAvailability,
     isAssessment,
+    pageGuideAvailable: pageTutorAvailable,
     viewerMode,
     hasActiveExercise: activeExercise !== null,
   });
   const interactiveSupportAvailable =
     pageTutorAvailable &&
-    exerciseAvailability === "available" &&
     viewerMode === "pdfjs";
 
   const applySession = useCallback((result: SessionResponse) => {

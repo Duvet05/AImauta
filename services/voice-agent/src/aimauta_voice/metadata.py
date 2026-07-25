@@ -14,8 +14,8 @@ class RoomMetadata(BaseModel):
     grade: str = Field(max_length=100)
     language: str = "es-PE"
     stage: str
-    exercise_id: str = Field(min_length=1, max_length=160)
-    exercise_revision: int = Field(ge=1)
+    exercise_id: str | None = Field(default=None, min_length=1, max_length=160)
+    exercise_revision: int | None = Field(default=None, ge=1)
     mode: str
 
     def model_post_init(self, __context: object) -> None:
@@ -23,6 +23,8 @@ class RoomMetadata(BaseModel):
             raise ValueError("La sala no pertenece al tutor socrático AImauta")
         if self.page > self.total_pages:
             raise ValueError("Página fuera del material")
+        if (self.exercise_id is None) != (self.exercise_revision is None):
+            raise ValueError("La selección del ejercicio está incompleta")
 
 
 class DispatchMetadata(BaseModel):

@@ -50,8 +50,16 @@ export default async function CatalogPage() {
 
         <nav className="topbar shell" aria-label="Navegación principal">
           <Link className="brand" href="/" aria-label="AImauta, inicio">
-            <BrandMark />
-            <span>AImauta</span>
+            <Image
+              className="brand-primary-logo"
+              src="/brand/ASD.png"
+              alt=""
+              width={924}
+              height={232}
+              priority
+              unoptimized
+            />
+            <span className="sr-only">AImauta</span>
           </Link>
           <a className="quiet-link" href="#biblioteca">
             Ver cuadernos

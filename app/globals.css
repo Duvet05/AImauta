@@ -178,6 +178,13 @@ svg {
   padding: 0.16rem;
 }
 
+.brand-primary-logo {
+  display: block;
+  width: clamp(10.5rem, 18vw, 13.5rem);
+  height: auto;
+  border-radius: 0.3rem;
+}
+
 .quiet-link {
   padding: 0.55rem 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.55);
@@ -2034,6 +2041,10 @@ svg {
 
   .topbar {
     min-height: 70px;
+  }
+
+  .brand-primary-logo {
+    width: clamp(9.5rem, 48vw, 11.5rem);
   }
 
   .hero-content {

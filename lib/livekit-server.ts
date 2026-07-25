@@ -101,15 +101,11 @@ export async function createVoiceAccess(sessionToken: string): Promise<{
     windowMs: 60_000
   });
   const activity = getPageActivity(session.bookId, session.page);
-  if (
-    !activity.tutorAvailable ||
-    session.exerciseId === null ||
-    session.exerciseRevision === null
-  ) {
+  if (!activity.tutorAvailable) {
     throw new VoiceUnavailableError(
       activity.stage === "assessment" && activity.unitId !== null
         ? "El tutor de voz está en pausa durante Evaluamos."
-        : "Selecciona un ejercicio publicado antes de activar la voz."
+        : "El tutor de voz no está disponible en esta página."
     );
   }
 
@@ -118,25 +114,38 @@ export async function createVoiceAccess(sessionToken: string): Promise<{
   // configured deployment still revalidates publication before any LiveKit
   // room or token operation.
   const config = configuration();
-  let exercise;
-  try {
-    exercise = await getPublishedExercise(
-      session.bookId,
-      session.exerciseId
-    );
-  } catch {
-    throw new VoiceUnavailableError(
-      "El ejercicio seleccionado ya no está disponible."
-    );
-  }
   if (
-    !exercise ||
-    exercise.revision !== session.exerciseRevision ||
-    !exercise.regions.some((region) => region.page === session.page)
+    session.exerciseId !== null ||
+    session.exerciseRevision !== null
   ) {
-    throw new VoiceUnavailableError(
-      "El ejercicio seleccionado ya no está disponible."
-    );
+    if (
+      session.exerciseId === null ||
+      session.exerciseRevision === null
+    ) {
+      throw new VoiceUnavailableError(
+        "La selección del ejercicio está incompleta."
+      );
+    }
+    let exercise;
+    try {
+      exercise = await getPublishedExercise(
+        session.bookId,
+        session.exerciseId
+      );
+    } catch {
+      throw new VoiceUnavailableError(
+        "El ejercicio seleccionado ya no está disponible."
+      );
+    }
+    if (
+      !exercise ||
+      exercise.revision !== session.exerciseRevision ||
+      !exercise.regions.some((region) => region.page === session.page)
+    ) {
+      throw new VoiceUnavailableError(
+        "El ejercicio seleccionado ya no está disponible."
+      );
+    }
   }
 
   const book = getBook(session.bookId);
