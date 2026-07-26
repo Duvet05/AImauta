@@ -152,20 +152,23 @@ export default function PrivacidadPage() {
               audios, imágenes ni datos de navegación.
             </p>
             <p>
-              Para producir una pista, AImauta envía temporalmente al proveedor
-              configurado —OpenAI, xAI o Google Gemini— el texto acotado de la
-              pregunta, el intento y fragmentos del material curricular. No
-              adjunta el token QR, el token firmado de sesión, notas ni
-              identificadores del directorio escolar. Como el intento es texto
-              libre, podría contener un dato personal que el propio estudiante
-              escriba; se debe evitar incluirlo.
+              Para producir una pista, AImauta procesa de forma predeterminada
+              el texto acotado de la pregunta, el intento y fragmentos del
+              material curricular con Gemma 4 en infraestructura privada. Si el
+              responsable habilita explícitamente un fallback de nube, ese
+              mismo contenido puede enviarse temporalmente a OpenAI, xAI o
+              Google Gemini. No adjunta el token QR, el token firmado de sesión,
+              notas ni identificadores del directorio escolar. Como el intento
+              es texto libre, podría contener un dato personal que el propio
+              estudiante escriba; se debe evitar incluirlo.
             </p>
             <p>
-              Las solicitudes se realizan con almacenamiento de respuesta
-              desactivado. Aun así, cada proveedor mantiene controles y
-              retenciones independientes para seguridad y monitoreo de abuso.
-              Un acuerdo o configuración de retención cero debe verificarse por
-              separado antes de un piloto institucional.
+              En los fallbacks de nube, las solicitudes se realizan con
+              almacenamiento de respuesta desactivado. Aun así, cada proveedor
+              mantiene controles y retenciones independientes para seguridad y
+              monitoreo de abuso. Un acuerdo o configuración de retención cero
+              debe verificarse por separado antes de habilitarlos en un piloto
+              institucional.
               Consulte los{" "}
               <a href="https://developers.openai.com/api/docs/guides/your-data">
                 controles de datos de OpenAI

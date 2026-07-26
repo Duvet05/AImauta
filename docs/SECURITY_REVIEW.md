@@ -142,13 +142,13 @@ El CI es completo (catalog:validate, typecheck, lint, vitest, build, pytest del 
 
 ## Fortalezas confirmadas (preservar)
 
-- **Tutor:** guard de salida cerrado — OpenAI, xAI o Gemini elige **1 de 5 etiquetas**;
-  cualquier desviación se descarta y cae a plantilla determinista
+- **Tutor:** guard de salida cerrado — Gemma o un fallback cloud elige **1 de 5
+  etiquetas**; cualquier desviación se descarta y cae a plantilla determinista
   (`lib/pedagogy.ts`, `lib/tutor-service.ts`). HMAC-SHA-256 con
   `timingSafeEqual` y anti-replay monotónico. Auth interna fail-closed con
-  comparación en tiempo constante. El router sólo acepta OpenAI `gpt-4.1`,
-  xAI `grok-4.3` y Gemini `gemini-3.6-flash` en una cadena explícita; Ollama
-  queda fuera del runtime de tutoría hasta una migración posterior.
+  comparación en tiempo constante. El router Ollama sólo acepta loopback, el
+  modelo Gemma fijado, respuestas acotadas y sin redirecciones; OpenAI, xAI y
+  Gemini requieren selección y credenciales explícitas como fallbacks.
 - **Ejercicios:** separación pública/privada estricta, `O_NOFOLLOW`, integridad fail-closed y **revisión humana obligatoria**. El bundle privado activa público, solución y evidencia regional con un solo `rename`, lock recuperable y rollback.
 - **Config/flags/ops:** flags fail-closed con el servidor como autoridad
   (`lib/feature-flags.ts`, `app/api/livekit/token/route.ts:24`); solo el valor

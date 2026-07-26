@@ -50,9 +50,9 @@ PowerEdge: Next.js (standalone) ─────────┤                  
   │    └─ índices v2 read-only
   ├─ directorio + tareas QR ─ Prisma ─► PostgreSQL            (sin LLM propio)
   ├─ API LiveKit                         │
-  ├─ HTTPS ──────────────────────────────┴─► OpenAI → xAI → Gemini
-  └─ túnel SSH opcional 127.0.0.1:11435 ──► Aule 127.0.0.1:11434
-                                              (Gemma posterior)
+  ├─ túnel SSH 127.0.0.1:11435 ─────────┴─► Aule 127.0.0.1:11434
+  │                                            (Gemma 4 primario)
+  └─ HTTPS opcional ───────────────────────► OpenAI / xAI / Gemini
 
 Pipeline offline (operador):  PDF MINEDU ─► content:sync/index ─► ingest
                               ─► Gemma 4 Ollama (Google opcional explícito)
@@ -63,10 +63,9 @@ PowerEdge conserva la autoridad pedagógica, el contenido, el recuperador y el
 worker. El servicio RAG separado adapta el límite HTTP del prototipo de Marcelo,
 pero abre únicamente los índices v2 verificados de AImauta y escucha solo en
 `127.0.0.1:3310`; no recibe claves de modelo, PDFs arbitrarios ni datos
-persistentes del estudiante. El router temporal usa la cadena explícita
-OpenAI → xAI → Gemini del ejemplo de despliegue. El túnel privado a
-Ollama/Aule se conserva para una migración posterior a Gemma, pero el router
-actual no lo selecciona. LiveKit Cloud transporta el audio y ejecuta STT/TTS
+persistentes del estudiante. El router usa Gemma 4 en Ollama/Aule como primario
+por el túnel privado; OpenAI, xAI y Gemini son fallbacks opcionales y
+explícitos. LiveKit Cloud transporta el audio y ejecuta STT/TTS
 por *Inference*. La ingesta de ejercicios es offline y usa Gemma 4 por el
 túnel privado; Google permanece como modo alternativo explícito.
 
@@ -273,21 +272,23 @@ sobreviva.
 > índice validado localmente. Esta segunda ruta siempre mantiene
 > `canRevealSolution=false`. Ambas excluyen `Evaluamos` y `teacherOnly`.
 
-### Router temporal y presupuesto de inferencia
+### Router Gemma-first y presupuesto de inferencia
 
-`lib/llm.ts` admite una cadena cerrada y explícita de hasta tres proveedores:
-OpenAI `gpt-4.1`, xAI `grok-4.3` y Gemini `gemini-3.6-flash`. El ejemplo de
-operación conserva OpenAI como primario y ordena xAI y Gemini como fallbacks,
-pero cualquiera de los tres puede ser el primario si se nombra expresamente.
-Los endpoints y modelos están permitidos en código; una variable que intente
-seleccionar otro proveedor o modelo —incluido Ollama— no genera tráfico. No hay
-reintentos dentro de un proveedor.
+`lib/llm.ts` admite una cadena cerrada y explícita de hasta tres intentos entre
+Ollama `gemma4:e4b-it-qat`, OpenAI `gpt-4.1`, xAI `grok-4.3` y Gemini
+`gemini-3.6-flash`. La configuración predeterminada intenta sólo Gemma 4; los
+proveedores cloud deben nombrarse explícitamente como fallbacks. Los endpoints
+y modelos están permitidos en código: Ollama sólo acepta loopback y valida el
+modelo tanto al enviar como al recibir. No hay reintentos dentro de un
+proveedor.
 
-OpenAI y xAI reciben una petición mínima por Responses API. Gemini usa
+Gemma recibe una petición local `/api/chat` con `think: false`, salida acotada
+y redirecciones bloqueadas. OpenAI y xAI reciben una petición mínima por
+Responses API. Gemini usa
 `generateContent` en el endpoint fijo de Google, autentica por
 `x-goog-api-key`, solicita razonamiento `minimal` sin resúmenes de pensamiento
-y rechaza respuestas truncadas, múltiples o sin un único texto final. Las tres
-rutas envían `store: false`. OpenAI recibe como `safety_identifier` únicamente
+y rechaza respuestas truncadas, múltiples o sin un único texto final. Las rutas
+cloud envían `store: false`. OpenAI recibe como `safety_identifier` únicamente
 un hash unidireccional del UUID efímero de sesión; xAI se invoca sin
 razonamiento extendido. El backend no adjunta el token HMAC, el token QR, notas ni
 identificadores del directorio escolar. Sí se procesan el texto libre que el
@@ -300,8 +301,9 @@ tokens usados o reservados; no guarda prompts, respuestas, sesiones, proveedor
 ni estudiante. Los máximos compilados son 300 intentos, 150 000 tokens de
 entrada y 6 000 de salida por día. Las variables de entorno pueden reducirlos,
 pero nunca aumentarlos. Hay además un máximo de dos solicitudes concurrentes,
-20 intentos por minuto y 15 segundos de timeout. Si PostgreSQL, el presupuesto
-o los proveedores no están disponibles, `tutor-service` usa la guía
+20 intentos por minuto, 45 segundos de timeout para Gemma local y 15 segundos
+para proveedores cloud. Si PostgreSQL, el presupuesto o los proveedores no
+están disponibles, `tutor-service` usa la guía
 determinista sin eludir el límite.
 
 `store: false` desactiva el almacenamiento de la petición en las APIs
@@ -425,7 +427,7 @@ por evolucionar la misma sesión.
 
 ```text
 Silero VAD ─► LiveKit Inference · Deepgram Nova-3 (STT)
-   └─► POST /api/internal/turn ─► tutor-service ─► router cloud o respaldo
+   └─► POST /api/internal/turn ─► tutor-service ─► Gemma / nube opcional / respaldo
    ◄─────────────────── respuesta aprobada
 ◄─ LiveKit Inference · Inworld TTS-2, voz «Diego» (TTS)
 ```
@@ -509,10 +511,10 @@ la indexación corren en PowerEdge; la Mac solo edita y versiona.
 Secretos obligatorios en producción (≥32 chars, independientes):
 `AIMAUTA_SESSION_SECRET`, `AIMAUTA_AGENT_SECRET`, `AIMAUTA_ADMIN_SECRET`,
 `AIMAUTA_ASSIGNMENT_ADMIN_SECRET` y `AIMAUTA_ASSIGNMENT_TOKEN_SECRET`; además
-se requieren `DATABASE_URL` y las credenciales del proveedor cloud elegido en un archivo
-runtime separado. Con voz activa se añaden las variables `LIVEKIT_*`. Ollama
-permanece disponible en `Aule` para la ingesta privada y la migración posterior
-del tutor, y se alcanza por un
+se requieren `DATABASE_URL` y la configuración loopback de Ollama en un archivo
+runtime separado. Las credenciales cloud sólo son necesarias al habilitar un
+fallback. Con voz activa se añaden las variables `LIVEKIT_*`. Ollama corre en
+`Aule` y se alcanza por un
 **túnel SSH local loopback** (`127.0.0.1:11435` → `127.0.0.1:11434`); nunca
 escucha en `0.0.0.0` ni por Funnel. Detalle operativo en
 [`DEPLOYMENT.md`](DEPLOYMENT.md).
@@ -531,11 +533,11 @@ PowerEdge (runtime público)
   ├─ worker de voz: adaptador sin LLM
   └─ PDFs autorizados, índices y manifiestos reproducibles
 
-Egress externo del runtime
-  └─ OpenAI → xAI → Google Gemini: selección pedagógica cerrada y explícita
+Egress externo opcional del runtime
+  └─ OpenAI / xAI / Google Gemini: fallbacks pedagógicos explícitos
 
-Canal privado opcional PowerEdge–Aule
-  └─ SSH sobre la tailnet: 127.0.0.1:11435 → Ollama 127.0.0.1:11434
+Canal privado PowerEdge–Aule
+  └─ SSH sobre la tailnet: Gemma 4 en 127.0.0.1:11435 → Ollama 127.0.0.1:11434
 
 Egress externo (pipeline offline)
   └─ Google generativelanguage.googleapis.com en modo ingesta explícito
@@ -549,8 +551,9 @@ Egress externo (pipeline offline)
   anti-replay es efímero y en memoria.
 - Las tareas QR guardan progreso y conteos anónimos por ejecución. El control
   LLM guarda solo contadores diarios agregados, nunca prompts ni respuestas.
-- Los proveedores LLM procesan temporalmente texto libre del intento y
-  evidencia curricular acotada; `store:false` no equivale a retención cero.
+- Gemma procesa el intento y la evidencia acotada en la infraestructura
+  privada. Los fallbacks cloud procesan ese contenido temporalmente si se
+  habilitan; `store:false` no equivale a retención cero.
 - El plano de directorio **sí** almacena PII (nombres, correos, notas de
   menores); su acceso está tras `AIMAUTA_ADMIN_SECRET` y pendiente de roles por
   usuario, retención y eliminación definidas.
@@ -561,5 +564,5 @@ La postura de seguridad, los hallazgos verificados y la hoja de ruta se
 documentan en [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md). Pendientes principales:
 autenticación por usuario (rol docente/admin) para el directorio; mover
 anti-replay y rate-limit a un almacén compartido antes de escalar; y definir la
-gobernanza de datos (consentimiento y retención verificada en OpenAI, xAI y
-Google) antes de un piloto con menores.
+gobernanza de datos (consentimiento y retención verificada para cualquier
+fallback cloud habilitado) antes de un piloto con menores.

@@ -35,6 +35,7 @@ export type TutorTurnResult = {
     chunkId: string;
   }>;
   mode:
+    | "ollama"
     | "openai"
     | "xai"
     | "gemini"
@@ -53,7 +54,7 @@ export type TutorTurnResult = {
 
 type GuidedMode = Extract<
   TutorTurnResult["mode"],
-  "openai" | "xai" | "gemini" | "guided-fallback"
+  "ollama" | "openai" | "xai" | "gemini" | "guided-fallback"
 >;
 
 async function createGuidedMessage(input: {

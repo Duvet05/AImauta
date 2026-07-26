@@ -10,10 +10,9 @@ y red del host:
   verificados en modo read-only y no recibe claves de modelo; su grupo
   suplementario usa `AIMAUTA_RUNTIME_GID` (por defecto `1000`) para conservar
   los archivos en `0640`/directorios en `0750`;
-- Next.js se liga exclusivamente a `127.0.0.1:3309`, llama al router LLM
-  OpenAI → xAI → Gemini configurado y conserva el túnel opcional de Ollama en
-  `127.0.0.1:11435` para la migración posterior a Gemma; el router actual no
-  selecciona Ollama;
+- Next.js se liga exclusivamente a `127.0.0.1:3309`, llama primero a Gemma 4
+  por el túnel Ollama de `127.0.0.1:11435` y sólo usa OpenAI, xAI o Gemini si
+  se habilitan explícitamente como fallbacks;
 - Nginx se liga exclusivamente a `127.0.0.1:3308` y es el único destino del
   proxy público.
 

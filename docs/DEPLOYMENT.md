@@ -15,8 +15,9 @@ expresamente que corresponden a Aule o a una consola de proveedor.
 
 - **PowerEdge:** Next.js, PDFs, servicio RAG interno y worker de voz
   autohospedados.
-- **Proveedores LLM temporales:** cadena explícita OpenAI, xAI y Gemini.
-- **Aule opcional:** Ollama con Gemma, escuchando solamente en loopback.
+- **Tutor LLM:** Gemma 4 en Ollama/Aule por túnel loopback privado.
+- **Fallbacks opcionales:** OpenAI, xAI y Gemini, deshabilitados salvo
+  configuración explícita.
 - **LiveKit Cloud:** señalización, SFU, TURN, dispatch, Deepgram STT e
   Inworld TTS.
 - **Tailscale + SSH:** canal privado PowerEdge–Aule para Ollama.
@@ -54,10 +55,9 @@ están dentro del repositorio ni de un release.
   Compose v2.
 - Python 3.12 o 3.13 en PowerEdge para ejecutar las pruebas del worker.
 - Tailscale y acceso SSH por llave desde PowerEdge hacia Aule.
-- Claves dedicadas de los proveedores cloud habilitados mientras se prepara
-  Gemma 4.
-- Opcionalmente, Ollama y `gemma4:e4b-it-qat` instalados en Aule para la
-  ingesta privada y la migración posterior del tutor.
+- Ollama y `gemma4:e4b-it-qat` instalados en Aule.
+- Opcionalmente, claves dedicadas para los proveedores cloud habilitados como
+  fallback.
 - Un proyecto LiveKit Cloud y un par API dedicados a AImauta.
 - Un proxy HTTPS administrado delante de Next.js.
 
@@ -190,14 +190,14 @@ curl --fail http://127.0.0.1:11435/api/tags
 curl --fail http://127.0.0.1:3308/_edge-health
 ```
 
-La ingesta privada y la futura migración del tutor pueden usar:
+La ingesta privada y el tutor usan:
 
 ```dotenv
 OLLAMA_BASE_URL=http://127.0.0.1:11435
 ```
 
-El router actual de tutoría no selecciona Ollama aunque estas variables estén
-presentes; OpenAI sigue siendo primario hasta completar la migración posterior.
+El router del tutor selecciona este endpoint como primario y rechaza cualquier
+URL que no sea loopback.
 
 No se usa Tailscale Funnel para Ollama, no se abre el puerto 11434 en el proxy
 público y no se configura `OLLAMA_HOST=0.0.0.0`. El enlace queda:
@@ -348,13 +348,14 @@ LIVEKIT_API_KEY=clave-cloud-de-aimauta
 LIVEKIT_API_SECRET=secreto-cloud-de-aimauta
 ```
 
-Las credenciales del modelo viven en un segundo archivo que solo se inyecta al
-contenedor de Next.js; el migrador y el build no las necesitan:
+La selección y las credenciales opcionales del modelo viven en un segundo
+archivo que solo se inyecta al contenedor de Next.js; el migrador y el build no
+las necesitan:
 
 ```dotenv
 # /home/hii1sc/aimauta-runtime/model-providers.env
-LLM_PROVIDER=openai
-LLM_FALLBACK_PROVIDERS=xai,gemini
+LLM_PROVIDER=ollama
+LLM_FALLBACK_PROVIDERS=
 OPENAI_API_KEY=clave-de-un-proyecto-openai-dedicado
 OPENAI_MODEL=gpt-4.1
 XAI_API_KEY=clave-de-un-equipo-xai-dedicado
@@ -364,9 +365,11 @@ GOOGLE_GENAI_MODEL=gemini-3.6-flash
 ```
 
 No se admite seleccionar otro modelo mediante variables de entorno: la lista
-permitida del tutor queda cerrada en código a OpenAI `gpt-4.1`, xAI
-`grok-4.3` y Gemini `gemini-3.6-flash`; Ollama no se selecciona todavía. Cada
-proveedor sólo se intenta si se nombra y tiene su credencial dedicada.
+permitida queda cerrada en código a Ollama `gemma4:e4b-it-qat`, OpenAI
+`gpt-4.1`, xAI `grok-4.3` y Gemini `gemini-3.6-flash`. Ollama sólo admite
+`localhost`, `127.0.0.0/8` o `::1`, bloquea redirecciones y valida que la
+respuesta corresponda al modelo fijado. Cada proveedor cloud sólo se intenta
+si se nombra y tiene su credencial dedicada.
 
 `LIVEKIT_API_URL` usa el mismo host del proyecto con esquema HTTPS para
 RoomService y AgentDispatch. La URL WSS llega al navegador; la API key y el
@@ -389,8 +392,8 @@ incluir ruta, query, fragmento ni credenciales. `DATABASE_URL` apunta al
 PostgreSQL administrado de AImauta; con `network_mode: host`, el contenedor
 alcanza el listener de loopback del host.
 
-Los límites diarios se comparten entre OpenAI, xAI y Gemini y se reservan en
-PostgreSQL antes de cada llamada. Las variables permiten reducir los máximos
+Los límites diarios se comparten entre Gemma, OpenAI, xAI y Gemini y se reservan
+en PostgreSQL antes de cada llamada. Las variables permiten reducir los máximos
 compilados de 300 intentos, 150 000 tokens de entrada y 6 000 tokens de salida
 por día, nunca aumentarlos. Cada fallback cuenta como un segundo intento; no hay
 reintentos automáticos. Si el registro de presupuesto falla, el tutor usa la
@@ -665,8 +668,8 @@ Internet → Tailscale Funnel HTTPS en Aule
          → Nginx PowerEdge 127.0.0.1:3308
          → Next.js PowerEdge 127.0.0.1:3309
          → RAG interno PowerEdge 127.0.0.1:3310
-         → OpenAI → xAI → Gemini
-         → Ollama Aule 127.0.0.1:11434 (opcional)
+         → Ollama/Gemma Aule 127.0.0.1:11434
+         → OpenAI / xAI / Gemini (fallbacks opcionales)
 ```
 
 Nginx aplica límite de cuerpo, solicitudes y conexiones, bloquea externamente
